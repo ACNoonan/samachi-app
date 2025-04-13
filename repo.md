@@ -9,7 +9,9 @@
     │   │   └── route.ts
     │   ├── login-profile
     │   │   └── route.ts
-    │   └── logout
+    │   ├── logout
+    │   │   └── route.ts
+    │   └── venues
     │   │   └── route.ts
     ├── card
     │   └── [card_id]
@@ -96,8 +98,10 @@
     ├── create-profile
     │   └── page.tsx
     ├── dashboard
+    │   ├── loading.tsx
     │   └── page.tsx
     ├── discover
+    │   ├── loading.tsx
     │   └── page.tsx
     ├── favicon.ico
     ├── globals.css
@@ -106,8 +110,10 @@
     │   └── page.tsx
     ├── page.tsx
     ├── profile
+    │   ├── loading.tsx
     │   └── page.tsx
     └── wallet
+    │   ├── loading.tsx
     │   └── page.tsx
 ├── hooks
     └── useAuth.ts
@@ -115,6 +121,8 @@
     ├── auth.ts
     ├── glownet.ts
     ├── supabase.ts
+    ├── supabase
+    │   └── server.ts
     └── utils.ts
 ├── middleware.ts
 ├── next.config.ts
@@ -180,6 +188,8 @@
 40 | *.tsbuildinfo
 41 | next-env.d.ts
 42 | 
+43 | # AI instructions
+44 | repo.md
 
 
 --------------------------------------------------------------------------------
@@ -348,184 +358,6 @@
 
 
 --------------------------------------------------------------------------------
-/app/api/create-profile-and-claim/route.ts:
---------------------------------------------------------------------------------
-  1 | import { NextResponse } from 'next/server';
-  2 | import { createClient } from '@supabase/supabase-js';
-  3 | import bcrypt from 'bcryptjs';
-  4 | 
-  5 | const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  6 | const supabaseAdminKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // Use Admin Key
-  7 | 
-  8 | if (!supabaseUrl || !supabaseAdminKey) {
-  9 |   console.error('Missing Supabase URL or Admin Key environment variables.');
- 10 | }
- 11 | 
- 12 | const supabaseAdmin = createClient(supabaseUrl!, supabaseAdminKey!);
- 13 | const SALT_ROUNDS = 10; // Standard for bcrypt
- 14 | 
- 15 | // Define the same secure cookie name
- 16 | const SESSION_COOKIE_NAME = 'auth_session';
- 17 | 
- 18 | export async function POST(request: Request) {
- 19 |   try {
- 20 |     const {
- 21 |       username,
- 22 |       password,
- 23 |       twitterHandle,
- 24 |       telegramHandle,
- 25 |       walletAddress,
- 26 |       cardId
- 27 |     } = await request.json();
- 28 | 
- 29 |     // 1. Validate Input
- 30 |     if (!username || !password || !cardId) {
- 31 |       return NextResponse.json({ error: 'Missing required fields: username, password, cardId' }, { status: 400 });
- 32 |     }
- 33 |     if (password.length < 6) { // Basic password length check
- 34 |         return NextResponse.json({ error: 'Password must be at least 6 characters long.' }, { status: 400 });
- 35 |     }
- 36 | 
- 37 |     // 2. Check if username or wallet address already exists
- 38 |     const { data: existingUser, error: findUserError } = await supabaseAdmin
- 39 |         .from('profiles')
- 40 |         .select('id, username, wallet_address')
- 41 |         .or(`username.eq.${username},wallet_address.eq.${walletAddress ? walletAddress : 'null'}`) // Check both username and wallet if provided
- 42 |         .maybeSingle(); // Use maybeSingle as walletAddress might be null
- 43 | 
- 44 |     if (findUserError) {
- 45 |         console.error('Error checking for existing profile:', findUserError);
- 46 |         throw new Error('Database error checking profile existence.');
- 47 |     }
- 48 | 
- 49 |     if (existingUser) {
- 50 |         if (existingUser.username === username) {
- 51 |             return NextResponse.json({ error: 'Username already taken.' }, { status: 409 });
- 52 |         }
- 53 |         if (walletAddress && existingUser.wallet_address === walletAddress) {
- 54 |             return NextResponse.json({ error: 'Wallet address already linked to another profile.' }, { status: 409 });
- 55 |         }
- 56 |         // If walletAddress was null and we found a match, it must be by username
- 57 |         if (!walletAddress && existingUser.username === username) {
- 58 |              return NextResponse.json({ error: 'Username already taken.' }, { status: 409 });
- 59 |         }
- 60 |     }
- 61 | 
- 62 | 
- 63 |     // 3. Find the Membership Card and check its status
- 64 |     const { data: cardData, error: cardError } = await supabaseAdmin
- 65 |       .from('membership_cards')
- 66 |       .select('id, user_id, status')
- 67 |       .eq('card_identifier', cardId)
- 68 |       .single(); // Expect exactly one card
- 69 | 
- 70 |     if (cardError || !cardData) {
- 71 |         console.error('Error fetching card or card not found:', cardId, cardError);
- 72 |         return NextResponse.json({ error: `Membership card with ID ${cardId} not found.` }, { status: 404 });
- 73 |     }
- 74 | 
- 75 |     if (cardData.user_id) {
- 76 |         console.warn(`Card ${cardId} already claimed by user ${cardData.user_id}`);
- 77 |         return NextResponse.json({ error: 'This membership card has already been claimed.' }, { status: 409 }); // 409 Conflict
- 78 |     }
- 79 | 
- 80 |     // 4. Hash Password
- 81 |     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
- 82 | 
- 83 |     // 5. Create Profile
- 84 |     const { data: newProfile, error: profileCreateError } = await supabaseAdmin
- 85 |       .from('profiles')
- 86 |       .insert({
- 87 |         username: username,
- 88 |         password_hash: passwordHash,
- 89 |         twitter_handle: twitterHandle,
- 90 |         telegram_handle: telegramHandle,
- 91 |         wallet_address: walletAddress,
- 92 |       })
- 93 |       .select('id') // Select the ID of the newly created profile
- 94 |       .single();
- 95 | 
- 96 |     if (profileCreateError || !newProfile) {
- 97 |       console.error('Error creating profile:', profileCreateError);
- 98 |       // Log sensitive info only server-side
- 99 |       console.error('Failed profile data:', { username, twitterHandle, telegramHandle, walletAddress });
-100 |       throw new Error('Database error creating profile.');
-101 |     }
-102 |     const profileId = newProfile.id;
-103 |     console.log(`Profile created successfully: ${profileId} for username ${username}`);
-104 | 
-105 | 
-106 |     // 6. Link Card to Profile
-107 |     const { data: updateData, error: updateError } = await supabaseAdmin
-108 |       .from('membership_cards')
-109 |       .update({ user_id: profileId, status: 'registered' }) // Link to the new profile's ID
-110 |       .eq('card_identifier', cardId)
-111 |       .is('user_id', null) // Safety check: only update if user_id is still null
-112 |       .select('id')
-113 |       .single();
-114 | 
-115 |     if (updateError || !updateData) {
-116 |       console.error('Error updating membership card:', cardId, profileId, updateError);
-117 |       // CRITICAL: If card linking fails after profile creation, we have an orphaned profile.
-118 |       // Ideally, wrap profile creation and card update in a transaction (requires Supabase function).
-119 |       // For MVP, we log the error. Consider manual cleanup or a retry mechanism.
-120 |       // Attempting to delete the profile we just created might be complex if other operations depend on it.
-121 |       throw new Error('Database error linking card to profile. Profile was created but card linking failed.');
-122 |     }
-123 | 
-124 |     console.log(`Card ${cardId} successfully linked to profile ${profileId}`);
-125 | 
-126 |     // 7. Prepare Success Response
-127 |     const response = NextResponse.json({
-128 |         message: 'Profile created and card claimed successfully!',
-129 |         profile: { id: profileId, username: username } // Return basic profile info
-130 |     });
-131 | 
-132 |     // 8. Set Session Cookie on the Response
-133 |     response.cookies.set(SESSION_COOKIE_NAME, profileId, { // Use the new profile ID
-134 |         httpOnly: true,
-135 |         secure: process.env.NODE_ENV === 'production',
-136 |         maxAge: 60 * 60 * 24 * 7, // 1 week
-137 |         path: '/',
-138 |         sameSite: 'lax',
-139 |       });
-140 | 
-141 |     // 9. Return the Response with the Cookie
-142 |     return response;
-143 | 
-144 |   } catch (error: any) {
-145 |     // --- Enhanced Error Logging --- 
-146 |     console.error('-----------------------------------------');
-147 |     console.error('CREATE PROFILE API ROUTE CRITICAL ERROR:');
-148 |     console.error('Timestamp:', new Date().toISOString());
-149 |     // Log the specific error object
-150 |     console.error('Error Name:', error.name);
-151 |     console.error('Error Message:', error.message);
-152 |     console.error('Error Stack:', error.stack);
-153 |     // Log incoming data (excluding password)
-154 |     try {
-155 |       const body = await request.clone().json().catch(() => ({}));
-156 |       delete body.password; // Remove password before logging
-157 |       console.error('Request Body (Filtered):', body);
-158 |     } catch (logError) {
-159 |         console.error('Error logging request body:', logError);
-160 |     }
-161 |     console.error('-----------------------------------------');
-162 | 
-163 |     // Avoid sending detailed internal errors to the client
-164 |     const message = error.message.includes('Database error') || error.message.includes('already taken') || error.message.includes('already linked')
-165 |         ? error.message
-166 |         : 'An internal server error occurred during profile creation.';
-167 |     // Determine status code based on common errors
-168 |     const status = error.message.includes('already taken') || error.message.includes('already linked') ? 409 
-169 |                  : error.message.includes('not found') ? 404 
-170 |                  : 500;
-171 |     return NextResponse.json({ error: message }, { status: status });
-172 |   }
-173 | } 
-
-
---------------------------------------------------------------------------------
 /app/api/login-profile/route.ts:
 --------------------------------------------------------------------------------
  1 | import { NextResponse } from 'next/server';
@@ -666,6 +498,47 @@
 33 | export async function GET(request: Request) {
 34 |     return POST(request); // Just call the POST handler
 35 | } 
+
+
+--------------------------------------------------------------------------------
+/app/api/venues/route.ts:
+--------------------------------------------------------------------------------
+ 1 | import { cookies } from "next/headers";
+ 2 | import { NextResponse } from "next/server";
+ 3 | import { createClient } from "@/lib/supabase/server"; // Use the server-side client
+ 4 | 
+ 5 | export const dynamic = 'force-dynamic'; // Force dynamic execution, disable caching
+ 6 | 
+ 7 | export async function GET(request: Request) {
+ 8 |   // Await the cookies() call to get the actual store
+ 9 |   const cookieStore = await cookies();
+10 |   const supabase = createClient(cookieStore); // Now pass the resolved store
+11 | 
+12 |   try {
+13 |     // Fetch all venues from the 'venues' table
+14 |     const { data: venues, error } = await supabase
+15 |       .from("venues")
+16 |       .select("id, name, address, image_url, glownet_event_id") // Adjust columns as needed
+17 |       .order("name", { ascending: true }); // Optional: order by name
+18 | 
+19 |     if (error) {
+20 |       console.error("Error fetching venues:", error);
+21 |       return NextResponse.json(
+22 |         { error: "Failed to fetch venues", details: error.message },
+23 |         { status: 500 }
+24 |       );
+25 |     }
+26 | 
+27 |     return NextResponse.json(venues || []);
+28 |   } catch (err) {
+29 |     console.error("Unexpected error in /api/venues:", err);
+30 |     const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
+31 |     return NextResponse.json(
+32 |       { error: "An unexpected server error occurred", details: errorMessage },
+33 |       { status: 500 }
+34 |     );
+35 |   }
+36 | } 
 
 
 --------------------------------------------------------------------------------
@@ -3090,210 +2963,6 @@
 152 |   CommandSeparator,
 153 | }
 154 | 
-
-
---------------------------------------------------------------------------------
-/app/components/ui/context-menu.tsx:
---------------------------------------------------------------------------------
-  1 | import * as React from "react"
-  2 | import * as ContextMenuPrimitive from "@radix-ui/react-context-menu"
-  3 | import { Check, ChevronRight, Circle } from "lucide-react"
-  4 | 
-  5 | import { cn } from "@/lib/utils"
-  6 | 
-  7 | const ContextMenu = ContextMenuPrimitive.Root
-  8 | 
-  9 | const ContextMenuTrigger = ContextMenuPrimitive.Trigger
- 10 | 
- 11 | const ContextMenuGroup = ContextMenuPrimitive.Group
- 12 | 
- 13 | const ContextMenuPortal = ContextMenuPrimitive.Portal
- 14 | 
- 15 | const ContextMenuSub = ContextMenuPrimitive.Sub
- 16 | 
- 17 | const ContextMenuRadioGroup = ContextMenuPrimitive.RadioGroup
- 18 | 
- 19 | const ContextMenuSubTrigger = React.forwardRef<
- 20 |   React.ElementRef<typeof ContextMenuPrimitive.SubTrigger>,
- 21 |   React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.SubTrigger> & {
- 22 |     inset?: boolean
- 23 |   }
- 24 | >(({ className, inset, children, ...props }, ref) => (
- 25 |   <ContextMenuPrimitive.SubTrigger
- 26 |     ref={ref}
- 27 |     className={cn(
- 28 |       "flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground",
- 29 |       inset && "pl-8",
- 30 |       className
- 31 |     )}
- 32 |     {...props}
- 33 |   >
- 34 |     {children}
- 35 |     <ChevronRight className="ml-auto h-4 w-4" />
- 36 |   </ContextMenuPrimitive.SubTrigger>
- 37 | ))
- 38 | ContextMenuSubTrigger.displayName = ContextMenuPrimitive.SubTrigger.displayName
- 39 | 
- 40 | const ContextMenuSubContent = React.forwardRef<
- 41 |   React.ElementRef<typeof ContextMenuPrimitive.SubContent>,
- 42 |   React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.SubContent>
- 43 | >(({ className, ...props }, ref) => (
- 44 |   <ContextMenuPrimitive.SubContent
- 45 |     ref={ref}
- 46 |     className={cn(
- 47 |       "z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
- 48 |       className
- 49 |     )}
- 50 |     {...props}
- 51 |   />
- 52 | ))
- 53 | ContextMenuSubContent.displayName = ContextMenuPrimitive.SubContent.displayName
- 54 | 
- 55 | const ContextMenuContent = React.forwardRef<
- 56 |   React.ElementRef<typeof ContextMenuPrimitive.Content>,
- 57 |   React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Content>
- 58 | >(({ className, ...props }, ref) => (
- 59 |   <ContextMenuPrimitive.Portal>
- 60 |     <ContextMenuPrimitive.Content
- 61 |       ref={ref}
- 62 |       className={cn(
- 63 |         "z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
- 64 |         className
- 65 |       )}
- 66 |       {...props}
- 67 |     />
- 68 |   </ContextMenuPrimitive.Portal>
- 69 | ))
- 70 | ContextMenuContent.displayName = ContextMenuPrimitive.Content.displayName
- 71 | 
- 72 | const ContextMenuItem = React.forwardRef<
- 73 |   React.ElementRef<typeof ContextMenuPrimitive.Item>,
- 74 |   React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Item> & {
- 75 |     inset?: boolean
- 76 |   }
- 77 | >(({ className, inset, ...props }, ref) => (
- 78 |   <ContextMenuPrimitive.Item
- 79 |     ref={ref}
- 80 |     className={cn(
- 81 |       "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
- 82 |       inset && "pl-8",
- 83 |       className
- 84 |     )}
- 85 |     {...props}
- 86 |   />
- 87 | ))
- 88 | ContextMenuItem.displayName = ContextMenuPrimitive.Item.displayName
- 89 | 
- 90 | const ContextMenuCheckboxItem = React.forwardRef<
- 91 |   React.ElementRef<typeof ContextMenuPrimitive.CheckboxItem>,
- 92 |   React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.CheckboxItem>
- 93 | >(({ className, children, checked, ...props }, ref) => (
- 94 |   <ContextMenuPrimitive.CheckboxItem
- 95 |     ref={ref}
- 96 |     className={cn(
- 97 |       "relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
- 98 |       className
- 99 |     )}
-100 |     checked={checked}
-101 |     {...props}
-102 |   >
-103 |     <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
-104 |       <ContextMenuPrimitive.ItemIndicator>
-105 |         <Check className="h-4 w-4" />
-106 |       </ContextMenuPrimitive.ItemIndicator>
-107 |     </span>
-108 |     {children}
-109 |   </ContextMenuPrimitive.CheckboxItem>
-110 | ))
-111 | ContextMenuCheckboxItem.displayName =
-112 |   ContextMenuPrimitive.CheckboxItem.displayName
-113 | 
-114 | const ContextMenuRadioItem = React.forwardRef<
-115 |   React.ElementRef<typeof ContextMenuPrimitive.RadioItem>,
-116 |   React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.RadioItem>
-117 | >(({ className, children, ...props }, ref) => (
-118 |   <ContextMenuPrimitive.RadioItem
-119 |     ref={ref}
-120 |     className={cn(
-121 |       "relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-122 |       className
-123 |     )}
-124 |     {...props}
-125 |   >
-126 |     <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
-127 |       <ContextMenuPrimitive.ItemIndicator>
-128 |         <Circle className="h-2 w-2 fill-current" />
-129 |       </ContextMenuPrimitive.ItemIndicator>
-130 |     </span>
-131 |     {children}
-132 |   </ContextMenuPrimitive.RadioItem>
-133 | ))
-134 | ContextMenuRadioItem.displayName = ContextMenuPrimitive.RadioItem.displayName
-135 | 
-136 | const ContextMenuLabel = React.forwardRef<
-137 |   React.ElementRef<typeof ContextMenuPrimitive.Label>,
-138 |   React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Label> & {
-139 |     inset?: boolean
-140 |   }
-141 | >(({ className, inset, ...props }, ref) => (
-142 |   <ContextMenuPrimitive.Label
-143 |     ref={ref}
-144 |     className={cn(
-145 |       "px-2 py-1.5 text-sm font-semibold text-foreground",
-146 |       inset && "pl-8",
-147 |       className
-148 |     )}
-149 |     {...props}
-150 |   />
-151 | ))
-152 | ContextMenuLabel.displayName = ContextMenuPrimitive.Label.displayName
-153 | 
-154 | const ContextMenuSeparator = React.forwardRef<
-155 |   React.ElementRef<typeof ContextMenuPrimitive.Separator>,
-156 |   React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Separator>
-157 | >(({ className, ...props }, ref) => (
-158 |   <ContextMenuPrimitive.Separator
-159 |     ref={ref}
-160 |     className={cn("-mx-1 my-1 h-px bg-border", className)}
-161 |     {...props}
-162 |   />
-163 | ))
-164 | ContextMenuSeparator.displayName = ContextMenuPrimitive.Separator.displayName
-165 | 
-166 | const ContextMenuShortcut = ({
-167 |   className,
-168 |   ...props
-169 | }: React.HTMLAttributes<HTMLSpanElement>) => {
-170 |   return (
-171 |     <span
-172 |       className={cn(
-173 |         "ml-auto text-xs tracking-widest text-muted-foreground",
-174 |         className
-175 |       )}
-176 |       {...props}
-177 |     />
-178 |   )
-179 | }
-180 | ContextMenuShortcut.displayName = "ContextMenuShortcut"
-181 | 
-182 | export {
-183 |   ContextMenu,
-184 |   ContextMenuTrigger,
-185 |   ContextMenuContent,
-186 |   ContextMenuItem,
-187 |   ContextMenuCheckboxItem,
-188 |   ContextMenuRadioItem,
-189 |   ContextMenuLabel,
-190 |   ContextMenuSeparator,
-191 |   ContextMenuShortcut,
-192 |   ContextMenuGroup,
-193 |   ContextMenuPortal,
-194 |   ContextMenuSub,
-195 |   ContextMenuSubContent,
-196 |   ContextMenuSubTrigger,
-197 |   ContextMenuRadioGroup,
-198 | }
-199 | 
 
 
 --------------------------------------------------------------------------------
@@ -5947,6 +5616,15 @@
 
 
 --------------------------------------------------------------------------------
+/app/dashboard/loading.tsx:
+--------------------------------------------------------------------------------
+1 | export default function Loading() {
+2 |   // You can add any UI inside Loading, including a Skeleton.
+3 |   return <div>Loading Dashboard...</div>;
+4 | } 
+
+
+--------------------------------------------------------------------------------
 /app/dashboard/page.tsx:
 --------------------------------------------------------------------------------
  1 | import { PageLayout } from '@/app/components/layout/PageLayout';
@@ -5959,6 +5637,15 @@
  8 |     </PageLayout>
  9 |   );
 10 | } 
+
+
+--------------------------------------------------------------------------------
+/app/discover/loading.tsx:
+--------------------------------------------------------------------------------
+1 | export default function Loading() {
+2 |   // You can add any UI inside Loading, including a Skeleton.
+3 |   return <div>Loading Discover...</div>;
+4 | } 
 
 
 --------------------------------------------------------------------------------
@@ -6127,6 +5814,15 @@ https://raw.githubusercontent.com/ACNoonan/samachi-app/master/app/favicon.ico
 
 
 --------------------------------------------------------------------------------
+/app/profile/loading.tsx:
+--------------------------------------------------------------------------------
+1 | export default function Loading() {
+2 |   // You can add any UI inside Loading, including a Skeleton.
+3 |   return <div>Loading Profile...</div>;
+4 | } 
+
+
+--------------------------------------------------------------------------------
 /app/profile/page.tsx:
 --------------------------------------------------------------------------------
  1 | import { PageLayout } from '@/app/components/layout/PageLayout';
@@ -6139,6 +5835,15 @@ https://raw.githubusercontent.com/ACNoonan/samachi-app/master/app/favicon.ico
  8 |     </PageLayout>
  9 |   );
 10 | } 
+
+
+--------------------------------------------------------------------------------
+/app/wallet/loading.tsx:
+--------------------------------------------------------------------------------
+1 | export default function Loading() {
+2 |   // You can add any UI inside Loading, including a Skeleton.
+3 |   return <div>Loading Wallet...</div>;
+4 | } 
 
 
 --------------------------------------------------------------------------------
@@ -6216,17 +5921,212 @@ https://raw.githubusercontent.com/ACNoonan/samachi-app/master/app/favicon.ico
 --------------------------------------------------------------------------------
 /lib/glownet.ts:
 --------------------------------------------------------------------------------
- 1 | // TODO: Add functions for interacting with the Glownet API
- 2 | 
- 3 | export const checkGlownetCardStatus = async (cardId: string) => {
- 4 |   // Placeholder function
- 5 |   console.log(`Checking Glownet status for card: ${cardId}`);
- 6 |   // Replace with actual API call
- 7 |   await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
- 8 |   return { registered: Math.random() > 0.5 }; // Example response
- 9 | };
-10 | 
-11 | export {}; // Keep if no other named exports 
+  1 | import { z } from 'zod';
+  2 | 
+  3 | const GLOWNET_BASE_URL = process.env.GLOWNET_BASE_URL;
+  4 | const GLOWNET_API_KEY = process.env.GLOWNET_API_KEY;
+  5 | 
+  6 | if (!GLOWNET_BASE_URL) {
+  7 |   throw new Error('Missing GLOWNET_BASE_URL environment variable');
+  8 | }
+  9 | if (!GLOWNET_API_KEY) {
+ 10 |   throw new Error('Missing GLOWNET_API_KEY environment variable');
+ 11 | }
+ 12 | 
+ 13 | interface FetchOptions extends RequestInit {
+ 14 |   params?: Record<string, string | number | boolean>;
+ 15 | }
+ 16 | 
+ 17 | /**
+ 18 |  * Generic fetch function for interacting with the Glownet API.
+ 19 |  * Handles adding authentication headers and base URL.
+ 20 |  * Throws an error for non-2xx responses.
+ 21 |  * @param endpoint - The API endpoint (e.g., '/api/v2/events')
+ 22 |  * @param options - Fetch options (method, body, headers, etc.)
+ 23 |  * @returns The parsed JSON response.
+ 24 |  */
+ 25 | async function fetchGlownet<T = unknown>(
+ 26 |   endpoint: string,
+ 27 |   options: FetchOptions = {}
+ 28 | ): Promise<T> {
+ 29 |   const url = new URL(endpoint, GLOWNET_BASE_URL);
+ 30 | 
+ 31 |   if (options.params) {
+ 32 |     Object.entries(options.params).forEach(([key, value]) => {
+ 33 |       url.searchParams.append(key, String(value));
+ 34 |     });
+ 35 |   }
+ 36 | 
+ 37 |   const { params, ...fetchOptions } = options; // Remove custom 'params' option
+ 38 | 
+ 39 |   const response = await fetch(url.toString(), {
+ 40 |     ...fetchOptions,
+ 41 |     headers: {
+ 42 |       'Authorization': `Token token=${GLOWNET_API_KEY}`,
+ 43 |       'Content-Type': 'application/json',
+ 44 |       'Accept': 'application/json',
+ 45 |       ...fetchOptions.headers,
+ 46 |     },
+ 47 |   });
+ 48 | 
+ 49 |   if (!response.ok) {
+ 50 |     let errorBody;
+ 51 |     try {
+ 52 |       errorBody = await response.json();
+ 53 |     } catch (e) {
+ 54 |       errorBody = await response.text();
+ 55 |     }
+ 56 |     console.error('Glownet API Error:', response.status, response.statusText, errorBody);
+ 57 |     throw new Error(
+ 58 |       `Glownet API request failed to ${endpoint}: ${response.status} ${response.statusText}`
+ 59 |     );
+ 60 |   }
+ 61 | 
+ 62 |   // Handle cases with empty response bodies (e.g., 201 Created, 204 No Content)
+ 63 |   if (response.status === 201 || response.status === 204) {
+ 64 |       return {} as T; // Return an empty object or adjust as needed
+ 65 |   }
+ 66 | 
+ 67 |   // Only attempt to parse JSON if there's content
+ 68 |   const contentType = response.headers.get("content-type");
+ 69 |   if (contentType && contentType.includes("application/json")) {
+ 70 |       try {
+ 71 |           return (await response.json()) as T;
+ 72 |       } catch (e) {
+ 73 |           console.error('Failed to parse Glownet JSON response:', e);
+ 74 |           throw new Error(`Failed to parse JSON response from ${endpoint}`);
+ 75 |       }
+ 76 |   }
+ 77 | 
+ 78 |   // If not JSON or no content, return an empty object or handle appropriately
+ 79 |   return {} as T;
+ 80 | }
+ 81 | 
+ 82 | // --- Helper Functions ---
+ 83 | 
+ 84 | /**
+ 85 |  * Performs a GET request to the Glownet API.
+ 86 |  */
+ 87 | export function getGlownet<T = unknown>(
+ 88 |   endpoint: string,
+ 89 |   params?: Record<string, string | number | boolean>,
+ 90 |   options: FetchOptions = {}
+ 91 | ): Promise<T> {
+ 92 |   return fetchGlownet<T>(endpoint, { ...options, method: 'GET', params });
+ 93 | }
+ 94 | 
+ 95 | /**
+ 96 |  * Performs a POST request to the Glownet API.
+ 97 |  */
+ 98 | export function postGlownet<T = unknown>(
+ 99 |   endpoint: string,
+100 |   body: any,
+101 |   options: FetchOptions = {}
+102 | ): Promise<T> {
+103 |   return fetchGlownet<T>(endpoint, {
+104 |     ...options,
+105 |     method: 'POST',
+106 |     body: JSON.stringify(body),
+107 |   });
+108 | }
+109 | 
+110 | /**
+111 |  * Performs a PATCH request to the Glownet API.
+112 |  */
+113 | export function patchGlownet<T = unknown>(
+114 |   endpoint: string,
+115 |   body: any,
+116 |   options: FetchOptions = {}
+117 | ): Promise<T> {
+118 |   return fetchGlownet<T>(endpoint, {
+119 |     ...options,
+120 |     method: 'PATCH',
+121 |     body: JSON.stringify(body),
+122 |   });
+123 | }
+124 | 
+125 | /**
+126 |  * Performs a DELETE request to the Glownet API.
+127 |  */
+128 | export function deleteGlownet<T = unknown>(
+129 |   endpoint: string,
+130 |   options: FetchOptions = {}
+131 | ): Promise<T> {
+132 |   return fetchGlownet<T>(endpoint, { ...options, method: 'DELETE' });
+133 | }
+134 | 
+135 | 
+136 | // --- Specific API Function Examples (using Zod for validation) ---
+137 | 
+138 | const GlownetEventSchema = z.object({
+139 |   id: z.number(),
+140 |   name: z.string(),
+141 |   slug: z.string().optional().nullable(),
+142 |   start_date: z.string(),
+143 |   end_date: z.string(),
+144 |   timezone: z.string(),
+145 |   // Add other relevant fields based on glownet_api_docs.json
+146 | });
+147 | 
+148 | export type GlownetEvent = z.infer<typeof GlownetEventSchema>;
+149 | 
+150 | /**
+151 |  * Fetches all events (venues) from Glownet.
+152 |  */
+153 | export async function getAllGlownetEvents(): Promise<GlownetEvent[]> {
+154 |   const events = await getGlownet<unknown[]>(`/api/v2/events`);
+155 |   // Validate the response structure
+156 |   return z.array(GlownetEventSchema).parse(events);
+157 | }
+158 | 
+159 | 
+160 | const GlownetCustomerSchema = z.object({
+161 |     id: z.number(), // Assuming ID is numeric, adjust if string
+162 |     first_name: z.string().optional().nullable(),
+163 |     last_name: z.string().optional().nullable(),
+164 |     email: z.string().email().optional().nullable(),
+165 |     // Add other fields as needed from docs
+166 | });
+167 | 
+168 | export type GlownetCustomer = z.infer<typeof GlownetCustomerSchema>;
+169 | 
+170 | interface CreateGlownetCustomerPayload {
+171 |     customer: {
+172 |         first_name?: string;
+173 |         last_name?: string;
+174 |         email?: string;
+175 |         phone?: string;
+176 |         birthdate?: string; // "YYYY-MM-DD" format? Docs example uses "2019-01-01"
+177 |         // Add other fields as needed/supported by POST /api/v2/events/{event_id}/customers
+178 |     };
+179 | }
+180 | 
+181 | /**
+182 |  * Creates a new customer for a specific Glownet event.
+183 |  */
+184 | export async function createGlownetCustomer(
+185 |     glownetEventId: number | string, // Can be ID or slug
+186 |     payload: CreateGlownetCustomerPayload
+187 | ): Promise<GlownetCustomer> {
+188 |     // Note: API docs indicate 201 returns an *array* of customers, potentially just one.
+189 |     // Adjust parsing if necessary. Assuming it returns the single created customer object directly for simplicity here.
+190 |     const result = await postGlownet<GlownetCustomer>( // Adjust <GlownetCustomer> if it returns an array
+191 |         `/api/v2/events/${glownetEventId}/customers`,
+192 |         payload
+193 |     );
+194 |     // If it returns an array: return GlownetCustomerSchema.parse(result[0]);
+195 |     return GlownetCustomerSchema.parse(result);
+196 | }
+197 | 
+198 | 
+199 | // We might not need checkGlownetCardStatus directly anymore,
+200 | // as card linking might happen via Gtag lookup or customer creation.
+201 | // Removing the placeholder for now.
+202 | 
+203 | // export const checkGlownetCardStatus = async (cardId: string) => { ... }
+204 | 
+205 | 
+206 | // export {}; // No longer needed as we have named exports 
 
 
 --------------------------------------------------------------------------------
@@ -6247,6 +6147,63 @@ https://raw.githubusercontent.com/ACNoonan/samachi-app/master/app/favicon.ico
 13 | }
 14 | 
 15 | export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+
+--------------------------------------------------------------------------------
+/lib/supabase/server.ts:
+--------------------------------------------------------------------------------
+ 1 | import { createServerClient, type CookieOptions } from '@supabase/ssr';
+ 2 | import { cookies } from 'next/headers';
+ 3 | import type { ReadonlyRequestCookies } from 'next/dist/server/web/spec-extension/adapters/request-cookies';
+ 4 | 
+ 5 | // Define a function to create a Supabase client for server-side operations
+ 6 | export function createClient(cookieStore: ReadonlyRequestCookies) {
+ 7 |   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+ 8 |   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // Use Service Role Key for server actions
+ 9 | 
+10 |   if (!supabaseUrl) {
+11 |     throw new Error('Missing env.NEXT_PUBLIC_SUPABASE_URL');
+12 |   }
+13 |   if (!supabaseServiceRoleKey) {
+14 |     throw new Error('Missing env.SUPABASE_SERVICE_ROLE_KEY');
+15 |   }
+16 | 
+17 |   return createServerClient(supabaseUrl, supabaseServiceRoleKey, {
+18 |     cookies: {
+19 |       get(name: string) {
+20 |         return cookieStore.get(name)?.value;
+21 |       },
+22 |       set(name: string, value: string, options: CookieOptions) {
+23 |         try {
+24 |           // Use the cookieStore instance directly
+25 |           cookieStore.set({ name, value, ...options });
+26 |         } catch (error) {
+27 |           // The `set` method was called from a Server Component.
+28 |           // This can be ignored if you have middleware refreshing
+29 |           // user sessions.
+30 |         }
+31 |       },
+32 |       remove(name: string, options: CookieOptions) {
+33 |         try {
+34 |           // Use the cookieStore instance directly
+35 |           cookieStore.set({ name, value: '', ...options });
+36 |         } catch (error) {
+37 |           // The `delete` method was called from a Server Component.
+38 |           // This can be ignored if you have middleware refreshing
+39 |           // user sessions.
+40 |         }
+41 |       },
+42 |     },
+43 |     // It's generally recommended to use the service role key for server-side operations
+44 |     // that need to bypass RLS or perform admin tasks.
+45 |     auth: {
+46 |       // Required for supabase-ssr
+47 |       persistSession: true,
+48 |       autoRefreshToken: true,
+49 |       detectSessionInUrl: false,
+50 |     },
+51 |   });
+52 | } 
 
 
 --------------------------------------------------------------------------------

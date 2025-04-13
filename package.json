@@ -18,6 +18,7 @@
     "@solana/wallet-adapter-react-ui": "^0.9.36",
     "@solana/wallet-adapter-wallets": "^0.19.34",
     "@solana/web3.js": "^1.98.0",
+    "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.4",
     "@types/bcryptjs": "^3.0.0",
     "bcryptjs": "^3.0.2",

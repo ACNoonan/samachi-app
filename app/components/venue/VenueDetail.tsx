@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { 
   ArrowLeft, Star, MapPin, Calendar, Clock, Phone, Globe, 
   ChevronUp, Share2, Heart, Check 
@@ -9,94 +9,137 @@ import {
 import { Button } from '@/app/components/ui/button';
 import { CheckInModal } from './CheckInModal';
 import Image from 'next/image';
+import { Skeleton } from "@/app/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/app/components/ui/alert";
+import { Terminal } from "lucide-react";
 
-// Mock venue data - in a real app, you'd fetch this based on the venueId
-const venueData = {
-  '1': {
-    id: '1',
-    name: 'Silk Club London',
-    location: 'London, UK',
-    address: '123 Highbridge Street, Mayfair, London',
-    description: 'Exclusive rooftop lounge with panoramic city views and world-class mixology. Members enjoy priority seating and private event access.',
-    rating: 4.8,
-    hours: 'Mon-Sun: 6:00 PM - 2:00 AM',
-    phone: '+44 20 1234 5678',
-    website: 'silkclublondon.com',
-    images: [
-      'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=60',
-      'https://images.unsplash.com/photo-1538488881038-e252a119ace7?w=400&auto=format&fit=crop&q=60',
-    ]
-  },
-  '2': {
-    id: '2',
-    name: 'Azure Lounge Miami',
-    location: 'Miami, FL',
-    address: '789 Ocean Drive, South Beach, Miami',
-    description: 'Beachfront club with private cabanas and premium service. Stunning ocean views and signature cocktails.',
-    rating: 4.7,
-    hours: 'Thu-Sun: 8:00 PM - 4:00 AM',
-    phone: '+1 305 987 6543',
-    website: 'azureloungemia.com',
-    images: [
-      'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=800&auto=format&fit=crop&q=60',
-      'https://images.unsplash.com/photo-1470337458703-46ad1756a187?w=400&auto=format&fit=crop&q=60',
-    ]
-  },
-  '3': {
-    id: '3',
-    name: 'Crystal Tokyo',
-    location: 'Tokyo, Japan',
-    address: '2-5-1 Roppongi, Minato City, Tokyo',
-    description: 'Ultra-modern nightclub featuring world-class DJs and immersive light shows in the heart of Tokyo.',
-    rating: 4.9,
-    hours: 'Tue-Sun: 9:00 PM - 5:00 AM',
-    phone: '+81 3 1234 5678',
-    website: 'crystaltokyo.jp',
-    images: [
-      'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=800&auto=format&fit=crop&q=60',
-      'https://images.unsplash.com/photo-1502872364588-894d7d6ddfab?w=400&auto=format&fit=crop&q=60',
-    ]
-  },
-  '4': {
-    id: '4',
-    name: 'Celestial Berlin',
-    location: 'Berlin, Germany',
-    address: '25 Friedrichstraße, Berlin',
-    description: 'Industrial-chic techno venue with immersive lighting and underground atmosphere.',
-    rating: 4.6,
-    hours: 'Fri-Sun: 11:00 PM - 8:00 AM',
-    phone: '+49 30 8765 4321',
-    website: 'celestialberlin.de',
-    images: [
-      'https://images.unsplash.com/photo-1556035511-3168381ea4d4?w=800&auto=format&fit=crop&q=60',
-      'https://images.unsplash.com/photo-1493676304819-0d7a8d026dcf?w=400&auto=format&fit=crop&q=60',
-    ]
-  },
-};
+// Interface matching the expected API response from /api/venues/[venueId]
+interface VenueDetailData {
+  id: string; // UUID
+  name: string;
+  glownet_event_id: number | null;
+  address: string | null;
+  image_url: string | null;
+  created_at: string;
+  updated_at: string;
+  // Add other fields returned by the API if needed
+  // Placeholder fields (if needed temporarily, but prefer real data)
+  description?: string;
+  rating?: number;
+  hours?: string;
+  phone?: string;
+  website?: string;
+  images?: string[];
+}
 
-export const VenueDetail: React.FC = () => {
+// Mock venue data - Keep for reference or fallback during development
+// const mockVenueData = { ... };
+
+export function VenueDetail() { // Removed React.FC
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams(); // Hook to read query parameters
   const venueId = params.venueId as string;
+
+  // Read membershipId from URL query parameter
+  const membershipIdFromQuery = searchParams.get('membershipId');
+
+  const [venue, setVenue] = useState<VenueDetailData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [bottomSheetVisible, setBottomSheetVisible] = useState(true);
   const [showCheckInModal, setShowCheckInModal] = useState(false);
-  const [favorite, setFavorite] = useState(false);
-  
-  // Safety check
-  if (!venueId || !venueData[venueId as keyof typeof venueData]) {
+  const [favorite, setFavorite] = useState(false); // Keep local state for favorite
+
+  // ***** PLACEHOLDER: Fetch or determine the user's membership ID for this venue *****
+  // In a real app, this might come from a user context, a parent component,
+  // or another fetch useEffect based on profileId and venueId.
+  const currentUserMembershipId: string | null = "mock-membership-uuid-123"; // Replace with actual logic
+  // *******************************************************************************
+
+  useEffect(() => {
+    if (!venueId) {
+      setError('No Venue ID provided.');
+      setIsLoading(false);
+      return;
+    }
+
+    const fetchVenueDetails = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        console.log(`Fetching details for venue ID: ${venueId}`);
+        const response = await fetch(`/api/venues/${venueId}`);
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Failed to fetch venue: ${response.statusText}`);
+        }
+        const data: VenueDetailData = await response.json();
+        console.log("Fetched venue data:", data);
+        setVenue(data);
+      } catch (err: any) {
+        console.error("Error fetching venue details:", err);
+        setError(err.message);
+        setVenue(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchVenueDetails();
+  }, [venueId]);
+
+  // --- Loading State --- 
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <p className="text-xl font-medium mb-4">Venue not found</p>
-          <Button onClick={() => router.push('/discover')}>
-            Back to Discover
-          </Button>
-        </div>
+      <div className="p-4 space-y-4">
+          <Skeleton className="h-10 w-10 rounded-full" />
+          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-8 w-3/4" />
+          <Skeleton className="h-6 w-1/2" />
+          <Skeleton className="h-20 w-full" />
       </div>
     );
   }
-  
-  const venue = venueData[venueId as keyof typeof venueData];
+
+  // --- Error State --- 
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-6">
+        <Alert variant="destructive" className="max-w-md mb-4">
+            <Terminal className="h-4 w-4" />
+            <AlertTitle>Error Loading Venue</AlertTitle>
+            <AlertDescription>
+                {error}
+            </AlertDescription>
+        </Alert>
+        <Button onClick={() => router.push('/discover')}>
+          Back to Discover
+        </Button>
+      </div>
+    );
+  }
+
+  // --- Venue Not Found State (handled by API, but good fallback) ---
+  if (!venue) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-6">
+        <Alert className="max-w-md mb-4">
+            <Terminal className="h-4 w-4" />
+            <AlertTitle>Venue Not Found</AlertTitle>
+            <AlertDescription>
+                The requested venue could not be found.
+            </AlertDescription>
+        </Alert>
+        <Button onClick={() => router.push('/discover')}>
+          Back to Discover
+        </Button>
+      </div>
+    );
+  }
+
+  // --- Render Venue Details (using fetched 'venue' state) ---
 
   const handleShare = async () => {
     if (navigator.share) {
@@ -115,6 +158,13 @@ export const VenueDetail: React.FC = () => {
       console.log('Web Share API not supported');
       // TODO: Show fallback (e.g., copy link button)
     }
+  };
+
+  // Prepare data for CheckInModal
+  const checkInVenueData = {
+      id: venue.id,
+      name: venue.name,
+      location: venue.address || 'Location not specified'
   };
 
   return (
@@ -151,16 +201,22 @@ export const VenueDetail: React.FC = () => {
         </div>
       </div>
       
-      {/* Main image */}
-      <div className="h-2/3 relative">
-        <Image
-          src={venue.images[0]}
-          alt={venue.name}
-          layout="fill"
-          objectFit="cover"
-          priority
-          className="z-10"
-        />
+      {/* Main image - Use venue.image_url */} 
+      <div className="h-2/3 relative bg-gray-300"> {/* Added background */} 
+        {venue.image_url ? (
+            <Image
+            src={venue.image_url} // Use real image URL
+            alt={venue.name}
+            layout="fill"
+            objectFit="cover"
+            priority
+            className="z-10"
+            />
+        ) : (
+            <div className="absolute inset-0 flex items-center justify-center z-0">
+                <span className="text-gray-500">No Image Available</span>
+            </div>
+        )}
         <div className="absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-black/30 to-transparent z-10" />
       </div>
       
@@ -184,9 +240,7 @@ export const VenueDetail: React.FC = () => {
               <h1 className="text-xl font-semibold">{venue.name}</h1>
               <div className="flex items-center flex-wrap">
                 <MapPin className="h-3 w-3 text-muted-foreground mr-1" />
-                <p className="text-xs text-muted-foreground mr-2">{venue.location}</p>
-                <Star className="h-3 w-3 text-yellow-500 mr-1" />
-                <p className="text-xs font-medium">{venue.rating}</p>
+                <p className="text-xs text-muted-foreground mr-2">{venue.address || 'Address not available'}</p>
               </div>
             </div>
             <ChevronUp className={`h-5 w-5 text-muted-foreground transition-transform ${
@@ -197,73 +251,73 @@ export const VenueDetail: React.FC = () => {
         
         {/* Bottom sheet content */}
         <div className="px-4 pb-32 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 140px)' }}>
-          <p className="text-sm mb-6">{venue.description}</p>
+          <p className="text-sm mb-6">{venue.description || 'No description available.'}</p>
           
           <div className="space-y-4 mb-6">
-            <div className="flex items-start">
-              <Clock className="h-5 w-5 text-primary mr-3 mt-0.5 shrink-0" />
-              <div>
-                <h3 className="text-sm font-medium">Hours</h3>
-                <p className="text-xs text-muted-foreground break-words">{venue.hours}</p>
-              </div>
-            </div>
-            
-            <div className="flex items-start">
-              <MapPin className="h-5 w-5 text-primary mr-3 mt-0.5 shrink-0" />
-              <div>
-                <h3 className="text-sm font-medium">Address</h3>
-                <p className="text-xs text-muted-foreground break-words">{venue.address}</p>
-              </div>
-            </div>
-            
-            <div className="flex items-start">
-              <Phone className="h-5 w-5 text-primary mr-3 mt-0.5 shrink-0" />
-              <div>
-                <h3 className="text-sm font-medium">Contact</h3>
-                <p className="text-xs text-muted-foreground break-words">{venue.phone}</p>
-              </div>
-            </div>
-            
-            <div className="flex items-start">
-              <Globe className="h-5 w-5 text-primary mr-3 mt-0.5 shrink-0" />
-              <div>
-                <h3 className="text-sm font-medium">Website</h3>
-                <a href={`https://${venue.website}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline break-all">
-                  {venue.website}
-                </a>
-              </div>
-            </div>
-          </div>
-          
-          <div className="mb-6">
-            <h3 className="text-sm font-medium mb-2">Gallery</h3>
-            <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 scrollbar-none">
-              {venue.images.map((image, index) => (
-                <div key={index} className="min-w-[120px] h-20 rounded-lg overflow-hidden relative">
-                  <Image 
-                    src={image} 
-                    alt={`${venue.name} gallery image ${index + 1}`}
-                    layout="fill"
-                    objectFit="cover"
-                  />
+            {venue.hours && (
+                <div className="flex items-start">
+                    <Clock className="h-5 w-5 text-primary mr-3 mt-0.5 shrink-0" />
+                    <div><h3 className="text-sm font-medium">Hours</h3><p className="text-xs text-muted-foreground break-words">{venue.hours}</p></div>
                 </div>
-              ))}
-            </div>
+            )}
+            
+            {venue.address && (
+                <div className="flex items-start">
+                    <MapPin className="h-5 w-5 text-primary mr-3 mt-0.5 shrink-0" />
+                    <div><h3 className="text-sm font-medium">Address</h3><p className="text-xs text-muted-foreground break-words">{venue.address}</p></div>
+                </div>
+            )}
+            
+            {venue.phone && (
+                <div className="flex items-start">
+                    <Phone className="h-5 w-5 text-primary mr-3 mt-0.5 shrink-0" />
+                    <div><h3 className="text-sm font-medium">Contact</h3><p className="text-xs text-muted-foreground break-words">{venue.phone}</p></div>
+                </div>
+            )}
+            
+            {venue.website && (
+                <div className="flex items-start">
+                    <Globe className="h-5 w-5 text-primary mr-3 mt-0.5 shrink-0" />
+                    <div><h3 className="text-sm font-medium">Website</h3><a href={`https://${venue.website}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline break-all">{venue.website}</a></div>
+                </div>
+            )}
           </div>
           
-          <Button 
+          <Button
             onClick={() => setShowCheckInModal(true)}
             className="w-full glass-button"
+            disabled={!membershipIdFromQuery}
           >
             Check In Now
             <Check className="ml-2 h-4 w-4" />
           </Button>
+          {!membershipIdFromQuery && (
+                <p className="text-xs text-center text-muted-foreground mt-2">
+                    (You must access this page via your Memberships list to check in)
+                </p>
+            )}
         </div>
       </div>
       
-      {showCheckInModal && (
-        <CheckInModal venue={venue} onClose={() => setShowCheckInModal(false)} />
+      {/* Pass membershipId from query to modal */}
+      {showCheckInModal && membershipIdFromQuery && (
+        <CheckInModal
+            venue={checkInVenueData}
+            membershipId={membershipIdFromQuery}
+            onClose={() => setShowCheckInModal(false)}
+        />
       )}
+       {/* Show message if check-in modal opened without ID (e.g., direct navigation) */}
+       {showCheckInModal && !membershipIdFromQuery && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowCheckInModal(false)} />
+              <div className="bg-white p-6 rounded-lg shadow-xl z-10 max-w-sm w-full">
+                  <h3 className="text-lg font-semibold mb-2">Cannot Check In</h3>
+                  <p className="text-sm text-muted-foreground mb-4">Membership details not found. Please access this venue through your dashboard membership list.</p>
+                  <Button onClick={() => setShowCheckInModal(false)} className="w-full">Close</Button>
+              </div>
+          </div>
+       )}
     </div>
   );
-};
+}

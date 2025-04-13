@@ -5,29 +5,32 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/app/components/ui/button';
 // import useAuth from '@/hooks/useAuth'; // Remove old auth hook
-import { useSimpleAuth } from '@/app/context/AuthContext'; // Import the new simple auth hook
+import { useAuth } from '@/app/context/AuthContext'; // Corrected import: useAuth instead of useSimpleAuth
 
 export const CardLanding = () => {
   const params = useParams();
   const router = useRouter();
   const card_id = params?.card_id as string | undefined;
   // const { user, loading: authLoading, logout } = useAuth(); // Remove old auth state
-  const { isLoggedIn } = useSimpleAuth(); // Use simple auth state
+  const { user, isLoading: authLoading } = useAuth(); // Corrected usage: useAuth and get user/isLoading
 
   // State for card status check
   const [cardStatus, setCardStatus] = useState<'loading' | 'unregistered' | 'registered' | 'not_found' | 'error'>('loading');
   const [cardError, setCardError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Determine if user is logged in based on the presence of user data
+    const isLoggedIn = !!user;
+
     // Redirect logged-in users immediately
-    if (isLoggedIn) {
+    if (!authLoading && isLoggedIn) {
       console.log('CardLanding: User is logged in, redirecting to /dashboard');
       router.replace('/dashboard');
       return; // Don't proceed if already logged in
     }
 
     // Fetch card status only if not logged in and card_id is present
-    if (!isLoggedIn && card_id) {
+    if (!authLoading && !isLoggedIn && card_id) {
       const checkCardStatus = async () => {
         setCardStatus('loading');
         setCardError(null);
@@ -56,7 +59,7 @@ export const CardLanding = () => {
       checkCardStatus();
     }
     // Dependencies updated: removed user, authLoading, added isLoggedIn
-  }, [isLoggedIn, router, card_id]);
+  }, [authLoading, router, card_id, user]);
 
   const handleCreateProfile = () => {
     if (!card_id) return;
@@ -72,12 +75,12 @@ export const CardLanding = () => {
   };
 
   // Combined Loading State (only check cardStatus loading if not logged in)
-  if (!isLoggedIn && cardStatus === 'loading') {
+  if (!authLoading && cardStatus === 'loading') {
     return <div>Loading...</div>;
   }
 
   // Should be redirected if user is logged in
-  if (isLoggedIn) {
+  if (authLoading || !user) {
     return null;
   }
 

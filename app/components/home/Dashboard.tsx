@@ -1,17 +1,40 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Card } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
-import { CreditCard, MapPin, Plus, Wallet } from 'lucide-react';
+import { CreditCard, MapPin, Plus, Wallet, Building, Ticket, Info, ListChecks } from 'lucide-react';
 import { StakingModal } from './StakingModal';
+import { Skeleton } from "@/app/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/app/components/ui/alert";
+import { Terminal } from "lucide-react";
 
-export const Dashboard: React.FC = () => {
+// Define the structure of the membership data returned by /api/memberships
+interface Membership {
+  id: string; // Membership UUID
+  status: string;
+  glownet_customer_id: number | null;
+  created_at: string;
+  venues: {
+    id: string; // Venue UUID
+    name: string;
+    address: string | null;
+    image_url: string | null;
+    glownet_event_id: number | null;
+  } | null; // Venue can be null if join failed, filter applied in API
+}
+
+export function Dashboard() {
   const router = useRouter();
   const [showStakingModal, setShowStakingModal] = useState(false);
   
+  // State for memberships
+  const [memberships, setMemberships] = useState<Membership[]>([]);
+  const [isLoadingMemberships, setIsLoadingMemberships] = useState(true);
+  const [membershipsError, setMembershipsError] = useState<string | null>(null);
+
   const featuredVenues = [
     { id: '1', name: 'El Noviciado', location: 'Social Club, Madrid', image: '/novi1.png' },
     { id: '2', name: 'Bloom Festival', location: 'Festival, Malta', image: '/bloom-festival.png' },
@@ -23,6 +46,38 @@ export const Dashboard: React.FC = () => {
   const stakedSymbol = 'SOL';
   const availableCredit = 2500;
   const creditProgress = 80;
+
+  // Fetch memberships on component mount
+  useEffect(() => {
+    const fetchMemberships = async () => {
+      setIsLoadingMemberships(true);
+      setMembershipsError(null);
+      try {
+        console.log("Dashboard: Fetching user memberships...");
+        const response = await fetch('/api/memberships');
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Failed to fetch memberships: ${response.statusText}`);
+        }
+        const data: Membership[] = await response.json();
+        console.log(`Dashboard: Fetched ${data.length} memberships.`);
+        setMemberships(data || []); // Ensure it's an array
+      } catch (err: any) {
+        console.error("Dashboard: Error fetching memberships:", err);
+        setMembershipsError(err.message || 'An unexpected error occurred.');
+        setMemberships([]);
+      } finally {
+        setIsLoadingMemberships(false);
+      }
+    };
+
+    fetchMemberships();
+  }, []);
+
+  const handleMembershipClick = (venueId: string, membershipId: string) => {
+    // Navigate to venue detail page, passing membershipId as query param
+    router.push(`/venue/${venueId}?membershipId=${membershipId}`);
+  };
 
   return (
     <div className="flex flex-col pt-10 pb-20 px-6">
@@ -74,6 +129,66 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
+      <div className="mb-8 animate-fade-in">
+        <h2 className="text-lg font-semibold mb-3">Your Memberships</h2>
+        {isLoadingMemberships ? (
+            <div className="space-y-3">
+                <Skeleton className="h-20 w-full rounded-lg" />
+                <Skeleton className="h-20 w-full rounded-lg" />
+            </div>
+        ) : membershipsError ? (
+            <Alert variant="destructive">
+                <Terminal className="h-4 w-4" />
+                <AlertTitle>Error Loading Memberships</AlertTitle>
+                <AlertDescription>{membershipsError}</AlertDescription>
+            </Alert>
+        ) : memberships.length === 0 ? (
+            <Alert>
+                <Info className="h-4 w-4" />
+                <AlertTitle>No Memberships Yet</AlertTitle>
+                <AlertDescription>
+                    Claim a card or visit the discover page to find venues.
+                    <Link href="/discover"><Button variant="link" className="p-0 h-auto ml-1">Discover Venues</Button></Link>
+                </AlertDescription>
+            </Alert>
+        ) : (
+            <div className="space-y-3">
+                {memberships.map((membership) => (
+                    membership.venues && (
+                        <div
+                            key={membership.id}
+                            className="glass-card p-4 flex items-center justify-between cursor-pointer hover:bg-white/70 transition-colors"
+                            onClick={() => handleMembershipClick(membership.venues!.id, membership.id)}
+                        >
+                            <div className="flex items-center">
+                                {membership.venues.image_url ? (
+                                    <img src={membership.venues.image_url} alt={membership.venues.name} className="w-12 h-12 rounded-md object-cover mr-4"/>
+                                ) : (
+                                    <div className="w-12 h-12 rounded-md bg-gray-200 flex items-center justify-center mr-4">
+                                        <Building className="h-6 w-6 text-gray-400"/>
+                                    </div>
+                                )}
+                                <div>
+                                    <h3 className="font-medium">{membership.venues.name}</h3>
+                                    <p className="text-xs text-muted-foreground flex items-center">
+                                       <MapPin className="h-3 w-3 mr-1" />
+                                       {membership.venues.address || 'Location not specified'}
+                                    </p>
+                                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full mt-1 inline-block ${membership.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                                        {membership.status} 
+                                    </span>
+                                </div>
+                            </div>
+                            <Button variant="ghost" size="sm">
+                               View / Check In 
+                            </Button>
+                        </div>
+                    )
+                ))}
+            </div>
+        )}
+      </div>
+
       <div className="mb-6 animate-fade-in">
         <div className="flex justify-between items-center mb-3">
           <h2 className="text-lg font-semibold">Featured Venues</h2>
@@ -113,4 +228,4 @@ export const Dashboard: React.FC = () => {
       )}
     </div>
   );
-};
+}

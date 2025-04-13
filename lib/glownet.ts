@@ -133,7 +133,7 @@ export function deleteGlownet<T = unknown>(
 }
 
 
-// --- Specific API Function Examples (using Zod for validation) ---
+// --- Zod Schemas ---
 
 const GlownetEventSchema = z.object({
   id: z.number(),
@@ -147,6 +147,47 @@ const GlownetEventSchema = z.object({
 
 export type GlownetEvent = z.infer<typeof GlownetEventSchema>;
 
+const GlownetCustomerSchema = z.object({
+    id: z.number(), // Changed from string based on API response for POST/PATCH
+    first_name: z.string().optional().nullable(),
+    last_name: z.string().optional().nullable(),
+    email: z.string().email().optional().nullable(),
+    phone: z.string().optional().nullable(),
+    birthdate: z.string().optional().nullable(),
+    postcode: z.string().optional().nullable(),
+    address: z.string().optional().nullable(),
+    city: z.string().optional().nullable(),
+    country: z.string().optional().nullable(),
+    gender: z.string().optional().nullable(),
+    virtual_money: z.number().optional().nullable(), // Added
+    money: z.number().optional().nullable(),         // Added
+    global_refundable_money: z.number().optional().nullable(), // Added
+    balances: z.record(z.any()).optional().nullable(), // Added (object type)
+    locale: z.string().optional().nullable(),
+    anonymous: z.boolean().optional().nullable(),
+    refundable: z.boolean().optional().nullable(),
+    family_id: z.string().optional().nullable(), // Assuming string ID
+    family_owner: z.boolean().optional().nullable(),
+    // Omit nested gtags, tickets, orders for this specific schema if not needed for check-in
+    // gtags: z.array(z.any()).optional(), // Example if needed later
+    // tickets: z.array(z.any()).optional(),
+    // orders: z.array(z.any()).optional(),
+});
+
+export type GlownetCustomer = z.infer<typeof GlownetCustomerSchema>;
+
+// Schema for the /api/v2/events/lookup endpoint response
+const GlownetLookupResponseSchema = z.object({
+    event_id: z.number(),
+    gtag_id: z.number(),
+    customer_id: z.number().nullable(),
+    "gtag_active?": z.boolean(), // Note the key name with question mark
+});
+export type GlownetLookupResponse = z.infer<typeof GlownetLookupResponseSchema>;
+
+
+// --- Specific API Functions ---
+
 /**
  * Fetches all events (venues) from Glownet.
  */
@@ -155,17 +196,6 @@ export async function getAllGlownetEvents(): Promise<GlownetEvent[]> {
   // Validate the response structure
   return z.array(GlownetEventSchema).parse(events);
 }
-
-
-const GlownetCustomerSchema = z.object({
-    id: z.number(), // Assuming ID is numeric, adjust if string
-    first_name: z.string().optional().nullable(),
-    last_name: z.string().optional().nullable(),
-    email: z.string().email().optional().nullable(),
-    // Add other fields as needed from docs
-});
-
-export type GlownetCustomer = z.infer<typeof GlownetCustomerSchema>;
 
 interface CreateGlownetCustomerPayload {
     customer: {
@@ -182,17 +212,119 @@ interface CreateGlownetCustomerPayload {
  * Creates a new customer for a specific Glownet event.
  */
 export async function createGlownetCustomer(
-    glownetEventId: number | string, // Can be ID or slug
+    glownetEventId: number | string,
     payload: CreateGlownetCustomerPayload
 ): Promise<GlownetCustomer> {
-    // Note: API docs indicate 201 returns an *array* of customers, potentially just one.
-    // Adjust parsing if necessary. Assuming it returns the single created customer object directly for simplicity here.
-    const result = await postGlownet<GlownetCustomer>( // Adjust <GlownetCustomer> if it returns an array
+    console.log(`Attempting to create Glownet customer for event ${glownetEventId}...`);
+    // Docs indicate 201 returns an array of customers.
+    // We expect only one customer to be created and returned in the array.
+    const result = await postGlownet<unknown[]>(
         `/api/v2/events/${glownetEventId}/customers`,
         payload
     );
-    // If it returns an array: return GlownetCustomerSchema.parse(result[0]);
-    return GlownetCustomerSchema.parse(result);
+
+    // Validate the response structure (expecting an array)
+    try {
+        const parsedArray = z.array(GlownetCustomerSchema).parse(result);
+        if (parsedArray.length > 0) {
+            console.log(`Glownet customer created successfully for event ${glownetEventId}. ID: ${parsedArray[0].id}`);
+            return parsedArray[0]; // Return the first customer object from the array
+        } else {
+            console.error(`Glownet customer creation for event ${glownetEventId} returned an empty array.`);
+            throw new Error('Glownet customer creation returned empty array.');
+        }
+    } catch (error) {
+        console.error(`Failed to parse Glownet customer creation response for event ${glownetEventId}:`, error);
+        console.error('Raw response received from Glownet create customer:', result);
+        throw new Error(`Invalid response structure from Glownet create customer API.`);
+    }
+}
+
+/**
+ * Looks up Glownet event and customer details based on a Gtag UID.
+ * @param gtagUid The UID of the gtag (card identifier).
+ * @returns The parsed lookup response containing event_id, gtag_id, etc.
+ */
+export async function getGlownetEventDetailsByGtagUid(gtagUid: string): Promise<GlownetLookupResponse> {
+    console.log(`Looking up Glownet event details for gtag_uid: ${gtagUid}`);
+    const result = await getGlownet<unknown>('/api/v2/events/lookup', { gtag_uid: gtagUid });
+
+    // Validate the response structure
+    try {
+        const parsed = GlownetLookupResponseSchema.parse(result);
+        console.log(`Glownet lookup successful for gtag_uid ${gtagUid}:`, parsed);
+        return parsed;
+    } catch (error) {
+        console.error(`Failed to parse Glownet lookup response for gtag_uid ${gtagUid}:`, error);
+        console.error('Raw response received from Glownet:', result); // Log raw response on parse failure
+        throw new Error(`Invalid response structure from Glownet lookup API for gtag ${gtagUid}.`);
+    }
+}
+
+/**
+ * Assigns a specific Gtag UID to a Glownet customer within a specific event.
+ * @param glownetEventId The ID or slug of the Glownet event.
+ * @param glownetCustomerId The ID of the Glownet customer.
+ * @param gtagUid The UID of the gtag (card identifier) to assign.
+ * @returns The updated Glownet customer object.
+ */
+export async function assignGlownetGtagToCustomer(
+    glownetEventId: number | string,
+    glownetCustomerId: number,
+    gtagUid: string
+): Promise<GlownetCustomer> { // Assuming it returns the customer object
+    console.log(`Assigning gtag_uid ${gtagUid} to Glownet customer ${glownetCustomerId} in event ${glownetEventId}...`);
+
+    const payload = {
+        tag_uid: gtagUid
+    };
+
+    // The API docs suggest this returns the Customer object on 201 Created.
+    const result = await postGlownet<unknown>(
+        `/api/v2/events/${glownetEventId}/customers/${glownetCustomerId}/assign_gtag`,
+        payload
+    );
+
+    // Validate the response assuming it's a Customer object
+    try {
+        const parsedCustomer = GlownetCustomerSchema.parse(result);
+        console.log(`Successfully assigned gtag ${gtagUid} to customer ${glownetCustomerId}.`);
+        return parsedCustomer;
+    } catch (error) {
+        console.error(`Failed to parse response after assigning gtag ${gtagUid} to customer ${glownetCustomerId}:`, error);
+        console.error('Raw response received from Glownet assign_gtag:', result);
+        // Even if parsing fails, the assignment might have succeeded (e.g., if API returns slightly different structure).
+        // Consider if we need to handle this differently - for now, throw error.
+        throw new Error(`Invalid response structure from Glownet assign_gtag API.`);
+    }
+}
+
+/**
+ * Fetches detailed information for a specific Glownet customer within an event.
+ * @param glownetEventId The ID or slug of the Glownet event.
+ * @param glownetCustomerId The ID of the Glownet customer.
+ * @returns The detailed Glownet customer object, including balances.
+ */
+export async function getGlownetCustomerDetails(
+    glownetEventId: number | string,
+    glownetCustomerId: number
+): Promise<GlownetCustomer> {
+    console.log(`Fetching details for Glownet customer ${glownetCustomerId} in event ${glownetEventId}...`);
+
+    const result = await getGlownet<unknown>(
+        `/api/v2/events/${glownetEventId}/customers/${glownetCustomerId}`
+    );
+
+    // Validate the response using the enhanced schema
+    try {
+        const parsedCustomer = GlownetCustomerSchema.parse(result);
+        console.log(`Successfully fetched details for customer ${glownetCustomerId}.`);
+        return parsedCustomer;
+    } catch (error) {
+        console.error(`Failed to parse customer details response for customer ${glownetCustomerId}:`, error);
+        console.error('Raw response received from Glownet get customer details:', result);
+        throw new Error(`Invalid response structure from Glownet get customer details API.`);
+    }
 }
 
 

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Switch } from '@/app/components/ui/switch';
-import useAuth from '@/hooks/useAuth';
+import { useAuth } from '@/app/context/AuthContext';
 
 // Define a more specific type for settings items
 type SettingItem = {

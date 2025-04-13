@@ -2,73 +2,113 @@
 
 import React, { createContext, useState, useContext, ReactNode, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation'; // Import useRouter for redirect
-import { cookies } from 'next/headers'; // Import to read initial state
+// Removed cookies import from 'next/headers' as it's server-side only
 
 // Define the same secure cookie name
 const SESSION_COOKIE_NAME = 'auth_session';
 
-interface AuthContextType {
-  isLoggedIn: boolean;
-  // In a real app, you might store profile info here too
-  // profile: { id: string; username: string; } | null;
-  login: () => void; // Will just update state, cookie is set by API
-  logout: () => Promise<void>; // Make async to call API
+// Define Profile type (adjust based on actual data needed)
+interface Profile {
+    id: string;
+    username?: string; // Made optional as ProfileSettings uses email/name
+    email?: string;    // Added email
+    name?: string;     // Added name
+    walletAddress?: string; // Added walletAddress
+    // Add other relevant profile fields
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+interface AuthContextType {
+  user: Profile | null; // Store user profile data
+  isLoading: boolean; // Add loading state
+  login: (userData: Profile) => void; // Accept user data on login
+  logout: () => Promise<void>;
+  checkSession: () => Promise<void>; // Add function to manually re-check session
+}
+
+// Export the context
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Function to check cookie on the client (can run in useEffect)
+// This doesn't verify the cookie, just checks presence
 const hasSessionCookie = (): boolean => {
-    if (typeof document === 'undefined') return false; // Guard for SSR
+    if (typeof document === 'undefined') return false;
     return document.cookie.split(';').some((item) => item.trim().startsWith(`${SESSION_COOKIE_NAME}=`));
 }
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const router = useRouter();
+  const [user, setUser] = useState<Profile | null>(null);
+  const [isLoading, setIsLoading] = useState(true); // Start loading initially
 
-  // Initialize state based on cookie presence (client-side check)
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  // Function to fetch session info from our backend endpoint
+  const checkSession = async () => {
+      console.log("AuthContext: Checking session with backend...");
+      setIsLoading(true);
+      try {
+          const response = await fetch('/api/auth/session'); // Call our backend endpoint
+          if (response.ok) {
+              const userData: Profile = await response.json();
+              if (userData && userData.id) { // Check if valid user data is returned
+                 console.log("AuthContext: Session valid, user found:", userData);
+                 setUser(userData);
+              } else {
+                  console.log("AuthContext: Session invalid or no user data returned.");
+                  setUser(null);
+              }
+          } else {
+              console.log("AuthContext: Session check API call failed or returned non-OK status.");
+              setUser(null); // Assume logged out if session check fails
+          }
+      } catch (error) {
+          console.error("AuthContext: Error calling /api/auth/session:", error);
+          setUser(null); // Assume logged out on error
+      } finally {
+          setIsLoading(false);
+      }
+  };
 
   useEffect(() => {
-      // Check cookie presence on initial client mount
-      setIsLoggedIn(hasSessionCookie());
+      // Check session on initial mount
+      checkSession();
   }, []);
 
-  const login = () => {
-    // This function might not even be strictly necessary anymore if
-    // the UI reacts directly to redirects/cookie changes.
-    // But it's useful for instant UI updates before a full page reload.
-    console.log("AuthContext: Setting isLoggedIn to true (client state)");
-    setIsLoggedIn(true);
+  const login = (userData: Profile) => {
+    // Called after successful API login which sets the cookie
+    console.log("AuthContext: Setting user state:", userData);
+    setUser(userData);
+    setIsLoading(false); // Ensure loading is false after login set
   };
 
   const logout = async () => {
-    console.log("AuthContext: Calling logout API and setting isLoggedIn to false");
+    console.log("AuthContext: Calling logout API and clearing user state");
+    setIsLoading(true);
     try {
-        // Call the API route to clear the server-side cookie
         await fetch('/api/logout', { method: 'POST' });
-    } catch (error) { // Catch network errors etc.
+    } catch (error) {
         console.error("Logout API call failed:", error);
-        // Decide if you still want to clear client state or show an error
     }
-    setIsLoggedIn(false); // Update client state regardless of API success for responsiveness
-    router.push('/login'); // Redirect to login page
+    setUser(null); // Clear client state
+    setIsLoading(false);
+    router.push('/login');
   };
 
   // Memoize context value
   const value = useMemo(() => ({
-    isLoggedIn,
+    user,
+    isLoading,
     login,
     logout,
-  }), [isLoggedIn]); // Dependency array might need router if used in memoized value
+    checkSession // Expose checkSession if needed externally
+  }), [user, isLoading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-export const useSimpleAuth = (): AuthContextType => {
+// Rename the hook to useAuth
+export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useSimpleAuth must be used within an AuthProvider');
+    throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
 }; 

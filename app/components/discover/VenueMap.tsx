@@ -1,71 +1,83 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React from 'react';
+import { Building } from 'lucide-react';
 
-// TODO: Replace with actual venues from the database, implement Map
-const venues = [
-  { id: '1', name: 'El Noviciado', location: 'Madrid', coords: { lat: 40.4168, lng: -3.7038 }, image: '/images/novi1.png' },
-  { id: '2', name: 'Bloom Festival', location: 'Malta', coords: { lat: 35.9375, lng: 14.3754 }, image: '/images/bloom-festival.png' },
-  { id: '3', name: 'Barrage Club', location: 'Greece', coords: { lat: 39.0742, lng: 21.8243 }, image: '/images/barrage-club.png' },
-  { id: '4', name: 'Berhta Club', location: 'Washington D.C.', coords: { lat: 38.9072, lng: -77.0369 }, image: '/images/berhta-club.png' },
-];
-
-// Define props including searchQuery
-interface VenueMapProps {
-  searchQuery: string;
+// Align Venue type with DiscoverVenues.tsx
+interface Venue {
+  id: string;
+  name: string;
+  description: string | null;
+  address: string | null;
+  location?: string | null; // Optional field from mock data
+  image_url: string | null;
+  image?: string | null; // Optional field from mock data
+  glownet_event_id?: number | null; // Make optional/nullable
+  coords?: { lat: number; lng: number }; // Keep coords if needed for map
 }
 
-export const VenueMap: React.FC<VenueMapProps> = ({ searchQuery }) => {
+// Update props to accept the filtered venues array
+interface VenueMapProps {
+  venues: Venue[];
+}
 
-  // Filter venues based on search query for map markers
-  const filteredVenues = useMemo(() => {
-    if (!searchQuery) {
-      return venues;
-    }
-    // Simple filter for map, adjust as needed
-    return venues.filter(venue => 
-      venue.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      venue.location.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [searchQuery]);
+// Remove React.FC typing for consistency, destructure venues prop
+export function VenueMap({ venues }: VenueMapProps) {
+
+  // Filtering is now done in the parent component
+  // Removed useMemo and filteredVenues logic
+
+  // Handle case where the filtered list passed from parent is empty
+  if (venues.length === 0) {
+     // Potentially show a simplified map or a message
+     return (
+         <div className="glass-card h-96 relative overflow-hidden flex items-center justify-center">
+             <p className="text-muted-foreground">No venues to display on the map.</p>
+         </div>
+     );
+  }
+
+  // TODO: Implement actual map rendering using the 'venues' prop
+  // - Use a library like Leaflet, Mapbox GL JS, or Google Maps React component.
+  // - Iterate over 'venues' to place markers (using venue.coords if available).
+  // - Add popups or interactions on marker click.
 
   return (
     <div className="glass-card h-96 relative overflow-hidden">
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="w-full h-full bg-gray-100 relative">
-          {/* Simple map placeholder */}
-          <svg 
-            viewBox="0 0 1000 500" 
+          {/* Simple map placeholder - REMAINS PLACEHOLDER */}
+          <svg
+            viewBox="0 0 1000 500"
             className="w-full h-full opacity-70"
             xmlns="http://www.w3.org/2000/svg"
           >
-            {/* Placeholder shapes */}
-            <path d="M100,100 h800 v300 h-800 Z" fill="#E5E7EB" stroke="#9CA3AF" /> 
-            {/* Basic World Representation (adjust as needed) */}
+            <path d="M100,100 h800 v300 h-800 Z" fill="#E5E7EB" stroke="#9CA3AF" />
             <text x="500" y="250" fontSize="20" textAnchor="middle" fill="#6B7280">
               Map Area (Interactive Map Coming Soon)
             </text>
           </svg>
 
-          {/* TODO: Integrate a real map library (Leaflet, Mapbox GL JS, Google Maps) */}
-          {/* For now, just indicate filtered results */}
+          {/* Display count based on passed venues */}
           <div className="absolute top-4 left-4 bg-white/80 backdrop-blur-md p-2 rounded shadow">
             <p className="text-xs text-muted-foreground">
-              {filteredVenues.length} venue(s) found {searchQuery ? `matching "${searchQuery}"` : ''}
+              Displaying {venues.length} venue(s)
             </p>
           </div>
 
-          {/* Placeholder for markers - replace with actual map markers */}
-          {/* These positions are arbitrary for the placeholder */}
-          {filteredVenues.map((venue, index) => (
-            <div 
+          {/* Placeholder for markers - using passed venues */}
+          {venues.map((venue, index) => (
+            <div
               key={venue.id}
-              className="absolute w-4 h-4 bg-primary rounded-full transform -translate-x-1/2 -translate-y-1/2 shadow-md"
-              style={{ 
-                left: `${20 + index * 10}%`, // Example positioning
-                top: `${40 + (index % 2) * 20}%`, // Example positioning
+              className="absolute w-4 h-4 bg-primary rounded-full transform -translate-x-1/2 -translate-y-1/2 shadow-md cursor-pointer hover:scale-125 transition-transform"
+              style={{
+                // Use actual coords if available, otherwise fallback to random-ish positions
+                left: venue.coords ? `${(venue.coords.lng + 180) / 3.6}%` : `${20 + index * 10}%`, // Basic scaling for demo
+                top: venue.coords ? `${90 - (venue.coords.lat + 90) / 1.8}%` : `${40 + (index % 2) * 20}%`, // Basic scaling for demo
                }}
-              title={`${venue.name} - ${venue.location}`}
+               // Use address or location for title
+              title={`${venue.name || 'Venue'} - ${venue.address || venue.location || 'Location N/A'}`}
+              // TODO: Add onClick to show popup or navigate
             ></div>
           ))}
 
@@ -73,4 +85,4 @@ export const VenueMap: React.FC<VenueMapProps> = ({ searchQuery }) => {
       </div>
     </div>
   );
-};
+}

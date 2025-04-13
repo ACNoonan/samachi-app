@@ -1,50 +1,115 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  CreditCard, Wallet, RefreshCw, History, Eye, EyeOff 
+  CreditCard, Wallet, RefreshCw, History, Eye, EyeOff, Info
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/app/context/AuthContext';
+import { Skeleton } from '@/app/components/ui/skeleton';
 
-// Mock wallet data - updated for Solana
-const walletData = {
-  connected: true,
-  address: 'ABcd...XYz1',
-  assets: [
-    { id: 'sol', name: 'Solana', symbol: 'SOL', amount: 1.25, value: 125, staked: 1.0 },
-    { id: 'usdc', name: 'USD Coin on Solana', symbol: 'USDC', amount: 750, value: 750, staked: 500 },
-  ]
+// Define a basic type for assets (can be expanded later)
+interface Asset {
+    id: string;
+    name: string;
+    symbol: string;
+    amount: number;
+    value: number;
+    staked: number;
+}
+
+// Provide type for initial assets array
+const initialWalletData: { connected: boolean; address: string | null; assets: Asset[] } = {
+  connected: false,
+  address: null,
+  assets: [] // Initialize as empty Asset array
 };
 
-export const WalletDashboard: React.FC = () => {
+export function WalletDashboard() {
   const router = useRouter();
+  const { user, isLoading: authLoading } = useAuth();
   const [hideBalances, setHideBalances] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [connectedWalletBalance, setConnectedWalletBalance] = useState<number | null>(500);
+  const [stakedBalance, setStakedBalance] = useState<number>(1500);
+  const [stablecoinsStaked, setStablecoinsStaked] = useState<number>(2500);
+  const [activeTabAmount, setActiveTabAmount] = useState<number>(150);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [walletAssets, setWalletAssets] = useState<Asset[]>(initialWalletData.assets); // State for actual assets
 
-  const totalValue = walletData.assets.reduce((sum, asset) => sum + asset.value, 0);
-  const totalStakedValue = walletData.assets.reduce((sum, asset) => {
-    if (asset.id === 'sol') return sum + (asset.staked * 100); // Mock SOL price
-    if (asset.id === 'usdc') return sum + asset.staked;
-    return sum;
-  }, 0);
+  // Simulate data fetching
+  useEffect(() => {
+      setIsLoadingData(true);
+      setDataError(null);
+      // TODO: Fetch real data
+      const timer = setTimeout(() => {
+          // Set placeholder balances
+          setConnectedWalletBalance(500);
+          setStakedBalance(1500);
+          setStablecoinsStaked(2500);
+          setActiveTabAmount(150);
+          // Simulate fetching some assets too
+          setWalletAssets([
+               { id: 'sol', name: 'Solana', symbol: 'SOL', amount: 1.25, value: 125, staked: 1.0 },
+               { id: 'usdc', name: 'USD Coin', symbol: 'USDC', amount: 750, value: 750, staked: 500 },
+          ]);
+          setIsLoadingData(false);
+      }, 1000);
+      return () => clearTimeout(timer);
+  }, [user]);
 
+
+  // --- Calculated Values ---
+  const totalBalance = (connectedWalletBalance ?? 0) + stakedBalance;
+  const creditLine = stablecoinsStaked - (activeTabAmount > 0 ? activeTabAmount : 0);
+  const totalCreditLimit = stablecoinsStaked;
+
+  // --- UI Functions ---
   const handleRefresh = () => {
-    setRefreshing(true);
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1500);
+      setRefreshing(true);
+      // TODO: Trigger actual data refetching here
+      setIsLoadingData(true); // Show loading state during refresh
+      const timer = setTimeout(() => {
+          // Simulate refetch completion
+          setRefreshing(false);
+          setIsLoadingData(false);
+      }, 1500);
+      return () => clearTimeout(timer);
   };
 
-  const maskValue = (value: number) => {
-    return hideBalances ? '••••••' : `€${value.toLocaleString()}`;
+  const maskValue = (value: number | null) => {
+    if (value === null) return hideBalances ? '••••••' : 'N/A';
+    return hideBalances ? '••••••' : `€${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  const maskAmount = (amount: number) => {
-    return hideBalances ? '••••' : amount.toString();
-  };
+  // Render Loading State
+  if (authLoading || isLoadingData) {
+      return (
+          <div className="flex flex-col pt-10 pb-20 px-6 space-y-8">
+              <Skeleton className="h-8 w-1/3" />
+              <Skeleton className="h-40 w-full rounded-lg" />
+              <Skeleton className="h-40 w-full rounded-lg" />
+              <Skeleton className="h-6 w-1/4 mb-3" />
+              <Skeleton className="h-24 w-full rounded-lg" />
+          </div>
+      );
+  }
 
+  // Render Not Logged In State
+  if (!user) {
+       return (
+         <div className="flex flex-col items-center justify-center min-h-[60vh] p-6">
+            <Wallet className="h-12 w-12 text-muted-foreground mb-4"/>
+           <p className="text-center text-muted-foreground mb-4">Please log in to view your wallet.</p>
+           <Button onClick={() => router.push('/login')}>Log In</Button>
+         </div>
+       );
+  }
+
+  // Render Logged In Dashboard
   return (
     <div className="flex flex-col pt-10 pb-20 px-6">
       <div className="mb-6 animate-fade-in">
@@ -69,13 +134,13 @@ export const WalletDashboard: React.FC = () => {
         <div className="flex justify-between items-start mb-6">
           <div>
             <h2 className="text-lg font-medium mb-1">Total Balance</h2>
-            <p className="text-sm text-muted-foreground">Across all assets</p>
+            <p className="text-sm text-muted-foreground">Wallet + Staked</p>
           </div>
           <Wallet className="h-6 w-6 text-primary" />
         </div>
         
         <div className="mb-4">
-          <h3 className="text-3xl font-bold mb-2">{maskValue(totalValue)}</h3>
+          <h3 className="text-3xl font-bold mb-2">{maskValue(totalBalance)}</h3>
           <div className="flex items-center">
             <button
               onClick={handleRefresh}
@@ -83,34 +148,44 @@ export const WalletDashboard: React.FC = () => {
               disabled={refreshing}
               aria-label="Refresh balances"
             >
-              <RefreshCw className="h-4 w-4 text-muted-foreground" />
+              <RefreshCw className={`h-4 w-4 text-muted-foreground ${refreshing ? 'animate-spin' : 'hover:opacity-70'}`} />
             </button>
             <span className="text-xs text-muted-foreground ml-1">Last updated just now</span>
           </div>
         </div>
+        
+        <div className="text-xs space-y-1 text-muted-foreground">
+            <div className="flex justify-between"><span>Connected Wallet:</span> <span>{maskValue(connectedWalletBalance)}</span></div>
+            <div className="flex justify-between"><span>Staked Balance:</span> <span>{maskValue(stakedBalance)}</span></div>
+         </div>
       </div>
 
       <div className="glass-card p-6 mb-8 animate-fade-in">
         <div className="flex justify-between items-start mb-6">
           <div>
-            <h2 className="text-lg font-medium mb-1">Staked Assets</h2>
-            <p className="text-sm text-muted-foreground">Collateral for credit line</p>
+            <h2 className="text-lg font-medium mb-1">Credit Line</h2>
+            <p className="text-sm text-muted-foreground">Available spending power</p>
           </div>
           <CreditCard className="h-6 w-6 text-primary" />
         </div>
         
         <div className="mb-6">
-          <h3 className="text-2xl font-bold mb-1">{maskValue(totalStakedValue)}</h3>
+          <h3 className="text-2xl font-bold mb-1">{maskValue(creditLine)} Available</h3>
           <p className="text-sm text-muted-foreground">
-            Credit Line: {maskValue(totalStakedValue * 2)} <span className="text-xs">(2x collateral)</span>
+            Total Limit: {maskValue(totalCreditLimit)}
+            {activeTabAmount > 0 && ` (Currently using ${maskValue(activeTabAmount)})`}
           </p>
+          
+          <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div className="h-full bg-primary rounded-full" style={{ width: `${totalCreditLimit > 0 ? ((totalCreditLimit - creditLine) / totalCreditLimit) * 100 : 0}%` }} />
+           </div>
         </div>
         
-        <Button 
+        <Button
           className="w-full glass-button"
-          onClick={() => { console.log("Open staking modal or page"); /* router.push('/stake') or open modal */ }}
+          onClick={() => { console.log("Navigate to staking..."); }}
         >
-          <span className="mr-2">+</span> Stake More Assets
+          Manage Staking
         </Button>
       </div>
 
@@ -123,7 +198,7 @@ export const WalletDashboard: React.FC = () => {
         </div>
         
         <div className="space-y-3">
-          {walletData.assets.map((asset) => (
+          {walletAssets.length > 0 ? walletAssets.map((asset: Asset) => (
             <div key={asset.id} className="glass-card p-4">
               <div className="flex justify-between items-center mb-2">
                 <div className="flex items-center">
@@ -137,19 +212,24 @@ export const WalletDashboard: React.FC = () => {
                 </div>
                 <div className="text-right">
                   <p className="font-medium">{maskValue(asset.value)}</p>
-                  <p className="text-xs text-muted-foreground">{maskAmount(asset.amount)} {asset.symbol}</p>
+                  <p className="text-xs text-muted-foreground">{hideBalances ? '••••' : asset.amount} {asset.symbol}</p>
                 </div>
               </div>
               
               {asset.staked > 0 && (
-                <div className="text-xs bg-solana-primary/10 p-2 rounded-lg text-solana-primary font-medium">
-                  {maskAmount(asset.staked)} {asset.symbol} staked for credit line
+                <div className="text-xs bg-primary/10 p-2 rounded-lg text-primary font-medium">
+                  {hideBalances ? '••••' : asset.staked} {asset.symbol} staked
                 </div>
               )}
             </div>
-          ))}
+          )) : (
+              <div className="glass-card p-4 text-center text-muted-foreground">
+                  <Info className="h-5 w-5 mx-auto mb-2"/>
+                  No assets found in connected wallet.
+              </div>
+           )}
         </div>
       </div>
     </div>
   );
-};
+}
