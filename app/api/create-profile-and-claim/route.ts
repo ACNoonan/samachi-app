@@ -12,6 +12,9 @@ if (!supabaseUrl || !supabaseAdminKey) {
 const supabaseAdmin = createClient(supabaseUrl!, supabaseAdminKey!);
 const SALT_ROUNDS = 10; // Standard for bcrypt
 
+// Define the same secure cookie name
+const SESSION_COOKIE_NAME = 'auth_session';
+
 export async function POST(request: Request) {
   try {
     const {
@@ -120,8 +123,23 @@ export async function POST(request: Request) {
 
     console.log(`Card ${cardId} successfully linked to profile ${profileId}`);
 
-    // 7. Return Success (do not return profile data or password hash)
-    return NextResponse.json({ message: 'Profile created and card claimed successfully!' });
+    // 7. Prepare Success Response
+    const response = NextResponse.json({
+        message: 'Profile created and card claimed successfully!',
+        profile: { id: profileId, username: username } // Return basic profile info
+    });
+
+    // 8. Set Session Cookie on the Response
+    response.cookies.set(SESSION_COOKIE_NAME, profileId, { // Use the new profile ID
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 60 * 60 * 24 * 7, // 1 week
+        path: '/',
+        sameSite: 'lax',
+      });
+
+    // 9. Return the Response with the Cookie
+    return response;
 
   } catch (error: any) {
     // --- Enhanced Error Logging --- 

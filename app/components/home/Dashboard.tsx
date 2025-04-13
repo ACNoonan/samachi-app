@@ -13,10 +13,10 @@ export const Dashboard: React.FC = () => {
   const [showStakingModal, setShowStakingModal] = useState(false);
   
   const featuredVenues = [
-    { id: '1', name: 'El Noviciado', location: 'Social Club, Madrid', image: '/images/novi1.png' },
-    { id: '2', name: 'Bloom Festival', location: 'Festival, Malta', image: '/images/bloom-festival.png' },
-    { id: '3', name: 'Barrage Club', location: 'Nightclub, Greece', image: '/images/barrage-club.png' },
-    { id: '4', name: 'Berhta Club', location: 'Social Club, Washington D.C.', image: '/images/berhta-club.png' },
+    { id: '1', name: 'El Noviciado', location: 'Social Club, Madrid', image: '/novi1.png' },
+    { id: '2', name: 'Bloom Festival', location: 'Festival, Malta', image: '/bloom-festival.png' },
+    { id: '3', name: 'Barrage Club', location: 'Nightclub, Greece', image: '/barrage-club.png' },
+    { id: '4', name: 'Berhta Club', location: 'Social Club, Washington D.C.', image: '/bertha-club.png' },
   ];
 
   const stakedAmount = 1.25;

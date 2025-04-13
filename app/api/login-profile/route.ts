@@ -11,6 +11,9 @@ if (!supabaseUrl || !supabaseAdminKey) {
 
 const supabaseAdmin = createClient(supabaseUrl!, supabaseAdminKey!);
 
+// Define a secure cookie name
+const SESSION_COOKIE_NAME = 'auth_session';
+
 export async function POST(request: Request) {
   try {
     const { username, password } = await request.json();
@@ -58,16 +61,23 @@ export async function POST(request: Request) {
     // 4. Login Successful
     console.log(`Login successful for username: ${username}, Profile ID: ${profile.id}`);
 
-    // IMPORTANT: In a real app, you would generate a session token (e.g., JWT) here,
-    // store it (e.g., in httpOnly cookies), and return it to the client.
-    // The client would then use this token for subsequent authenticated requests.
-    // For MVP, we just return success and let the client update its local state.
-
-    return NextResponse.json({
+    // 5. Prepare Success Response
+    const response = NextResponse.json({
         message: 'Signed in successfully!',
-        // Optionally return non-sensitive profile info if needed by the client immediately
-        // profile: { id: profile.id, username: profile.username }
+        profile: { id: profile.id, username: profile.username } // Can return profile info
     });
+
+    // 6. Set Session Cookie on the Response
+    response.cookies.set(SESSION_COOKIE_NAME, profile.id, {
+      httpOnly: true, // Prevent client-side JS access
+      secure: process.env.NODE_ENV === 'production', // Use Secure in production (HTTPS)
+      maxAge: 60 * 60 * 24 * 7, // Example: 1 week expiry
+      path: '/', // Available on all paths
+      sameSite: 'lax', // Recommended for most cases
+    });
+
+    // 7. Return the Response with the Cookie
+    return response;
 
   } catch (error: any) {
     // --- Enhanced Error Logging --- 

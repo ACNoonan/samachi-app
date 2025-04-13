@@ -11,28 +11,28 @@ const venues = [
     name: 'El Noviciado',
     location: 'Social Club, Madrid',
     description: 'Exclusive social club with live music and intimate ambiance',
-    image: '/images/novi1.png',
+    image: '/novi1.png',
   },
   {
     id: '2',
     name: 'Bloom Festival',
     location: 'Festival, Malta',
     description: 'High-energy festival featuring world-class DJs and performers',
-    image: '/images/bloom-festival.png',
+    image: '/bloom-festival.png',
   },
   {
     id: '3',
     name: 'Barrage Club',
     location: 'Nightclub, Greece',
     description: 'Beachfront club with stunning ocean views and premium service',
-    image: '/images/barrage-club.png',
+    image: '/barrage-club.png',
   },
   {
     id: '4',
     name: 'Berhta Club',
     location: 'Social Club, Washington D.C.',
     description: 'Sophisticated venue with elegant design and premium atmosphere',
-    image: '/images/berhta-club.png',
+    image: '/bertha-club.png',
   },
 ];
 

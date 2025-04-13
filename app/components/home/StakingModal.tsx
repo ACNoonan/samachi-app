@@ -9,11 +9,10 @@ interface StakingModalProps {
 }
 
 const cryptoOptions = [
-  { id: 'eth', name: 'Ethereum', symbol: 'ETH', icon: '🔷' },
+  { id: 'sol', name: 'Solana', symbol: 'SOL', icon: '☀️' },
   { id: 'usdt', name: 'Tether', symbol: 'USDT', icon: '💵' },
   { id: 'usdc', name: 'USD Coin', symbol: 'USDC', icon: '💰' },
-  // Add SOL or other relevant cryptos if needed
-  // { id: 'sol', name: 'Solana', symbol: 'SOL', icon: '☀️' }, 
+  // Add other relevant cryptos if needed
 ];
 
 export const StakingModal: React.FC<StakingModalProps> = ({ onClose }) => {
