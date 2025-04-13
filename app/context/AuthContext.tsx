@@ -1,110 +1,157 @@
 'use client';
 
 import React, { createContext, useState, useContext, ReactNode, useMemo, useEffect } from 'react';
-import { useRouter } from 'next/navigation'; // Import useRouter for redirect
-// Removed cookies import from 'next/headers' as it's server-side only
+import { useRouter } from 'next/navigation';
+// Import Supabase client and types
+import { createClient } from '@/lib/supabase/client'; // Assuming you have a client helper
+import type { SupabaseClient, Session, User } from '@supabase/supabase-js';
 
-// Define the same secure cookie name
-const SESSION_COOKIE_NAME = 'auth_session';
-
-// Define Profile type (adjust based on actual data needed)
+// Keep your Profile type (ensure it matches the columns in public.profiles)
 interface Profile {
     id: string;
-    username?: string; // Made optional as ProfileSettings uses email/name
-    email?: string;    // Added email
-    name?: string;     // Added name
-    walletAddress?: string; // Added walletAddress
-    // Add other relevant profile fields
+    username?: string;
+    email?: string;
+    name?: string;
+    walletAddress?: string;
+    // Add other relevant profile fields from your 'profiles' table
 }
 
 interface AuthContextType {
-  user: Profile | null; // Store user profile data
-  isLoading: boolean; // Add loading state
-  login: (userData: Profile) => void; // Accept user data on login
+  supabase: SupabaseClient; // Expose Supabase client
+  session: Session | null; // Supabase session object
+  user: User | null; // Supabase auth user object
+  profile: Profile | null; // Your public profile data
+  isLoading: boolean; // Combined loading state for auth and profile
   logout: () => Promise<void>;
-  checkSession: () => Promise<void>; // Add function to manually re-check session
+  // Add specific sign-in methods if needed, or components can use supabase.auth directly
 }
 
-// Export the context
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// Function to check cookie on the client (can run in useEffect)
-// This doesn't verify the cookie, just checks presence
-const hasSessionCookie = (): boolean => {
-    if (typeof document === 'undefined') return false;
-    return document.cookie.split(';').some((item) => item.trim().startsWith(`${SESSION_COOKIE_NAME}=`));
-}
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const router = useRouter();
-  const [user, setUser] = useState<Profile | null>(null);
+  const supabase = createClient(); // Initialize Supabase client
+
+  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true); // Start loading initially
 
-  // Function to fetch session info from our backend endpoint
-  const checkSession = async () => {
-      console.log("AuthContext: Checking session with backend...");
-      setIsLoading(true);
-      try {
-          const response = await fetch('/api/auth/session'); // Call our backend endpoint
-          if (response.ok) {
-              const userData: Profile = await response.json();
-              if (userData && userData.id) { // Check if valid user data is returned
-                 console.log("AuthContext: Session valid, user found:", userData);
-                 setUser(userData);
-              } else {
-                  console.log("AuthContext: Session invalid or no user data returned.");
-                  setUser(null);
-              }
-          } else {
-              console.log("AuthContext: Session check API call failed or returned non-OK status.");
-              setUser(null); // Assume logged out if session check fails
-          }
-      } catch (error) {
-          console.error("AuthContext: Error calling /api/auth/session:", error);
-          setUser(null); // Assume logged out on error
-      } finally {
-          setIsLoading(false);
+  // Fetch profile data based on user ID
+  const fetchProfile = async (userId: string) => {
+    console.log("AuthContext: Fetching profile for user:", userId);
+    setIsLoading(true); // Indicate loading profile data
+    try {
+      const { data, error, status } = await supabase
+        .from('profiles')
+        .select('*') // Select all profile fields
+        .eq('id', userId)
+        .single();
+
+      if (error && status !== 406) { // 406 No Content is expected if profile doesn't exist yet
+        console.error("AuthContext: Error fetching profile:", error);
+        setProfile(null); // Clear profile on error
+        // Optionally throw error or handle it based on your app's needs
+      } else if (data) {
+        console.log("AuthContext: Profile data received:", data);
+        setProfile(data as Profile); // Set profile data
+      } else {
+        console.log("AuthContext: No profile found for user:", userId);
+        setProfile(null); // No profile exists
       }
+    } catch (error) {
+      console.error("AuthContext: Exception fetching profile:", error);
+      setProfile(null);
+    } finally {
+      // Consider setting isLoading false only after BOTH session AND profile check are done
+      // This might need adjustment based on how initial loading feels
+    }
   };
 
   useEffect(() => {
-      // Check session on initial mount
-      checkSession();
-  }, []);
+    setIsLoading(true); // Start loading on mount
 
-  const login = (userData: Profile) => {
-    // Called after successful API login which sets the cookie
-    console.log("AuthContext: Setting user state:", userData);
-    setUser(userData);
-    setIsLoading(false); // Ensure loading is false after login set
-  };
+    // 1. Get initial session
+    supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
+      console.log("AuthContext: Initial session:", initialSession);
+      setSession(initialSession);
+      setUser(initialSession?.user ?? null);
+
+      // 2. Fetch profile if session exists
+      if (initialSession?.user?.id) {
+        await fetchProfile(initialSession.user.id);
+      }
+      
+      // Initial load complete ONLY after session check AND profile fetch (if applicable)
+      setIsLoading(false); 
+    }).catch(error => {
+        console.error("AuthContext: Error in getSession promise:", error);
+        setIsLoading(false); // Stop loading on error
+    });
+
+
+    // 3. Listen for auth state changes
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      async (event, newSession) => {
+        console.log("AuthContext: onAuthStateChange event:", event, "session:", newSession);
+        setSession(newSession);
+        const newAuthUser = newSession?.user ?? null;
+        setUser(newAuthUser);
+
+        // If user logs in/session restored, fetch profile
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+          if (newAuthUser?.id) {
+            await fetchProfile(newAuthUser.id);
+          } else {
+            // Should not happen if event is SIGNED_IN, but handle defensively
+             console.warn("AuthContext: SIGNED_IN event but no user ID found in session.");
+             setProfile(null);
+          }
+        } else if (event === 'SIGNED_OUT') {
+          // Clear profile on logout
+          setProfile(null);
+          // Optionally redirect here or let components handle it
+          // router.push('/login'); // Example redirect on logout
+        }
+         // Ensure loading is false after state change and profile fetch
+         setIsLoading(false);
+      }
+    );
+
+    // Cleanup listener on unmount
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
+  }, [supabase]); // Add supabase as dependency
 
   const logout = async () => {
-    console.log("AuthContext: Calling logout API and clearing user state");
-    setIsLoading(true);
-    try {
-        await fetch('/api/logout', { method: 'POST' });
-    } catch (error) {
-        console.error("Logout API call failed:", error);
+    console.log("AuthContext: Signing out...");
+    setIsLoading(true); // Indicate loading during sign out
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error("AuthContext: Error signing out:", error);
+      // Handle error appropriately, e.g., show toast
     }
-    setUser(null); // Clear client state
-    setIsLoading(false);
-    router.push('/login');
+    // State updates (session, user, profile to null) are handled by onAuthStateChange listener
+    // Redirect can happen here or be handled by listener/components
+    router.push('/login'); 
+    setIsLoading(false); // Stop loading after sign out attempt
   };
 
   // Memoize context value
   const value = useMemo(() => ({
+    supabase, // Provide client instance
+    session,
     user,
+    profile, // Provide profile data
     isLoading,
-    login,
-    logout,
-    checkSession // Expose checkSession if needed externally
-  }), [user, isLoading]);
+    logout
+  }), [supabase, session, user, profile, isLoading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// Rename the hook to useAuth
+// Keep the hook as is
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (context === undefined) {

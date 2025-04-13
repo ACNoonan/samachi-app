@@ -5,14 +5,14 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/app/components/ui/button';
 // import useAuth from '@/hooks/useAuth'; // Remove old auth hook
-import { useAuth } from '@/app/context/AuthContext'; // Corrected import: useAuth instead of useSimpleAuth
+import { useAuth } from '@/app/context/AuthContext'; // Use the refactored context
 
 export const CardLanding = () => {
   const params = useParams();
   const router = useRouter();
   const card_id = params?.card_id as string | undefined;
-  // const { user, loading: authLoading, logout } = useAuth(); // Remove old auth state
-  const { user, isLoading: authLoading } = useAuth(); // Corrected usage: useAuth and get user/isLoading
+  // Use the refactored hook - user is Supabase user, isLoading covers auth+profile
+  const { user, isLoading: authLoading } = useAuth(); 
 
   // State for card status check
   const [cardStatus, setCardStatus] = useState<'loading' | 'unregistered' | 'registered' | 'not_found' | 'error'>('loading');

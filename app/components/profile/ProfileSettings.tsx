@@ -22,7 +22,7 @@ type SettingItem = {
 
 export const ProfileSettings: React.FC = () => {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, profile, logout } = useAuth();
   const [darkMode, setDarkMode] = useState(false);
   const [notifications, setNotifications] = useState(true);
   
@@ -39,7 +39,7 @@ export const ProfileSettings: React.FC = () => {
         {
           icon: Wallet, 
           label: 'Connected Wallet',
-          value: user?.walletAddress ? `${user.walletAddress.substring(0, 6)}...${user.walletAddress.substring(user.walletAddress.length - 4)}` : 'Not Connected',
+          value: profile?.walletAddress ? `${profile.walletAddress.substring(0, 6)}...${profile.walletAddress.substring(profile.walletAddress.length - 4)}` : 'Not Connected',
           onClick: () => router.push('/connect-wallet'),
         },
       ]
@@ -111,12 +111,12 @@ export const ProfileSettings: React.FC = () => {
       <div className="glass-card p-6 mb-8 animate-fade-in">
         <div className="flex items-center">
           <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-white text-2xl font-bold mr-4">
-            {/* TODO: Use user initials or avatar */}
-            {user?.email ? user.email.charAt(0).toUpperCase() : 'S'}
+            {/* Use profile username or user email initial */}
+            {profile?.username ? profile.username.charAt(0).toUpperCase() : (user?.email ? user.email.charAt(0).toUpperCase() : 'S')}
           </div>
           <div>
-            {/* TODO: Display user name/email */}
-            <h2 className="text-xl font-semibold">{user?.name || user?.email || 'Samachi Member'}</h2>
+            {/* Display profile name/username or user email */}
+            <h2 className="text-xl font-semibold">{profile?.name || profile?.username || user?.email || 'Samachi Member'}</h2>
           </div>
         </div>
       </div>

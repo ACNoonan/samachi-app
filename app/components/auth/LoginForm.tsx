@@ -6,7 +6,7 @@ import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { toast } from 'sonner';
-import { useSimpleAuth } from '@/app/context/AuthContext';
+import { useAuth } from '@/app/context/AuthContext';
 import { ArrowLeft } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -19,58 +19,52 @@ import {
   FormLabel,
   FormMessage,
 } from '@/app/components/ui/form';
+import Link from 'next/link';
 
 // 1. Define Zod Schema
 const formSchema = z.object({
-  username: z.string().min(1, { message: 'Username is required.' }),
+  email: z.string().email({ message: 'Invalid email address.' }),
   password: z.string().min(1, { message: 'Password is required.' }),
 });
 
 export const LoginForm: React.FC = () => {
   const router = useRouter();
-  const { login } = useSimpleAuth();
+  const { supabase } = useAuth();
 
   // 2. Initialize react-hook-form
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      username: '',
+      email: '',
       password: '',
     },
   });
 
-  // 3. Define onSubmit handler using form data
+  // 3. Define onSubmit handler using Supabase auth
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    // isLoading state is now form.formState.isSubmitting
-    console.log('Login form submitted:', values);
+    console.log('Login attempt with:', values.email);
 
     try {
-      const response = await fetch('/api/login-profile', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        // Use validated values from react-hook-form
-        body: JSON.stringify({ username: values.username, password: values.password }),
+      // Use Supabase client to sign in
+      const { error } = await supabase.auth.signInWithPassword({
+        email: values.email,
+        password: values.password,
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Login failed.');
+      if (error) {
+        throw error; // Throw Supabase error
       }
 
-      toast.success(data.message || 'Signed in successfully!');
-      login(); // Update auth state
-      router.push('/dashboard'); // Redirect
+      toast.success('Signed in successfully!');
+      // No need to call login() from context anymore
+      // Redirect is handled by middleware or can be done explicitly
+      router.push('/dashboard'); // Or router.refresh() if middleware handles redirect
 
     } catch (error: any) {
-      console.error('Login API error:', error);
-      toast.error(error.message || 'An error occurred during login.');
-      // Optionally reset form fields on error if desired
-      // form.reset();
+      console.error('Supabase login error:', error);
+      toast.error(error.message || 'Login failed. Please check your credentials.');
     }
-    // No need for setIsLoading(false) here, handled by react-hook-form
+    // isSubmitting is handled by react-hook-form
   }
 
   return (
@@ -79,7 +73,6 @@ export const LoginForm: React.FC = () => {
         onClick={() => router.back()}
         className="self-start mb-8 p-2 rounded-full hover:bg-black/5 transition-colors"
         aria-label="Go back"
-        // Disable button during submission
         disabled={form.formState.isSubmitting}
       >
         <ArrowLeft className="h-6 w-6" />
@@ -90,26 +83,26 @@ export const LoginForm: React.FC = () => {
         <p className="text-muted-foreground">Access your Samachi membership</p>
       </div>
 
-      {/* 4. Use Form component */}
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          {/* Username Field */}
+          {/* Email Field */}
           <FormField
             control={form.control}
-            name="username"
+            name="email"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Username</FormLabel>
+                <FormLabel>Email</FormLabel>
                 <FormControl>
                   <Input
-                    placeholder="your_username"
-                    autoComplete="username"
+                    type="email"
+                    placeholder="your@email.com"
+                    autoComplete="email"
                     className="bg-white/50 backdrop-blur-sm border-gray-200"
                     disabled={form.formState.isSubmitting}
-                    {...field} // Spread field props (onChange, onBlur, value, ref)
+                    {...field}
                   />
                 </FormControl>
-                <FormMessage /> {/* Displays validation errors */}
+                <FormMessage />
               </FormItem>
             )}
           />
@@ -132,6 +125,12 @@ export const LoginForm: React.FC = () => {
                   />
                 </FormControl>
                 <FormMessage />
+                <div className="text-right">
+                  <Link href="/forgot-password"
+                    className="text-sm text-primary hover:underline">
+                    Forgot Password?
+                  </Link>
+                </div>
               </FormItem>
             )}
           />
@@ -139,7 +138,7 @@ export const LoginForm: React.FC = () => {
           <Button
             type="submit"
             className="w-full glass-button"
-            disabled={form.formState.isSubmitting} // Disable based on form state
+            disabled={form.formState.isSubmitting}
           >
             {form.formState.isSubmitting ? 'Signing In...' : 'Sign In'}
           </Button>
