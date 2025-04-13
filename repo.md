@@ -7,7 +7,9 @@
     │   │   └── route.ts
     │   ├── create-profile-and-claim
     │   │   └── route.ts
-    │   └── login-profile
+    │   ├── login-profile
+    │   │   └── route.ts
+    │   └── logout
     │   │   └── route.ts
     ├── card
     │   └── [card_id]
@@ -16,8 +18,7 @@
     │   ├── auth
     │   │   ├── ConnectWallet.tsx
     │   │   ├── CreateProfileForm.tsx
-    │   │   ├── LoginForm.tsx
-    │   │   └── SignIn.tsx
+    │   │   └── LoginForm.tsx
     │   ├── discover
     │   │   ├── DiscoverVenues.tsx
     │   │   ├── VenueList.tsx
@@ -96,13 +97,17 @@
     │   └── page.tsx
     ├── dashboard
     │   └── page.tsx
+    ├── discover
+    │   └── page.tsx
     ├── favicon.ico
     ├── globals.css
     ├── layout.tsx
     ├── login
     │   └── page.tsx
     ├── page.tsx
-    └── register
+    ├── profile
+    │   └── page.tsx
+    └── wallet
     │   └── page.tsx
 ├── hooks
     └── useAuth.ts
@@ -118,11 +123,16 @@
 ├── pnpm-lock.yaml
 ├── postcss.config.mjs
 ├── public
+    ├── barrage-club.png
+    ├── bertha-club.png
+    ├── bloom-festival.png
     ├── file.svg
     ├── globe.svg
     ├── next.svg
+    ├── novi1.png
     ├── vercel.svg
     └── window.svg
+├── repo.md
 └── tsconfig.json
 
 
@@ -354,147 +364,165 @@
  12 | const supabaseAdmin = createClient(supabaseUrl!, supabaseAdminKey!);
  13 | const SALT_ROUNDS = 10; // Standard for bcrypt
  14 | 
- 15 | export async function POST(request: Request) {
- 16 |   try {
- 17 |     const {
- 18 |       username,
- 19 |       password,
- 20 |       twitterHandle,
- 21 |       telegramHandle,
- 22 |       walletAddress,
- 23 |       cardId
- 24 |     } = await request.json();
- 25 | 
- 26 |     // 1. Validate Input
- 27 |     if (!username || !password || !cardId) {
- 28 |       return NextResponse.json({ error: 'Missing required fields: username, password, cardId' }, { status: 400 });
- 29 |     }
- 30 |     if (password.length < 6) { // Basic password length check
- 31 |         return NextResponse.json({ error: 'Password must be at least 6 characters long.' }, { status: 400 });
+ 15 | // Define the same secure cookie name
+ 16 | const SESSION_COOKIE_NAME = 'auth_session';
+ 17 | 
+ 18 | export async function POST(request: Request) {
+ 19 |   try {
+ 20 |     const {
+ 21 |       username,
+ 22 |       password,
+ 23 |       twitterHandle,
+ 24 |       telegramHandle,
+ 25 |       walletAddress,
+ 26 |       cardId
+ 27 |     } = await request.json();
+ 28 | 
+ 29 |     // 1. Validate Input
+ 30 |     if (!username || !password || !cardId) {
+ 31 |       return NextResponse.json({ error: 'Missing required fields: username, password, cardId' }, { status: 400 });
  32 |     }
- 33 | 
- 34 |     // 2. Check if username or wallet address already exists
- 35 |     const { data: existingUser, error: findUserError } = await supabaseAdmin
- 36 |         .from('profiles')
- 37 |         .select('id, username, wallet_address')
- 38 |         .or(`username.eq.${username},wallet_address.eq.${walletAddress ? walletAddress : 'null'}`) // Check both username and wallet if provided
- 39 |         .maybeSingle(); // Use maybeSingle as walletAddress might be null
- 40 | 
- 41 |     if (findUserError) {
- 42 |         console.error('Error checking for existing profile:', findUserError);
- 43 |         throw new Error('Database error checking profile existence.');
- 44 |     }
- 45 | 
- 46 |     if (existingUser) {
- 47 |         if (existingUser.username === username) {
- 48 |             return NextResponse.json({ error: 'Username already taken.' }, { status: 409 });
- 49 |         }
- 50 |         if (walletAddress && existingUser.wallet_address === walletAddress) {
- 51 |             return NextResponse.json({ error: 'Wallet address already linked to another profile.' }, { status: 409 });
+ 33 |     if (password.length < 6) { // Basic password length check
+ 34 |         return NextResponse.json({ error: 'Password must be at least 6 characters long.' }, { status: 400 });
+ 35 |     }
+ 36 | 
+ 37 |     // 2. Check if username or wallet address already exists
+ 38 |     const { data: existingUser, error: findUserError } = await supabaseAdmin
+ 39 |         .from('profiles')
+ 40 |         .select('id, username, wallet_address')
+ 41 |         .or(`username.eq.${username},wallet_address.eq.${walletAddress ? walletAddress : 'null'}`) // Check both username and wallet if provided
+ 42 |         .maybeSingle(); // Use maybeSingle as walletAddress might be null
+ 43 | 
+ 44 |     if (findUserError) {
+ 45 |         console.error('Error checking for existing profile:', findUserError);
+ 46 |         throw new Error('Database error checking profile existence.');
+ 47 |     }
+ 48 | 
+ 49 |     if (existingUser) {
+ 50 |         if (existingUser.username === username) {
+ 51 |             return NextResponse.json({ error: 'Username already taken.' }, { status: 409 });
  52 |         }
- 53 |         // If walletAddress was null and we found a match, it must be by username
- 54 |         if (!walletAddress && existingUser.username === username) {
- 55 |              return NextResponse.json({ error: 'Username already taken.' }, { status: 409 });
- 56 |         }
- 57 |     }
- 58 | 
- 59 | 
- 60 |     // 3. Find the Membership Card and check its status
- 61 |     const { data: cardData, error: cardError } = await supabaseAdmin
- 62 |       .from('membership_cards')
- 63 |       .select('id, user_id, status')
- 64 |       .eq('card_identifier', cardId)
- 65 |       .single(); // Expect exactly one card
- 66 | 
- 67 |     if (cardError || !cardData) {
- 68 |         console.error('Error fetching card or card not found:', cardId, cardError);
- 69 |         return NextResponse.json({ error: `Membership card with ID ${cardId} not found.` }, { status: 404 });
- 70 |     }
- 71 | 
- 72 |     if (cardData.user_id) {
- 73 |         console.warn(`Card ${cardId} already claimed by user ${cardData.user_id}`);
- 74 |         return NextResponse.json({ error: 'This membership card has already been claimed.' }, { status: 409 }); // 409 Conflict
- 75 |     }
- 76 | 
- 77 |     // 4. Hash Password
- 78 |     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+ 53 |         if (walletAddress && existingUser.wallet_address === walletAddress) {
+ 54 |             return NextResponse.json({ error: 'Wallet address already linked to another profile.' }, { status: 409 });
+ 55 |         }
+ 56 |         // If walletAddress was null and we found a match, it must be by username
+ 57 |         if (!walletAddress && existingUser.username === username) {
+ 58 |              return NextResponse.json({ error: 'Username already taken.' }, { status: 409 });
+ 59 |         }
+ 60 |     }
+ 61 | 
+ 62 | 
+ 63 |     // 3. Find the Membership Card and check its status
+ 64 |     const { data: cardData, error: cardError } = await supabaseAdmin
+ 65 |       .from('membership_cards')
+ 66 |       .select('id, user_id, status')
+ 67 |       .eq('card_identifier', cardId)
+ 68 |       .single(); // Expect exactly one card
+ 69 | 
+ 70 |     if (cardError || !cardData) {
+ 71 |         console.error('Error fetching card or card not found:', cardId, cardError);
+ 72 |         return NextResponse.json({ error: `Membership card with ID ${cardId} not found.` }, { status: 404 });
+ 73 |     }
+ 74 | 
+ 75 |     if (cardData.user_id) {
+ 76 |         console.warn(`Card ${cardId} already claimed by user ${cardData.user_id}`);
+ 77 |         return NextResponse.json({ error: 'This membership card has already been claimed.' }, { status: 409 }); // 409 Conflict
+ 78 |     }
  79 | 
- 80 |     // 5. Create Profile
- 81 |     const { data: newProfile, error: profileCreateError } = await supabaseAdmin
- 82 |       .from('profiles')
- 83 |       .insert({
- 84 |         username: username,
- 85 |         password_hash: passwordHash,
- 86 |         twitter_handle: twitterHandle,
- 87 |         telegram_handle: telegramHandle,
- 88 |         wallet_address: walletAddress,
- 89 |       })
- 90 |       .select('id') // Select the ID of the newly created profile
- 91 |       .single();
- 92 | 
- 93 |     if (profileCreateError || !newProfile) {
- 94 |       console.error('Error creating profile:', profileCreateError);
- 95 |       // Log sensitive info only server-side
- 96 |       console.error('Failed profile data:', { username, twitterHandle, telegramHandle, walletAddress });
- 97 |       throw new Error('Database error creating profile.');
- 98 |     }
- 99 |     const profileId = newProfile.id;
-100 |     console.log(`Profile created successfully: ${profileId} for username ${username}`);
-101 | 
-102 | 
-103 |     // 6. Link Card to Profile
-104 |     const { data: updateData, error: updateError } = await supabaseAdmin
-105 |       .from('membership_cards')
-106 |       .update({ user_id: profileId, status: 'registered' }) // Link to the new profile's ID
-107 |       .eq('card_identifier', cardId)
-108 |       .is('user_id', null) // Safety check: only update if user_id is still null
-109 |       .select('id')
-110 |       .single();
-111 | 
-112 |     if (updateError || !updateData) {
-113 |       console.error('Error updating membership card:', cardId, profileId, updateError);
-114 |       // CRITICAL: If card linking fails after profile creation, we have an orphaned profile.
-115 |       // Ideally, wrap profile creation and card update in a transaction (requires Supabase function).
-116 |       // For MVP, we log the error. Consider manual cleanup or a retry mechanism.
-117 |       // Attempting to delete the profile we just created might be complex if other operations depend on it.
-118 |       throw new Error('Database error linking card to profile. Profile was created but card linking failed.');
-119 |     }
-120 | 
-121 |     console.log(`Card ${cardId} successfully linked to profile ${profileId}`);
-122 | 
-123 |     // 7. Return Success (do not return profile data or password hash)
-124 |     return NextResponse.json({ message: 'Profile created and card claimed successfully!' });
+ 80 |     // 4. Hash Password
+ 81 |     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+ 82 | 
+ 83 |     // 5. Create Profile
+ 84 |     const { data: newProfile, error: profileCreateError } = await supabaseAdmin
+ 85 |       .from('profiles')
+ 86 |       .insert({
+ 87 |         username: username,
+ 88 |         password_hash: passwordHash,
+ 89 |         twitter_handle: twitterHandle,
+ 90 |         telegram_handle: telegramHandle,
+ 91 |         wallet_address: walletAddress,
+ 92 |       })
+ 93 |       .select('id') // Select the ID of the newly created profile
+ 94 |       .single();
+ 95 | 
+ 96 |     if (profileCreateError || !newProfile) {
+ 97 |       console.error('Error creating profile:', profileCreateError);
+ 98 |       // Log sensitive info only server-side
+ 99 |       console.error('Failed profile data:', { username, twitterHandle, telegramHandle, walletAddress });
+100 |       throw new Error('Database error creating profile.');
+101 |     }
+102 |     const profileId = newProfile.id;
+103 |     console.log(`Profile created successfully: ${profileId} for username ${username}`);
+104 | 
+105 | 
+106 |     // 6. Link Card to Profile
+107 |     const { data: updateData, error: updateError } = await supabaseAdmin
+108 |       .from('membership_cards')
+109 |       .update({ user_id: profileId, status: 'registered' }) // Link to the new profile's ID
+110 |       .eq('card_identifier', cardId)
+111 |       .is('user_id', null) // Safety check: only update if user_id is still null
+112 |       .select('id')
+113 |       .single();
+114 | 
+115 |     if (updateError || !updateData) {
+116 |       console.error('Error updating membership card:', cardId, profileId, updateError);
+117 |       // CRITICAL: If card linking fails after profile creation, we have an orphaned profile.
+118 |       // Ideally, wrap profile creation and card update in a transaction (requires Supabase function).
+119 |       // For MVP, we log the error. Consider manual cleanup or a retry mechanism.
+120 |       // Attempting to delete the profile we just created might be complex if other operations depend on it.
+121 |       throw new Error('Database error linking card to profile. Profile was created but card linking failed.');
+122 |     }
+123 | 
+124 |     console.log(`Card ${cardId} successfully linked to profile ${profileId}`);
 125 | 
-126 |   } catch (error: any) {
-127 |     // --- Enhanced Error Logging --- 
-128 |     console.error('-----------------------------------------');
-129 |     console.error('CREATE PROFILE API ROUTE CRITICAL ERROR:');
-130 |     console.error('Timestamp:', new Date().toISOString());
-131 |     // Log the specific error object
-132 |     console.error('Error Name:', error.name);
-133 |     console.error('Error Message:', error.message);
-134 |     console.error('Error Stack:', error.stack);
-135 |     // Log incoming data (excluding password)
-136 |     try {
-137 |       const body = await request.clone().json().catch(() => ({}));
-138 |       delete body.password; // Remove password before logging
-139 |       console.error('Request Body (Filtered):', body);
-140 |     } catch (logError) {
-141 |         console.error('Error logging request body:', logError);
-142 |     }
-143 |     console.error('-----------------------------------------');
-144 | 
-145 |     // Avoid sending detailed internal errors to the client
-146 |     const message = error.message.includes('Database error') || error.message.includes('already taken') || error.message.includes('already linked')
-147 |         ? error.message
-148 |         : 'An internal server error occurred during profile creation.';
-149 |     // Determine status code based on common errors
-150 |     const status = error.message.includes('already taken') || error.message.includes('already linked') ? 409 
-151 |                  : error.message.includes('not found') ? 404 
-152 |                  : 500;
-153 |     return NextResponse.json({ error: message }, { status: status });
-154 |   }
-155 | } 
+126 |     // 7. Prepare Success Response
+127 |     const response = NextResponse.json({
+128 |         message: 'Profile created and card claimed successfully!',
+129 |         profile: { id: profileId, username: username } // Return basic profile info
+130 |     });
+131 | 
+132 |     // 8. Set Session Cookie on the Response
+133 |     response.cookies.set(SESSION_COOKIE_NAME, profileId, { // Use the new profile ID
+134 |         httpOnly: true,
+135 |         secure: process.env.NODE_ENV === 'production',
+136 |         maxAge: 60 * 60 * 24 * 7, // 1 week
+137 |         path: '/',
+138 |         sameSite: 'lax',
+139 |       });
+140 | 
+141 |     // 9. Return the Response with the Cookie
+142 |     return response;
+143 | 
+144 |   } catch (error: any) {
+145 |     // --- Enhanced Error Logging --- 
+146 |     console.error('-----------------------------------------');
+147 |     console.error('CREATE PROFILE API ROUTE CRITICAL ERROR:');
+148 |     console.error('Timestamp:', new Date().toISOString());
+149 |     // Log the specific error object
+150 |     console.error('Error Name:', error.name);
+151 |     console.error('Error Message:', error.message);
+152 |     console.error('Error Stack:', error.stack);
+153 |     // Log incoming data (excluding password)
+154 |     try {
+155 |       const body = await request.clone().json().catch(() => ({}));
+156 |       delete body.password; // Remove password before logging
+157 |       console.error('Request Body (Filtered):', body);
+158 |     } catch (logError) {
+159 |         console.error('Error logging request body:', logError);
+160 |     }
+161 |     console.error('-----------------------------------------');
+162 | 
+163 |     // Avoid sending detailed internal errors to the client
+164 |     const message = error.message.includes('Database error') || error.message.includes('already taken') || error.message.includes('already linked')
+165 |         ? error.message
+166 |         : 'An internal server error occurred during profile creation.';
+167 |     // Determine status code based on common errors
+168 |     const status = error.message.includes('already taken') || error.message.includes('already linked') ? 409 
+169 |                  : error.message.includes('not found') ? 404 
+170 |                  : 500;
+171 |     return NextResponse.json({ error: message }, { status: status });
+172 |   }
+173 | } 
 
 
 --------------------------------------------------------------------------------
@@ -513,81 +541,131 @@
 11 | 
 12 | const supabaseAdmin = createClient(supabaseUrl!, supabaseAdminKey!);
 13 | 
-14 | export async function POST(request: Request) {
-15 |   try {
-16 |     const { username, password } = await request.json();
-17 | 
-18 |     // 1. Validate Input
-19 |     if (!username || !password) {
-20 |       return NextResponse.json({ error: 'Username and password are required' }, { status: 400 });
-21 |     }
-22 | 
-23 |     // 2. Find Profile by Username
-24 |     const { data: profile, error: findError } = await supabaseAdmin
-25 |       .from('profiles')
-26 |       .select('id, username, password_hash') // Select the hash
-27 |       .eq('username', username)
-28 |       .single(); // Expect exactly one user with this username
-29 | 
-30 |     if (findError) {
-31 |         // Add specific log for find error
-32 |         console.error(`[API Login] Supabase find error for username ${username}:`, findError);
-33 |         // Still return generic message to client
-34 |         return NextResponse.json({ error: 'Invalid username or password.' }, { status: 401 });
-35 |     }
-36 |     if (!profile) {
-37 |       console.warn(`[API Login] Login attempt failed for username: ${username}. User not found.`);
-38 |       return NextResponse.json({ error: 'Invalid username or password.' }, { status: 401 }); // Unauthorized
-39 |     }
-40 | 
-41 |     // Ensure password_hash is valid before comparing
-42 |     if (!profile.password_hash || typeof profile.password_hash !== 'string') {
-43 |         console.error(`[API Login] Invalid or missing password hash for username: ${username}. Profile ID: ${profile.id}`);
-44 |         // This indicates a problem during profile creation/update
-45 |         return NextResponse.json({ error: 'Account configuration error. Please contact support.' }, { status: 500 });
-46 |     }
-47 | 
-48 |     // 3. Compare Password Hashes
-49 |     console.log(`[API Login] Comparing password for username: ${username}`); // Log before compare
-50 |     const passwordMatch = await bcrypt.compare(password, profile.password_hash);
-51 |     console.log(`[API Login] Password match result for ${username}:`, passwordMatch); // Log after compare
-52 | 
-53 |     if (!passwordMatch) {
-54 |       console.warn(`Login attempt failed for username: ${username}. Incorrect password.`);
-55 |       return NextResponse.json({ error: 'Invalid username or password.' }, { status: 401 }); // Unauthorized
-56 |     }
-57 | 
-58 |     // 4. Login Successful
-59 |     console.log(`Login successful for username: ${username}, Profile ID: ${profile.id}`);
+14 | // Define a secure cookie name
+15 | const SESSION_COOKIE_NAME = 'auth_session';
+16 | 
+17 | export async function POST(request: Request) {
+18 |   try {
+19 |     const { username, password } = await request.json();
+20 | 
+21 |     // 1. Validate Input
+22 |     if (!username || !password) {
+23 |       return NextResponse.json({ error: 'Username and password are required' }, { status: 400 });
+24 |     }
+25 | 
+26 |     // 2. Find Profile by Username
+27 |     const { data: profile, error: findError } = await supabaseAdmin
+28 |       .from('profiles')
+29 |       .select('id, username, password_hash') // Select the hash
+30 |       .eq('username', username)
+31 |       .single(); // Expect exactly one user with this username
+32 | 
+33 |     if (findError) {
+34 |         // Add specific log for find error
+35 |         console.error(`[API Login] Supabase find error for username ${username}:`, findError);
+36 |         // Still return generic message to client
+37 |         return NextResponse.json({ error: 'Invalid username or password.' }, { status: 401 });
+38 |     }
+39 |     if (!profile) {
+40 |       console.warn(`[API Login] Login attempt failed for username: ${username}. User not found.`);
+41 |       return NextResponse.json({ error: 'Invalid username or password.' }, { status: 401 }); // Unauthorized
+42 |     }
+43 | 
+44 |     // Ensure password_hash is valid before comparing
+45 |     if (!profile.password_hash || typeof profile.password_hash !== 'string') {
+46 |         console.error(`[API Login] Invalid or missing password hash for username: ${username}. Profile ID: ${profile.id}`);
+47 |         // This indicates a problem during profile creation/update
+48 |         return NextResponse.json({ error: 'Account configuration error. Please contact support.' }, { status: 500 });
+49 |     }
+50 | 
+51 |     // 3. Compare Password Hashes
+52 |     console.log(`[API Login] Comparing password for username: ${username}`); // Log before compare
+53 |     const passwordMatch = await bcrypt.compare(password, profile.password_hash);
+54 |     console.log(`[API Login] Password match result for ${username}:`, passwordMatch); // Log after compare
+55 | 
+56 |     if (!passwordMatch) {
+57 |       console.warn(`Login attempt failed for username: ${username}. Incorrect password.`);
+58 |       return NextResponse.json({ error: 'Invalid username or password.' }, { status: 401 }); // Unauthorized
+59 |     }
 60 | 
-61 |     // IMPORTANT: In a real app, you would generate a session token (e.g., JWT) here,
-62 |     // store it (e.g., in httpOnly cookies), and return it to the client.
-63 |     // The client would then use this token for subsequent authenticated requests.
-64 |     // For MVP, we just return success and let the client update its local state.
-65 | 
-66 |     return NextResponse.json({
-67 |         message: 'Signed in successfully!',
-68 |         // Optionally return non-sensitive profile info if needed by the client immediately
-69 |         // profile: { id: profile.id, username: profile.username }
-70 |     });
-71 | 
-72 |   } catch (error: any) {
-73 |     // --- Enhanced Error Logging --- 
-74 |     console.error('-----------------------------------------');
-75 |     console.error('LOGIN API ROUTE CRITICAL ERROR:');
-76 |     console.error('Timestamp:', new Date().toISOString());
-77 |     // Log the specific error object
-78 |     console.error('Error Name:', error.name);
-79 |     console.error('Error Message:', error.message);
-80 |     console.error('Error Stack:', error.stack);
-81 |     // Log request details if possible (be careful with sensitive data)
-82 |     // const requestBody = await request.clone().json().catch(() => ({})); // Avoid logging raw password
-83 |     // console.error('Request Body (Username only):', { username: requestBody.username });
+61 |     // 4. Login Successful
+62 |     console.log(`Login successful for username: ${username}, Profile ID: ${profile.id}`);
+63 | 
+64 |     // 5. Prepare Success Response
+65 |     const response = NextResponse.json({
+66 |         message: 'Signed in successfully!',
+67 |         profile: { id: profile.id, username: profile.username } // Can return profile info
+68 |     });
+69 | 
+70 |     // 6. Set Session Cookie on the Response
+71 |     response.cookies.set(SESSION_COOKIE_NAME, profile.id, {
+72 |       httpOnly: true, // Prevent client-side JS access
+73 |       secure: process.env.NODE_ENV === 'production', // Use Secure in production (HTTPS)
+74 |       maxAge: 60 * 60 * 24 * 7, // Example: 1 week expiry
+75 |       path: '/', // Available on all paths
+76 |       sameSite: 'lax', // Recommended for most cases
+77 |     });
+78 | 
+79 |     // 7. Return the Response with the Cookie
+80 |     return response;
+81 | 
+82 |   } catch (error: any) {
+83 |     // --- Enhanced Error Logging --- 
 84 |     console.error('-----------------------------------------');
-85 |     // Return generic error to client
-86 |     return NextResponse.json({ error: 'An internal server error occurred during login.' }, { status: 500 });
-87 |   }
-88 | } 
+85 |     console.error('LOGIN API ROUTE CRITICAL ERROR:');
+86 |     console.error('Timestamp:', new Date().toISOString());
+87 |     // Log the specific error object
+88 |     console.error('Error Name:', error.name);
+89 |     console.error('Error Message:', error.message);
+90 |     console.error('Error Stack:', error.stack);
+91 |     // Log request details if possible (be careful with sensitive data)
+92 |     // const requestBody = await request.clone().json().catch(() => ({})); // Avoid logging raw password
+93 |     // console.error('Request Body (Username only):', { username: requestBody.username });
+94 |     console.error('-----------------------------------------');
+95 |     // Return generic error to client
+96 |     return NextResponse.json({ error: 'An internal server error occurred during login.' }, { status: 500 });
+97 |   }
+98 | } 
+
+
+--------------------------------------------------------------------------------
+/app/api/logout/route.ts:
+--------------------------------------------------------------------------------
+ 1 | import { NextResponse } from 'next/server';
+ 2 | import { cookies } from 'next/headers';
+ 3 | 
+ 4 | // Define the same secure cookie name
+ 5 | const SESSION_COOKIE_NAME = 'auth_session';
+ 6 | 
+ 7 | export async function POST(request: Request) {
+ 8 |   try {
+ 9 |     console.log('[API Logout] Clearing session cookie.');
+10 | 
+11 |     // Prepare response first
+12 |     const response = NextResponse.json({ message: 'Logged out successfully' });
+13 | 
+14 |     // Clear the cookie by setting its maxAge to 0 or expiring it
+15 |     response.cookies.set(SESSION_COOKIE_NAME, '', { // Set value to empty
+16 |       httpOnly: true,
+17 |       secure: process.env.NODE_ENV === 'production',
+18 |       expires: new Date(0), // Expire immediately
+19 |       path: '/',
+20 |       sameSite: 'lax',
+21 |     });
+22 | 
+23 |     return response;
+24 | 
+25 |   } catch (error: any) {
+26 |     console.error('[API Logout] Error during logout:', error);
+27 |     return NextResponse.json({ error: 'Logout failed.' }, { status: 500 });
+28 |   }
+29 | }
+30 | 
+31 | // Allow GET as well for simpler client-side calls if needed (e.g., link click)
+32 | // Although POST is generally preferred for actions that change state.
+33 | export async function GET(request: Request) {
+34 |     return POST(request); // Just call the POST handler
+35 | } 
 
 
 --------------------------------------------------------------------------------
@@ -664,323 +742,166 @@
 
 
 --------------------------------------------------------------------------------
-/app/components/auth/CreateProfileForm.tsx:
---------------------------------------------------------------------------------
-  1 | 'use client';
-  2 | 
-  3 | import React, { useState, useEffect, useCallback } from 'react';
-  4 | import { useRouter, useSearchParams } from 'next/navigation';
-  5 | import { useWallet } from '@solana/wallet-adapter-react';
-  6 | import { Button } from '@/app/components/ui/button';
-  7 | import { Input } from '@/app/components/ui/input';
-  8 | import { Label } from '@/app/components/ui/label';
-  9 | import { toast } from 'sonner';
- 10 | import { useSimpleAuth } from '@/app/context/AuthContext';
- 11 | import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'; // Use the pre-built button for convenience
- 12 | import { ArrowLeft } from 'lucide-react';
- 13 | 
- 14 | export const CreateProfileForm: React.FC = () => {
- 15 |   console.log("[CreateProfileForm] Component rendering start.");
- 16 | 
- 17 |   const router = useRouter();
- 18 |   const searchParams = useSearchParams();
- 19 |   const { login } = useSimpleAuth();
- 20 |   const { publicKey, connected, connecting } = useWallet();
- 21 | 
- 22 |   const cardIdFromQuery = searchParams.get('cardId');
- 23 | 
- 24 |   const [username, setUsername] = useState('');
- 25 |   const [password, setPassword] = useState('');
- 26 |   const [twitterHandle, setTwitterHandle] = useState('');
- 27 |   const [telegramHandle, setTelegramHandle] = useState('');
- 28 |   const [isLoading, setIsLoading] = useState(false);
- 29 | 
- 30 |   useEffect(() => {
- 31 |     if (!cardIdFromQuery) {
- 32 |       toast.error('Missing membership card ID. Please go back and scan the card again.');
- 33 |       // Consider redirecting back or disabling the form
- 34 |       // router.replace('/');
- 35 |     } else {
- 36 |         console.log('Create Profile page loaded for card:', cardIdFromQuery);
- 37 |     }
- 38 |   }, [cardIdFromQuery, router]);
- 39 | 
- 40 |   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
- 41 |     event.preventDefault();
- 42 |     if (!cardIdFromQuery) {
- 43 |         toast.error('Cannot create profile without a card ID.');
- 44 |         return;
- 45 |     }
- 46 |     if (!username || !password) {
- 47 |       toast.error('Username and password are required.');
- 48 |       return;
- 49 |     }
- 50 |     // Optional: Add password strength validation
- 51 | 
- 52 |     setIsLoading(true);
- 53 |     console.log('Submitting profile creation:', { username, cardIdFromQuery, publicKey: publicKey?.toBase58() });
- 54 | 
- 55 |     try {
- 56 |       const response = await fetch('/api/create-profile-and-claim', {
- 57 |         method: 'POST',
- 58 |         headers: {
- 59 |           'Content-Type': 'application/json',
- 60 |         },
- 61 |         body: JSON.stringify({
- 62 |           username,
- 63 |           password, // Send plain text, backend will hash
- 64 |           twitterHandle: twitterHandle || null,
- 65 |           telegramHandle: telegramHandle || null,
- 66 |           walletAddress: publicKey?.toBase58() || null, // Send connected wallet address or null
- 67 |           cardId: cardIdFromQuery,
- 68 |         }),
- 69 |       });
- 70 | 
- 71 |       const data = await response.json();
- 72 | 
- 73 |       if (!response.ok) {
- 74 |         throw new Error(data.error || 'Failed to create profile and claim card.');
- 75 |       }
- 76 | 
- 77 |       toast.success(data.message || 'Profile created and card claimed successfully!');
- 78 |       login(); // Set logged in state
- 79 |       router.push('/dashboard'); // Redirect to dashboard
- 80 | 
- 81 |     } catch (error: any) {
- 82 |       console.error('Profile creation API error:', error);
- 83 |       toast.error(error.message || 'An error occurred during profile creation.');
- 84 |     } finally {
- 85 |       setIsLoading(false);
- 86 |     }
- 87 |   };
- 88 | 
- 89 |   return (
- 90 |     <div className="flex flex-col min-h-screen p-6">
- 91 |        <button
- 92 |         onClick={() => router.back()} // Simple back navigation
- 93 |         className="self-start mb-8 p-2 rounded-full hover:bg-black/5 transition-colors"
- 94 |         aria-label="Go back"
- 95 |       >
- 96 |         <ArrowLeft className="h-6 w-6" />
- 97 |       </button>
- 98 | 
- 99 |       <div className="mb-10">
-100 |         <h1 className="text-3xl font-bold mb-2">Create Your Profile</h1>
-101 |         <p className="text-muted-foreground">
-102 |             Claiming Membership Card: <span className="font-mono text-sm bg-gray-100 p-1 rounded text-black">{cardIdFromQuery || 'N/A'}</span>
-103 |         </p>
-104 |       </div>
-105 | 
-106 |       <form onSubmit={handleSubmit} className="space-y-6">
-107 |         {/* Username */}
-108 |         <div className="space-y-2">
-109 |           <Label htmlFor="username">Username <span className="text-red-500">*</span></Label>
-110 |           <Input
-111 |             id="username"
-112 |             type="text"
-113 |             value={username}
-114 |             onChange={(e) => setUsername(e.target.value)}
-115 |             placeholder="your_username"
-116 |             required
-117 |             disabled={isLoading}
-118 |             className="bg-white/50 backdrop-blur-sm border-gray-200"
-119 |           />
-120 |         </div>
-121 | 
-122 |         {/* Password */}
-123 |         <div className="space-y-2">
-124 |           <Label htmlFor="password">Password <span className="text-red-500">*</span></Label>
-125 |           <Input
-126 |             id="password"
-127 |             type="password"
-128 |             value={password}
-129 |             onChange={(e) => setPassword(e.target.value)}
-130 |             placeholder="••••••••"
-131 |             required
-132 |             disabled={isLoading}
-133 |             className="bg-white/50 backdrop-blur-sm border-gray-200"
-134 |           />
-135 |           {/* Add password requirements hint if needed */}
-136 |         </div>
-137 | 
-138 |         {/* Twitter (Optional) */}
-139 |         <div className="space-y-2">
-140 |           <Label htmlFor="twitter">X / Twitter Handle (Optional)</Label>
-141 |           <Input
-142 |             id="twitter"
-143 |             type="text"
-144 |             value={twitterHandle}
-145 |             onChange={(e) => setTwitterHandle(e.target.value)}
-146 |             placeholder="@yourhandle"
-147 |             disabled={isLoading}
-148 |             className="bg-white/50 backdrop-blur-sm border-gray-200"
-149 |           />
-150 |         </div>
-151 | 
-152 |         {/* Telegram (Optional) */}
-153 |         <div className="space-y-2">
-154 |           <Label htmlFor="telegram">Telegram Handle (Optional)</Label>
-155 |           <Input
-156 |             id="telegram"
-157 |             type="text"
-158 |             value={telegramHandle}
-159 |             onChange={(e) => setTelegramHandle(e.target.value)}
-160 |             placeholder="@yourhandle"
-161 |             disabled={isLoading}
-162 |             className="bg-white/50 backdrop-blur-sm border-gray-200"
-163 |           />
-164 |         </div>
-165 | 
-166 |         {/* Wallet Connect (Optional) */}
-167 |         <div className="space-y-2 border-t pt-6 mt-4">
-168 |           <Label>Connect Wallet (Optional)</Label>
-169 |            <p className="text-sm text-muted-foreground pb-2">
-170 |             Connect your Solana wallet to link it to your profile.
-171 |           </p>
-172 |           {/* Use the pre-built UI button */}
-173 |           <WalletMultiButton style={{ width: '100%', justifyContent: 'center' }} />
-174 |           {connected && publicKey && (
-175 |             <p className="text-xs text-green-600 pt-1">Wallet Connected: {publicKey.toBase58().substring(0, 4)}...{publicKey.toBase58().substring(publicKey.toBase58().length - 4)}</p>
-176 |           )}
-177 |         </div>
-178 | 
-179 |         {/* Submit Button */}
-180 |         <Button
-181 |           type="submit"
-182 |           className="w-full glass-button mt-4"
-183 |           disabled={isLoading || !cardIdFromQuery} // Disable if loading or no card ID
-184 |         >
-185 |           {isLoading ? 'Creating Profile...' : 'Create Profile & Claim Card'}
-186 |         </Button>
-187 |       </form>
-188 |     </div>
-189 |   );
-190 | }; 
-
-
---------------------------------------------------------------------------------
 /app/components/auth/LoginForm.tsx:
 --------------------------------------------------------------------------------
   1 | 'use client';
   2 | 
-  3 | import React, { useState } from 'react';
+  3 | import React from 'react';
   4 | import { useRouter } from 'next/navigation';
-  5 | import Link from 'next/link';
-  6 | import { Button } from '@/app/components/ui/button';
-  7 | import { Input } from '@/app/components/ui/input';
-  8 | import { Label } from '@/app/components/ui/label';
-  9 | import { toast } from 'sonner';
- 10 | import { useSimpleAuth } from '@/app/context/AuthContext';
- 11 | import { ArrowLeft } from 'lucide-react';
- 12 | 
- 13 | export const LoginForm: React.FC = () => {
- 14 |   const router = useRouter();
- 15 |   const { login } = useSimpleAuth();
- 16 | 
- 17 |   const [username, setUsername] = useState('');
- 18 |   const [password, setPassword] = useState('');
- 19 |   const [isLoading, setIsLoading] = useState(false);
- 20 | 
- 21 |   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
- 22 |     event.preventDefault();
- 23 |     if (!username || !password) {
- 24 |       toast.error('Username and password are required.');
- 25 |       return;
- 26 |     }
- 27 | 
- 28 |     setIsLoading(true);
- 29 | 
- 30 |     try {
- 31 |       const response = await fetch('/api/login-profile', {
- 32 |         method: 'POST',
- 33 |         headers: {
- 34 |           'Content-Type': 'application/json',
- 35 |         },
- 36 |         body: JSON.stringify({ username, password }),
- 37 |       });
- 38 | 
- 39 |       const data = await response.json();
- 40 | 
- 41 |       if (!response.ok) {
- 42 |         throw new Error(data.error || 'Login failed.');
- 43 |       }
- 44 | 
- 45 |       toast.success(data.message || 'Signed in successfully!');
- 46 |       login(); // Update auth state
- 47 |       router.push('/dashboard'); // Redirect
- 48 | 
- 49 |     } catch (error: any) {
- 50 |       console.error('Login API error:', error);
- 51 |       toast.error(error.message || 'An error occurred during login.');
- 52 |     } finally {
- 53 |       setIsLoading(false);
- 54 |     }
- 55 |   };
+  5 | import { Button } from '@/app/components/ui/button';
+  6 | import { Input } from '@/app/components/ui/input';
+  7 | import { Label } from '@/app/components/ui/label';
+  8 | import { toast } from 'sonner';
+  9 | import { useSimpleAuth } from '@/app/context/AuthContext';
+ 10 | import { ArrowLeft } from 'lucide-react';
+ 11 | import { useForm } from 'react-hook-form';
+ 12 | import { zodResolver } from '@hookform/resolvers/zod';
+ 13 | import * as z from 'zod';
+ 14 | import {
+ 15 |   Form,
+ 16 |   FormControl,
+ 17 |   FormField,
+ 18 |   FormItem,
+ 19 |   FormLabel,
+ 20 |   FormMessage,
+ 21 | } from '@/app/components/ui/form';
+ 22 | 
+ 23 | // 1. Define Zod Schema
+ 24 | const formSchema = z.object({
+ 25 |   username: z.string().min(1, { message: 'Username is required.' }),
+ 26 |   password: z.string().min(1, { message: 'Password is required.' }),
+ 27 | });
+ 28 | 
+ 29 | export const LoginForm: React.FC = () => {
+ 30 |   const router = useRouter();
+ 31 |   const { login } = useSimpleAuth();
+ 32 | 
+ 33 |   // 2. Initialize react-hook-form
+ 34 |   const form = useForm<z.infer<typeof formSchema>>({
+ 35 |     resolver: zodResolver(formSchema),
+ 36 |     defaultValues: {
+ 37 |       username: '',
+ 38 |       password: '',
+ 39 |     },
+ 40 |   });
+ 41 | 
+ 42 |   // 3. Define onSubmit handler using form data
+ 43 |   async function onSubmit(values: z.infer<typeof formSchema>) {
+ 44 |     // isLoading state is now form.formState.isSubmitting
+ 45 |     console.log('Login form submitted:', values);
+ 46 | 
+ 47 |     try {
+ 48 |       const response = await fetch('/api/login-profile', {
+ 49 |         method: 'POST',
+ 50 |         headers: {
+ 51 |           'Content-Type': 'application/json',
+ 52 |         },
+ 53 |         // Use validated values from react-hook-form
+ 54 |         body: JSON.stringify({ username: values.username, password: values.password }),
+ 55 |       });
  56 | 
- 57 |   return (
- 58 |     <div className="flex flex-col min-h-screen p-6">
- 59 |        <button
- 60 |         onClick={() => router.back()}
- 61 |         className="self-start mb-8 p-2 rounded-full hover:bg-black/5 transition-colors"
- 62 |         aria-label="Go back"
- 63 |       >
- 64 |         <ArrowLeft className="h-6 w-6" />
- 65 |       </button>
+ 57 |       const data = await response.json();
+ 58 | 
+ 59 |       if (!response.ok) {
+ 60 |         throw new Error(data.error || 'Login failed.');
+ 61 |       }
+ 62 | 
+ 63 |       toast.success(data.message || 'Signed in successfully!');
+ 64 |       login(); // Update auth state
+ 65 |       router.push('/dashboard'); // Redirect
  66 | 
- 67 |       <div className="mb-10">
- 68 |         <h1 className="text-3xl font-bold mb-2">Sign In</h1>
- 69 |         <p className="text-muted-foreground">Access your Samachi membership</p>
- 70 |       </div>
- 71 | 
- 72 |       <form onSubmit={handleSubmit} className="space-y-6">
- 73 |         <div className="space-y-2">
- 74 |           <Label htmlFor="username">Username</Label>
- 75 |           <Input
- 76 |             id="username"
- 77 |             type="text"
- 78 |             value={username}
- 79 |             onChange={(e) => setUsername(e.target.value)}
- 80 |             placeholder="your_username"
- 81 |             required
- 82 |             disabled={isLoading}
- 83 |             className="bg-white/50 backdrop-blur-sm border-gray-200"
- 84 |             autoComplete="username"
- 85 |           />
- 86 |         </div>
+ 67 |     } catch (error: any) {
+ 68 |       console.error('Login API error:', error);
+ 69 |       toast.error(error.message || 'An error occurred during login.');
+ 70 |       // Optionally reset form fields on error if desired
+ 71 |       // form.reset();
+ 72 |     }
+ 73 |     // No need for setIsLoading(false) here, handled by react-hook-form
+ 74 |   }
+ 75 | 
+ 76 |   return (
+ 77 |     <div className="flex flex-col min-h-screen p-6">
+ 78 |        <button
+ 79 |         onClick={() => router.back()}
+ 80 |         className="self-start mb-8 p-2 rounded-full hover:bg-black/5 transition-colors"
+ 81 |         aria-label="Go back"
+ 82 |         // Disable button during submission
+ 83 |         disabled={form.formState.isSubmitting}
+ 84 |       >
+ 85 |         <ArrowLeft className="h-6 w-6" />
+ 86 |       </button>
  87 | 
- 88 |         <div className="space-y-2">
- 89 |           <Label htmlFor="password">Password</Label>
- 90 |           <Input
- 91 |             id="password"
- 92 |             type="password"
- 93 |             value={password}
- 94 |             onChange={(e) => setPassword(e.target.value)}
- 95 |             placeholder="••••••••"
- 96 |             required
- 97 |             disabled={isLoading}
- 98 |             className="bg-white/50 backdrop-blur-sm border-gray-200"
- 99 |             autoComplete="current-password"
-100 |           />
-101 |         </div>
-102 | 
-103 |         <Button
-104 |           type="submit"
-105 |           className="w-full glass-button"
-106 |           disabled={isLoading}
-107 |         >
-108 |           {isLoading ? 'Signing In...' : 'Sign In'}
-109 |         </Button>
-110 | 
-111 |         {/* Link to create profile if they landed here by mistake? Or is CardLanding the only entry? */}
-112 |         {/* For MVP, maybe omit this link if flow is strictly Card -> Create or Card -> Login */}
-113 |         {/* <p className="text-center text-sm">
-114 |           Don't have an account? You need a membership card to sign up.
-115 |           <Link href="/" className="text-primary font-medium hover:underline"> Learn More</Link> 
-116 |         </p> */}
-117 |       </form>
-118 |     </div>
-119 |   );
-120 | }; 
+ 88 |       <div className="mb-10">
+ 89 |         <h1 className="text-3xl font-bold mb-2">Sign In</h1>
+ 90 |         <p className="text-muted-foreground">Access your Samachi membership</p>
+ 91 |       </div>
+ 92 | 
+ 93 |       {/* 4. Use Form component */}
+ 94 |       <Form {...form}>
+ 95 |         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+ 96 |           {/* Username Field */}
+ 97 |           <FormField
+ 98 |             control={form.control}
+ 99 |             name="username"
+100 |             render={({ field }) => (
+101 |               <FormItem>
+102 |                 <FormLabel>Username</FormLabel>
+103 |                 <FormControl>
+104 |                   <Input
+105 |                     placeholder="your_username"
+106 |                     autoComplete="username"
+107 |                     className="bg-white/50 backdrop-blur-sm border-gray-200"
+108 |                     disabled={form.formState.isSubmitting}
+109 |                     {...field} // Spread field props (onChange, onBlur, value, ref)
+110 |                   />
+111 |                 </FormControl>
+112 |                 <FormMessage /> {/* Displays validation errors */}
+113 |               </FormItem>
+114 |             )}
+115 |           />
+116 | 
+117 |           {/* Password Field */}
+118 |           <FormField
+119 |             control={form.control}
+120 |             name="password"
+121 |             render={({ field }) => (
+122 |               <FormItem>
+123 |                 <FormLabel>Password</FormLabel>
+124 |                 <FormControl>
+125 |                   <Input
+126 |                     type="password"
+127 |                     placeholder="••••••••"
+128 |                     autoComplete="current-password"
+129 |                     className="bg-white/50 backdrop-blur-sm border-gray-200"
+130 |                     disabled={form.formState.isSubmitting}
+131 |                     {...field}
+132 |                   />
+133 |                 </FormControl>
+134 |                 <FormMessage />
+135 |               </FormItem>
+136 |             )}
+137 |           />
+138 | 
+139 |           <Button
+140 |             type="submit"
+141 |             className="w-full glass-button"
+142 |             disabled={form.formState.isSubmitting} // Disable based on form state
+143 |           >
+144 |             {form.formState.isSubmitting ? 'Signing In...' : 'Sign In'}
+145 |           </Button>
+146 | 
+147 |           {/* Comments remain the same */}
+148 |           {/* Link to create profile if they landed here by mistake? Or is CardLanding the only entry? */}
+149 |           {/* For MVP, maybe omit this link if flow is strictly Card -> Create or Card -> Login */}
+150 |           {/* <p className="text-center text-sm">
+151 |             Don't have an account? You need a membership card to sign up.
+152 |             <Link href="/" className="text-primary font-medium hover:underline"> Learn More</Link> 
+153 |           </p> */}
+154 |         </form>
+155 |       </Form>
+156 |     </div>
+157 |   );
+158 | }; 
 
 
 --------------------------------------------------------------------------------
@@ -1071,28 +992,28 @@
 11 |     name: 'El Noviciado',
 12 |     location: 'Social Club, Madrid',
 13 |     description: 'Exclusive social club with live music and intimate ambiance',
-14 |     image: '/images/novi1.png',
+14 |     image: '/novi1.png',
 15 |   },
 16 |   {
 17 |     id: '2',
 18 |     name: 'Bloom Festival',
 19 |     location: 'Festival, Malta',
 20 |     description: 'High-energy festival featuring world-class DJs and performers',
-21 |     image: '/images/bloom-festival.png',
+21 |     image: '/bloom-festival.png',
 22 |   },
 23 |   {
 24 |     id: '3',
 25 |     name: 'Barrage Club',
 26 |     location: 'Nightclub, Greece',
 27 |     description: 'Beachfront club with stunning ocean views and premium service',
-28 |     image: '/images/barrage-club.png',
+28 |     image: '/barrage-club.png',
 29 |   },
 30 |   {
 31 |     id: '4',
 32 |     name: 'Berhta Club',
 33 |     location: 'Social Club, Washington D.C.',
 34 |     description: 'Sophisticated venue with elegant design and premium atmosphere',
-35 |     image: '/images/berhta-club.png',
+35 |     image: '/bertha-club.png',
 36 |   },
 37 | ];
 38 | 
@@ -1259,10 +1180,10 @@
  13 |   const [showStakingModal, setShowStakingModal] = useState(false);
  14 |   
  15 |   const featuredVenues = [
- 16 |     { id: '1', name: 'El Noviciado', location: 'Social Club, Madrid', image: '/images/novi1.png' },
- 17 |     { id: '2', name: 'Bloom Festival', location: 'Festival, Malta', image: '/images/bloom-festival.png' },
- 18 |     { id: '3', name: 'Barrage Club', location: 'Nightclub, Greece', image: '/images/barrage-club.png' },
- 19 |     { id: '4', name: 'Berhta Club', location: 'Social Club, Washington D.C.', image: '/images/berhta-club.png' },
+ 16 |     { id: '1', name: 'El Noviciado', location: 'Social Club, Madrid', image: '/novi1.png' },
+ 17 |     { id: '2', name: 'Bloom Festival', location: 'Festival, Malta', image: '/bloom-festival.png' },
+ 18 |     { id: '3', name: 'Barrage Club', location: 'Nightclub, Greece', image: '/barrage-club.png' },
+ 19 |     { id: '4', name: 'Berhta Club', location: 'Social Club, Washington D.C.', image: '/bertha-club.png' },
  20 |   ];
  21 | 
  22 |   const stakedAmount = 1.25;
@@ -1377,155 +1298,154 @@
   9 | }
  10 | 
  11 | const cryptoOptions = [
- 12 |   { id: 'eth', name: 'Ethereum', symbol: 'ETH', icon: '🔷' },
+ 12 |   { id: 'sol', name: 'Solana', symbol: 'SOL', icon: '☀️' },
  13 |   { id: 'usdt', name: 'Tether', symbol: 'USDT', icon: '💵' },
  14 |   { id: 'usdc', name: 'USD Coin', symbol: 'USDC', icon: '💰' },
- 15 |   // Add SOL or other relevant cryptos if needed
- 16 |   // { id: 'sol', name: 'Solana', symbol: 'SOL', icon: '☀️' }, 
- 17 | ];
- 18 | 
- 19 | export const StakingModal: React.FC<StakingModalProps> = ({ onClose }) => {
- 20 |   const [selectedCrypto, setSelectedCrypto] = useState(cryptoOptions[0]);
- 21 |   const [showCryptoSelector, setShowCryptoSelector] = useState(false);
- 22 |   const [amount, setAmount] = useState('');
- 23 |   const [step, setStep] = useState(1);
- 24 | 
- 25 |   const handleStake = () => {
- 26 |     setStep(2);
- 27 |     // TODO: Add actual staking logic here (e.g., call backend/contract)
- 28 |     console.log(`Simulating stake of ${amount} ${selectedCrypto.symbol}`);
- 29 |     setTimeout(() => {
- 30 |       // TODO: Update user balance/state after successful stake
- 31 |       onClose();
- 32 |     }, 2000);
- 33 |   };
- 34 | 
- 35 |   // Type the event
- 36 |   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
- 37 |     setAmount(e.target.value);
- 38 |   };
- 39 | 
- 40 |   return (
- 41 |     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center p-4 animate-fade-in">
- 42 |       <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={onClose} />
- 43 |       
- 44 |       <div className="bottom-sheet max-w-md w-full z-10">
- 45 |         <div className="flex justify-between items-center mb-4">
- 46 |           <h2 className="text-xl font-semibold">
- 47 |             {step === 1 ? 'Stake Crypto' : 'Confirming Stake'}
- 48 |           </h2>
- 49 |           <button 
- 50 |             onClick={onClose}
- 51 |             className="p-1 rounded-full hover:bg-black/5"
- 52 |           >
- 53 |             <XCircle className="h-6 w-6 text-gray-500" />
- 54 |           </button>
- 55 |         </div>
- 56 |         
- 57 |         {step === 1 ? (
- 58 |           <>
- 59 |             <p className="text-muted-foreground mb-6">
- 60 |               Stake assets to increase your available credit line
- 61 |             </p>
- 62 | 
- 63 |             <div className="mb-6">
- 64 |               <label className="text-sm font-medium mb-2 block">
- 65 |                 Select Asset
- 66 |               </label>
- 67 |               <button
- 68 |                 onClick={() => setShowCryptoSelector(!showCryptoSelector)}
- 69 |                 className="w-full p-3 rounded-xl bg-white flex items-center justify-between border border-gray-200"
- 70 |               >
- 71 |                 <div className="flex items-center">
- 72 |                   <span className="text-2xl mr-2">{selectedCrypto.icon}</span>
- 73 |                   <div>
- 74 |                     <div className="font-medium">{selectedCrypto.name}</div>
- 75 |                     <div className="text-xs text-muted-foreground">{selectedCrypto.symbol}</div>
- 76 |                   </div>
- 77 |                 </div>
- 78 |                 <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform ${showCryptoSelector ? 'rotate-180' : ''}`} />
- 79 |               </button>
- 80 |               
- 81 |               {showCryptoSelector && (
- 82 |                 <div className="mt-1 bg-white rounded-xl border border-gray-200 overflow-hidden shadow-lg">
- 83 |                   {cryptoOptions.map((crypto) => (
- 84 |                     <button
- 85 |                       key={crypto.id}
- 86 |                       onClick={() => {
- 87 |                         setSelectedCrypto(crypto);
- 88 |                         setShowCryptoSelector(false);
- 89 |                       }}
- 90 |                       className="w-full p-3 flex items-center justify-between hover:bg-gray-50"
- 91 |                     >
- 92 |                       <div className="flex items-center">
- 93 |                         <span className="text-xl mr-2">{crypto.icon}</span>
- 94 |                         <div className="font-medium">{crypto.name}</div>
- 95 |                       </div>
- 96 |                       {selectedCrypto.id === crypto.id && (
- 97 |                         <Check className="h-5 w-5 text-primary" />
- 98 |                       )}
- 99 |                     </button>
-100 |                   ))}
-101 |                 </div>
-102 |               )}
-103 |             </div>
-104 | 
-105 |             <div className="mb-8">
-106 |               <label className="text-sm font-medium mb-2 block">
-107 |                 Amount
-108 |               </label>
-109 |               <div className="relative">
-110 |                 <input 
-111 |                   type="number"
-112 |                   value={amount}
-113 |                   // onChange={(e) => setAmount(e.target.value)} // Replace
-114 |                   onChange={handleAmountChange} // Use typed handler
-115 |                   placeholder="0.00"
-116 |                   className="w-full p-3 pr-16 rounded-xl bg-white border border-gray-200 text-xl font-medium"
-117 |                 />
-118 |                 <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground">
-119 |                   {selectedCrypto.symbol}
-120 |                 </div>
-121 |               </div>
-122 |               <div className="mt-2 flex justify-between">
-123 |                 <div className="text-xs text-muted-foreground">
-124 |                   {/* TODO: Replace with actual available balance */}
-125 |                   Available: 2.5 {selectedCrypto.symbol} 
-126 |                 </div>
-127 |                 <button className="text-xs text-primary font-medium">
-128 |                   MAX
-129 |                 </button>
-130 |               </div>
-131 |             </div>
-132 | 
-133 |             <Button 
-134 |               onClick={handleStake}
-135 |               disabled={!amount || parseFloat(amount) <= 0} // Add amount validation
-136 |               className="w-full glass-button"
-137 |             >
-138 |               Stake {selectedCrypto.symbol}
-139 |               <ChevronRight className="ml-2 h-4 w-4" />
-140 |             </Button>
-141 |           </>
-142 |         ) : (
-143 |           <div className="py-4 text-center">
-144 |             <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
-145 |               <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-146 |             </div>
-147 |             <h3 className="text-lg font-medium mb-2">Processing Your Stake</h3>
-148 |             <p className="text-muted-foreground mb-4">
-149 |               Please wait while we process your {amount} {selectedCrypto.symbol} stake
-150 |             </p>
-151 |             <div className="text-sm text-muted-foreground">
-152 |               This may take a few moments to complete
-153 |             </div>
-154 |           </div>
-155 |         )}
-156 |       </div>
-157 |     </div>
-158 |   );
-159 | };
-160 | 
+ 15 |   // Add other relevant cryptos if needed
+ 16 | ];
+ 17 | 
+ 18 | export const StakingModal: React.FC<StakingModalProps> = ({ onClose }) => {
+ 19 |   const [selectedCrypto, setSelectedCrypto] = useState(cryptoOptions[0]);
+ 20 |   const [showCryptoSelector, setShowCryptoSelector] = useState(false);
+ 21 |   const [amount, setAmount] = useState('');
+ 22 |   const [step, setStep] = useState(1);
+ 23 | 
+ 24 |   const handleStake = () => {
+ 25 |     setStep(2);
+ 26 |     // TODO: Add actual staking logic here (e.g., call backend/contract)
+ 27 |     console.log(`Simulating stake of ${amount} ${selectedCrypto.symbol}`);
+ 28 |     setTimeout(() => {
+ 29 |       // TODO: Update user balance/state after successful stake
+ 30 |       onClose();
+ 31 |     }, 2000);
+ 32 |   };
+ 33 | 
+ 34 |   // Type the event
+ 35 |   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+ 36 |     setAmount(e.target.value);
+ 37 |   };
+ 38 | 
+ 39 |   return (
+ 40 |     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center p-4 animate-fade-in">
+ 41 |       <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={onClose} />
+ 42 |       
+ 43 |       <div className="bottom-sheet max-w-md w-full z-10">
+ 44 |         <div className="flex justify-between items-center mb-4">
+ 45 |           <h2 className="text-xl font-semibold">
+ 46 |             {step === 1 ? 'Stake Crypto' : 'Confirming Stake'}
+ 47 |           </h2>
+ 48 |           <button 
+ 49 |             onClick={onClose}
+ 50 |             className="p-1 rounded-full hover:bg-black/5"
+ 51 |           >
+ 52 |             <XCircle className="h-6 w-6 text-gray-500" />
+ 53 |           </button>
+ 54 |         </div>
+ 55 |         
+ 56 |         {step === 1 ? (
+ 57 |           <>
+ 58 |             <p className="text-muted-foreground mb-6">
+ 59 |               Stake assets to increase your available credit line
+ 60 |             </p>
+ 61 | 
+ 62 |             <div className="mb-6">
+ 63 |               <label className="text-sm font-medium mb-2 block">
+ 64 |                 Select Asset
+ 65 |               </label>
+ 66 |               <button
+ 67 |                 onClick={() => setShowCryptoSelector(!showCryptoSelector)}
+ 68 |                 className="w-full p-3 rounded-xl bg-white flex items-center justify-between border border-gray-200"
+ 69 |               >
+ 70 |                 <div className="flex items-center">
+ 71 |                   <span className="text-2xl mr-2">{selectedCrypto.icon}</span>
+ 72 |                   <div>
+ 73 |                     <div className="font-medium">{selectedCrypto.name}</div>
+ 74 |                     <div className="text-xs text-muted-foreground">{selectedCrypto.symbol}</div>
+ 75 |                   </div>
+ 76 |                 </div>
+ 77 |                 <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform ${showCryptoSelector ? 'rotate-180' : ''}`} />
+ 78 |               </button>
+ 79 |               
+ 80 |               {showCryptoSelector && (
+ 81 |                 <div className="mt-1 bg-white rounded-xl border border-gray-200 overflow-hidden shadow-lg">
+ 82 |                   {cryptoOptions.map((crypto) => (
+ 83 |                     <button
+ 84 |                       key={crypto.id}
+ 85 |                       onClick={() => {
+ 86 |                         setSelectedCrypto(crypto);
+ 87 |                         setShowCryptoSelector(false);
+ 88 |                       }}
+ 89 |                       className="w-full p-3 flex items-center justify-between hover:bg-gray-50"
+ 90 |                     >
+ 91 |                       <div className="flex items-center">
+ 92 |                         <span className="text-xl mr-2">{crypto.icon}</span>
+ 93 |                         <div className="font-medium">{crypto.name}</div>
+ 94 |                       </div>
+ 95 |                       {selectedCrypto.id === crypto.id && (
+ 96 |                         <Check className="h-5 w-5 text-primary" />
+ 97 |                       )}
+ 98 |                     </button>
+ 99 |                   ))}
+100 |                 </div>
+101 |               )}
+102 |             </div>
+103 | 
+104 |             <div className="mb-8">
+105 |               <label className="text-sm font-medium mb-2 block">
+106 |                 Amount
+107 |               </label>
+108 |               <div className="relative">
+109 |                 <input 
+110 |                   type="number"
+111 |                   value={amount}
+112 |                   // onChange={(e) => setAmount(e.target.value)} // Replace
+113 |                   onChange={handleAmountChange} // Use typed handler
+114 |                   placeholder="0.00"
+115 |                   className="w-full p-3 pr-16 rounded-xl bg-white border border-gray-200 text-xl font-medium"
+116 |                 />
+117 |                 <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground">
+118 |                   {selectedCrypto.symbol}
+119 |                 </div>
+120 |               </div>
+121 |               <div className="mt-2 flex justify-between">
+122 |                 <div className="text-xs text-muted-foreground">
+123 |                   {/* TODO: Replace with actual available balance */}
+124 |                   Available: 2.5 {selectedCrypto.symbol} 
+125 |                 </div>
+126 |                 <button className="text-xs text-primary font-medium">
+127 |                   MAX
+128 |                 </button>
+129 |               </div>
+130 |             </div>
+131 | 
+132 |             <Button 
+133 |               onClick={handleStake}
+134 |               disabled={!amount || parseFloat(amount) <= 0} // Add amount validation
+135 |               className="w-full glass-button"
+136 |             >
+137 |               Stake {selectedCrypto.symbol}
+138 |               <ChevronRight className="ml-2 h-4 w-4" />
+139 |             </Button>
+140 |           </>
+141 |         ) : (
+142 |           <div className="py-4 text-center">
+143 |             <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
+144 |               <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+145 |             </div>
+146 |             <h3 className="text-lg font-medium mb-2">Processing Your Stake</h3>
+147 |             <p className="text-muted-foreground mb-4">
+148 |               Please wait while we process your {amount} {selectedCrypto.symbol} stake
+149 |             </p>
+150 |             <div className="text-sm text-muted-foreground">
+151 |               This may take a few moments to complete
+152 |             </div>
+153 |           </div>
+154 |         )}
+155 |       </div>
+156 |     </div>
+157 |   );
+158 | };
+159 | 
 
 
 --------------------------------------------------------------------------------
@@ -3640,7 +3560,7 @@
  11 | } from "react-hook-form"
  12 | 
  13 | import { cn } from "@/lib/utils"
- 14 | import { Label } from "@/components/ui/label"
+ 14 | import { Label } from "@/app/components/ui/label"
  15 | 
  16 | const Form = FormProvider
  17 | 
@@ -5931,51 +5851,78 @@
 --------------------------------------------------------------------------------
  1 | 'use client';
  2 | 
- 3 | import React, { createContext, useState, useContext, ReactNode, useMemo } from 'react';
- 4 | 
- 5 | interface AuthContextType {
- 6 |   isLoggedIn: boolean;
- 7 |   // In a real app, you might store profile info here too
- 8 |   // profile: { id: string; username: string; } | null;
- 9 |   login: () => void; // Simple login state setter
-10 |   logout: () => void; // Simple logout state setter
-11 | }
-12 | 
-13 | const AuthContext = createContext<AuthContextType | undefined>(undefined);
-14 | 
-15 | export const AuthProvider = ({ children }: { children: ReactNode }) => {
-16 |   // For MVP, just track login state. No persistent session yet.
-17 |   const [isLoggedIn, setIsLoggedIn] = useState(false);
-18 | 
-19 |   const login = () => {
-20 |     console.log("AuthContext: Setting isLoggedIn to true");
-21 |     setIsLoggedIn(true);
-22 |     // In a real app: set session cookie/token here
-23 |   };
-24 | 
-25 |   const logout = () => {
-26 |     console.log("AuthContext: Setting isLoggedIn to false");
-27 |     setIsLoggedIn(false);
-28 |     // In a real app: clear session cookie/token here
-29 |   };
-30 | 
-31 |   // Memoize context value to prevent unnecessary re-renders
-32 |   const value = useMemo(() => ({
-33 |     isLoggedIn,
-34 |     login,
-35 |     logout,
-36 |   }), [isLoggedIn]);
-37 | 
-38 |   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-39 | };
-40 | 
-41 | export const useSimpleAuth = (): AuthContextType => {
-42 |   const context = useContext(AuthContext);
-43 |   if (context === undefined) {
-44 |     throw new Error('useSimpleAuth must be used within an AuthProvider');
-45 |   }
-46 |   return context;
-47 | }; 
+ 3 | import React, { createContext, useState, useContext, ReactNode, useMemo, useEffect } from 'react';
+ 4 | import { useRouter } from 'next/navigation'; // Import useRouter for redirect
+ 5 | import { cookies } from 'next/headers'; // Import to read initial state
+ 6 | 
+ 7 | // Define the same secure cookie name
+ 8 | const SESSION_COOKIE_NAME = 'auth_session';
+ 9 | 
+10 | interface AuthContextType {
+11 |   isLoggedIn: boolean;
+12 |   // In a real app, you might store profile info here too
+13 |   // profile: { id: string; username: string; } | null;
+14 |   login: () => void; // Will just update state, cookie is set by API
+15 |   logout: () => Promise<void>; // Make async to call API
+16 | }
+17 | 
+18 | const AuthContext = createContext<AuthContextType | undefined>(undefined);
+19 | 
+20 | // Function to check cookie on the client (can run in useEffect)
+21 | const hasSessionCookie = (): boolean => {
+22 |     if (typeof document === 'undefined') return false; // Guard for SSR
+23 |     return document.cookie.split(';').some((item) => item.trim().startsWith(`${SESSION_COOKIE_NAME}=`));
+24 | }
+25 | 
+26 | export const AuthProvider = ({ children }: { children: ReactNode }) => {
+27 |   const router = useRouter();
+28 | 
+29 |   // Initialize state based on cookie presence (client-side check)
+30 |   const [isLoggedIn, setIsLoggedIn] = useState(false);
+31 | 
+32 |   useEffect(() => {
+33 |       // Check cookie presence on initial client mount
+34 |       setIsLoggedIn(hasSessionCookie());
+35 |   }, []);
+36 | 
+37 |   const login = () => {
+38 |     // This function might not even be strictly necessary anymore if
+39 |     // the UI reacts directly to redirects/cookie changes.
+40 |     // But it's useful for instant UI updates before a full page reload.
+41 |     console.log("AuthContext: Setting isLoggedIn to true (client state)");
+42 |     setIsLoggedIn(true);
+43 |   };
+44 | 
+45 |   const logout = async () => {
+46 |     console.log("AuthContext: Calling logout API and setting isLoggedIn to false");
+47 |     try {
+48 |         // Call the API route to clear the server-side cookie
+49 |         await fetch('/api/logout', { method: 'POST' });
+50 |     } catch (error) { // Catch network errors etc.
+51 |         console.error("Logout API call failed:", error);
+52 |         // Decide if you still want to clear client state or show an error
+53 |     }
+54 |     setIsLoggedIn(false); // Update client state regardless of API success for responsiveness
+55 |     router.push('/login'); // Redirect to login page
+56 |   };
+57 | 
+58 |   // Memoize context value
+59 |   const value = useMemo(() => ({
+60 |     isLoggedIn,
+61 |     login,
+62 |     logout,
+63 |   }), [isLoggedIn]); // Dependency array might need router if used in memoized value
+64 | 
+65 |   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+66 | };
+67 | 
+68 | export const useSimpleAuth = (): AuthContextType => {
+69 |   const context = useContext(AuthContext);
+70 |   if (context === undefined) {
+71 |     throw new Error('useSimpleAuth must be used within an AuthProvider');
+72 |   }
+73 |   return context;
+74 | }; 
 
 
 --------------------------------------------------------------------------------
@@ -6009,6 +5956,21 @@
  5 |   return (
  6 |     <PageLayout>
  7 |       <Dashboard />
+ 8 |     </PageLayout>
+ 9 |   );
+10 | } 
+
+
+--------------------------------------------------------------------------------
+/app/discover/page.tsx:
+--------------------------------------------------------------------------------
+ 1 | import { PageLayout } from '@/app/components/layout/PageLayout';
+ 2 | import { DiscoverVenues } from '@/app/components/discover/DiscoverVenues';
+ 3 | 
+ 4 | export default function DiscoverPage() {
+ 5 |   return (
+ 6 |     <PageLayout>
+ 7 |       <DiscoverVenues />
  8 |     </PageLayout>
  9 |   );
 10 | } 
@@ -6165,17 +6127,32 @@ https://raw.githubusercontent.com/ACNoonan/samachi-app/master/app/favicon.ico
 
 
 --------------------------------------------------------------------------------
-/app/register/page.tsx:
+/app/profile/page.tsx:
 --------------------------------------------------------------------------------
- 1 | import { SignIn } from "@/app/components/auth/SignIn";
- 2 | 
- 3 | export default function RegisterPage() {
- 4 |   // TODO: Potentially add onboarding video step here before showing the form,
- 5 |   // based on original UX requirements.
- 6 |   
- 7 |   // Render the SignIn component. It will detect the '/register' pathname
- 8 |   // and automatically display the Sign Up form.
- 9 |   return <SignIn />;
+ 1 | import { PageLayout } from '@/app/components/layout/PageLayout';
+ 2 | import { ProfileSettings } from '@/app/components/profile/ProfileSettings';
+ 3 | 
+ 4 | export default function ProfilePage() {
+ 5 |   return (
+ 6 |     <PageLayout>
+ 7 |       <ProfileSettings />
+ 8 |     </PageLayout>
+ 9 |   );
+10 | } 
+
+
+--------------------------------------------------------------------------------
+/app/wallet/page.tsx:
+--------------------------------------------------------------------------------
+ 1 | import { PageLayout } from '@/app/components/layout/PageLayout';
+ 2 | import { WalletDashboard } from '@/app/components/wallet/WalletDashboard';
+ 3 | 
+ 4 | export default function WalletPage() {
+ 5 |   return (
+ 6 |     <PageLayout>
+ 7 |       <WalletDashboard />
+ 8 |     </PageLayout>
+ 9 |   );
 10 | } 
 
 
@@ -6289,45 +6266,65 @@ https://raw.githubusercontent.com/ACNoonan/samachi-app/master/app/favicon.ico
  1 | import { NextResponse } from 'next/server';
  2 | import type { NextRequest } from 'next/server';
  3 | 
- 4 | // This function can be marked `async` if using `await` inside
- 5 | export function middleware(request: NextRequest) {
- 6 |   // TODO: Implement authentication check (e.g., check for session cookie or token)
- 7 |   // For MVP, middleware might be disabled or rely solely on client-side checks/redirects
- 8 |   // until proper session management is implemented.
- 9 |   const isAuthenticated = false; // Replace with actual auth check logic (e.g., check cookie)
-10 |   
-11 |   // Add /create-profile and /dashboard to public paths for MVP
-12 |   const publicPaths = ['/login', '/register', '/card/', '/create-profile', '/dashboard']; 
-13 |   const isPublicPath = publicPaths.some(path => request.nextUrl.pathname.startsWith(path)) || request.nextUrl.pathname === '/';
+ 4 | // Define the same secure cookie name
+ 5 | const SESSION_COOKIE_NAME = 'auth_session';
+ 6 | 
+ 7 | // This function can be marked `async` if using `await` inside
+ 8 | export function middleware(request: NextRequest) {
+ 9 |   // 1. Check for the session cookie
+10 |   const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME);
+11 |   const isAuthenticated = !!sessionCookie; // User is authenticated if the cookie exists
+12 | 
+13 |   console.log(`[Middleware] Path: ${request.nextUrl.pathname}, Cookie found: ${isAuthenticated}`);
 14 | 
-15 |   // Redirect unauthenticated users trying to access protected routes to login
-16 |   // This rule will now allow access to /dashboard even if isAuthenticated is false
-17 |   if (!isAuthenticated && !isPublicPath) {
-18 |     return NextResponse.redirect(new URL('/login', request.url));
-19 |   }
+15 |   // 2. Define public paths (paths accessible without authentication)
+16 |   // Remove /dashboard, /create-profile - they should require auth or be handled differently
+17 |   const publicPaths = ['/login', '/card/'];
+18 |   // Allow root path and API routes implicitly (though matcher excludes API)
+19 |   const isPublicPath = publicPaths.some(path => request.nextUrl.pathname.startsWith(path)) || request.nextUrl.pathname === '/';
 20 | 
-21 |   // Redirect authenticated users trying to access login/register/create-profile to dashboard
-22 |   // We might want to prevent access to /create-profile if already logged in too
-23 |   if (isAuthenticated && (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/register' || request.nextUrl.pathname === '/create-profile')) {
-24 |      return NextResponse.redirect(new URL('/dashboard', request.url));
-25 |   }
-26 | 
-27 |   return NextResponse.next();
-28 | }
-29 | 
-30 | // See "Matching Paths" below to learn more
-31 | export const config = {
-32 |   matcher: [
-33 |     /*
-34 |      * Match all request paths except for the ones starting with:
-35 |      * - api (API routes)
-36 |      * - _next/static (static files)
-37 |      * - _next/image (image optimization files)
-38 |      * - favicon.ico (favicon file)
-39 |      */
-40 |     '/((?!api|_next/static|_next/image|favicon.ico).*)',
-41 |   ],
-42 | }; 
+21 |   // 3. Handle Redirections
+22 | 
+23 |   // If user is NOT authenticated and trying to access a non-public path
+24 |   if (!isAuthenticated && !isPublicPath) {
+25 |     console.log(`[Middleware] Redirecting unauthenticated user from ${request.nextUrl.pathname} to /login`);
+26 |     // Special case: Allow access to /create-profile only if coming from card scan (has cardId query param)
+27 |     if (request.nextUrl.pathname === '/create-profile' && request.nextUrl.searchParams.has('cardId')) {
+28 |         console.log(`[Middleware] Allowing unauthenticated access to /create-profile with cardId`);
+29 |         return NextResponse.next();
+30 |     }
+31 |     return NextResponse.redirect(new URL('/login', request.url));
+32 |   }
+33 | 
+34 |   // If user IS authenticated and trying to access login or root path (after login)
+35 |   if (isAuthenticated && (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/')) {
+36 |     console.log(`[Middleware] Redirecting authenticated user from ${request.nextUrl.pathname} to /dashboard`);
+37 |     return NextResponse.redirect(new URL('/dashboard', request.url));
+38 |   }
+39 | 
+40 |   // If user IS authenticated and trying to access /create-profile (shouldn't happen)
+41 |   if (isAuthenticated && request.nextUrl.pathname === '/create-profile') {
+42 |      console.log(`[Middleware] Redirecting authenticated user from /create-profile to /dashboard`);
+43 |      return NextResponse.redirect(new URL('/dashboard', request.url));
+44 |   }
+45 | 
+46 |   // Otherwise, allow the request to proceed
+47 |   return NextResponse.next();
+48 | }
+49 | 
+50 | // See "Matching Paths" below to learn more
+51 | export const config = {
+52 |   matcher: [
+53 |     /*
+54 |      * Match all request paths except for the ones starting with:
+55 |      * - api (API routes)
+56 |      * - _next/static (static files)
+57 |      * - _next/image (image optimization files)
+58 |      * - favicon.ico (favicon file)
+59 |      */
+60 |     '/((?!api|_next/static|_next/image|favicon.ico).*)',
+61 |   ],
+62 | }; 
 
 
 --------------------------------------------------------------------------------
@@ -6357,37 +6354,41 @@ https://raw.githubusercontent.com/ACNoonan/samachi-app/master/app/favicon.ico
  9 |     "lint": "next lint"
 10 |   },
 11 |   "dependencies": {
-12 |     "@radix-ui/react-label": "^2.1.3",
-13 |     "@radix-ui/react-slot": "^1.2.0",
-14 |     "@solana/wallet-adapter-base": "^0.9.24",
-15 |     "@solana/wallet-adapter-react": "^0.15.36",
-16 |     "@solana/wallet-adapter-react-ui": "^0.9.36",
-17 |     "@solana/wallet-adapter-wallets": "^0.19.34",
-18 |     "@solana/web3.js": "^1.98.0",
-19 |     "@supabase/supabase-js": "^2.49.4",
-20 |     "@types/bcryptjs": "^3.0.0",
-21 |     "bcryptjs": "^3.0.2",
-22 |     "class-variance-authority": "^0.7.1",
-23 |     "clsx": "^2.1.1",
-24 |     "lucide-react": "^0.487.0",
-25 |     "next": "15.3.0",
-26 |     "next-themes": "^0.4.6",
-27 |     "pino-pretty": "^13.0.0",
-28 |     "react": "^19.0.0",
-29 |     "react-dom": "^19.0.0",
-30 |     "sonner": "^2.0.3",
-31 |     "tailwind-merge": "^3.2.0"
-32 |   },
-33 |   "devDependencies": {
-34 |     "@tailwindcss/postcss": "^4",
-35 |     "@types/node": "^20",
-36 |     "@types/react": "^19",
-37 |     "@types/react-dom": "^19",
-38 |     "tailwindcss": "^4",
-39 |     "typescript": "^5"
-40 |   }
-41 | }
-42 | 
+12 |     "@hookform/resolvers": "^5.0.1",
+13 |     "@radix-ui/react-label": "^2.1.3",
+14 |     "@radix-ui/react-slot": "^1.2.0",
+15 |     "@radix-ui/react-switch": "^1.1.4",
+16 |     "@solana/wallet-adapter-base": "^0.9.24",
+17 |     "@solana/wallet-adapter-react": "^0.15.36",
+18 |     "@solana/wallet-adapter-react-ui": "^0.9.36",
+19 |     "@solana/wallet-adapter-wallets": "^0.19.34",
+20 |     "@solana/web3.js": "^1.98.0",
+21 |     "@supabase/supabase-js": "^2.49.4",
+22 |     "@types/bcryptjs": "^3.0.0",
+23 |     "bcryptjs": "^3.0.2",
+24 |     "class-variance-authority": "^0.7.1",
+25 |     "clsx": "^2.1.1",
+26 |     "lucide-react": "^0.487.0",
+27 |     "next": "15.3.0",
+28 |     "next-themes": "^0.4.6",
+29 |     "pino-pretty": "^13.0.0",
+30 |     "react": "^19.0.0",
+31 |     "react-dom": "^19.0.0",
+32 |     "react-hook-form": "^7.55.0",
+33 |     "sonner": "^2.0.3",
+34 |     "tailwind-merge": "^3.2.0",
+35 |     "zod": "^3.24.2"
+36 |   },
+37 |   "devDependencies": {
+38 |     "@tailwindcss/postcss": "^4",
+39 |     "@types/node": "^20",
+40 |     "@types/react": "^19",
+41 |     "@types/react-dom": "^19",
+42 |     "tailwindcss": "^4",
+43 |     "typescript": "^5"
+44 |   }
+45 | }
+46 | 
 
 
 --------------------------------------------------------------------------------
@@ -6399,6 +6400,24 @@ https://raw.githubusercontent.com/ACNoonan/samachi-app/master/app/favicon.ico
 4 | 
 5 | export default config;
 6 | 
+
+
+--------------------------------------------------------------------------------
+/public/barrage-club.png:
+--------------------------------------------------------------------------------
+https://raw.githubusercontent.com/ACNoonan/samachi-app/master/public/barrage-club.png
+
+
+--------------------------------------------------------------------------------
+/public/bertha-club.png:
+--------------------------------------------------------------------------------
+https://raw.githubusercontent.com/ACNoonan/samachi-app/master/public/bertha-club.png
+
+
+--------------------------------------------------------------------------------
+/public/bloom-festival.png:
+--------------------------------------------------------------------------------
+https://raw.githubusercontent.com/ACNoonan/samachi-app/master/public/bloom-festival.png
 
 
 --------------------------------------------------------------------------------
@@ -6417,6 +6436,12 @@ https://raw.githubusercontent.com/ACNoonan/samachi-app/master/app/favicon.ico
 /public/next.svg:
 --------------------------------------------------------------------------------
 1 | <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 394 80"><path fill="#000" d="M262 0h68.5v12.7h-27.2v66.6h-13.6V12.7H262V0ZM149 0v12.7H94v20.4h44.3v12.6H94v21h55v12.6H80.5V0h68.7zm34.3 0h-17.8l63.8 79.4h17.9l-32-39.7 32-39.6h-17.9l-23 28.6-23-28.6zm18.3 56.7-9-11-27.1 33.7h17.8l18.3-22.7z"/><path fill="#000" d="M81 79.3 17 0H0v79.3h13.6V17l50.2 62.3H81Zm252.6-.4c-1 0-1.8-.4-2.5-1s-1.1-1.6-1.1-2.6.3-1.8 1-2.5 1.6-1 2.6-1 1.8.3 2.5 1a3.4 3.4 0 0 1 .6 4.3 3.7 3.7 0 0 1-3 1.8zm23.2-33.5h6v23.3c0 2.1-.4 4-1.3 5.5a9.1 9.1 0 0 1-3.8 3.5c-1.6.8-3.5 1.3-5.7 1.3-2 0-3.7-.4-5.3-1s-2.8-1.8-3.7-3.2c-.9-1.3-1.4-3-1.4-5h6c.1.8.3 1.6.7 2.2s1 1.2 1.6 1.5c.7.4 1.5.5 2.4.5 1 0 1.8-.2 2.4-.6a4 4 0 0 0 1.6-1.8c.3-.8.5-1.8.5-3V45.5zm30.9 9.1a4.4 4.4 0 0 0-2-3.3 7.5 7.5 0 0 0-4.3-1.1c-1.3 0-2.4.2-3.3.5-.9.4-1.6 1-2 1.6a3.5 3.5 0 0 0-.3 4c.3.5.7.9 1.3 1.2l1.8 1 2 .5 3.2.8c1.3.3 2.5.7 3.7 1.2a13 13 0 0 1 3.2 1.8 8.1 8.1 0 0 1 3 6.5c0 2-.5 3.7-1.5 5.1a10 10 0 0 1-4.4 3.5c-1.8.8-4.1 1.2-6.8 1.2-2.6 0-4.9-.4-6.8-1.2-2-.8-3.4-2-4.5-3.5a10 10 0 0 1-1.7-5.6h6a5 5 0 0 0 3.5 4.6c1 .4 2.2.6 3.4.6 1.3 0 2.5-.2 3.5-.6 1-.4 1.8-1 2.4-1.7a4 4 0 0 0 .8-2.4c0-.9-.2-1.6-.7-2.2a11 11 0 0 0-2.1-1.4l-3.2-1-3.8-1c-2.8-.7-5-1.7-6.6-3.2a7.2 7.2 0 0 1-2.4-5.7 8 8 0 0 1 1.7-5 10 10 0 0 1 4.3-3.5c2-.8 4-1.2 6.4-1.2 2.3 0 4.4.4 6.2 1.2 1.8.8 3.2 2 4.3 3.4 1 1.4 1.5 3 1.5 5h-5.8z"/></svg>
+
+
+--------------------------------------------------------------------------------
+/public/novi1.png:
+--------------------------------------------------------------------------------
+https://raw.githubusercontent.com/ACNoonan/samachi-app/master/public/novi1.png
 
 
 --------------------------------------------------------------------------------
