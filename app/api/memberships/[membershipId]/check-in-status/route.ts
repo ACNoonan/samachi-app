@@ -20,10 +20,10 @@ export async function GET(
   context: { params: { membershipId: string } }
 ) {
   const membershipId = context.params.membershipId;
-  console.log(`Simplified GET handler for /api/memberships/${membershipId}/check-in`);
-  return NextResponse.json({ message: "Handler simplified for testing", membershipId });
+  // console.log(`Simplified GET handler for /api/memberships/${membershipId}/check-in`); // Comment out the simplified log
+  // return NextResponse.json({ message: "Handler simplified for testing", membershipId }); // Comment out the simplified return
 
-  /* // Original logic commented out for testing
+  // Original logic commented out for testing
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
@@ -98,5 +98,5 @@ export async function GET(
     // Distinguish between Glownet API errors and other errors if possible
     return NextResponse.json({ error: error.message || 'Internal server error during check-in process.' }, { status: 500 });
   }
-  */ // End of commented out logic
+  // End of commented out logic
 } 
