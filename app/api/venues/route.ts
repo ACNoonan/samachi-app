@@ -1,10 +1,10 @@
 import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server"; // Use the server-side client
 
 export const dynamic = 'force-dynamic'; // Force dynamic execution, disable caching
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   // Await the cookies() call to get the actual store
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore); // Now pass the resolved store

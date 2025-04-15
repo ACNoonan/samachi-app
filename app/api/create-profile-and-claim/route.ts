@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server'; // Use server client
@@ -24,7 +24,7 @@ const SALT_ROUNDS = 10; // Standard for bcrypt
 // Define the same secure cookie name
 const SESSION_COOKIE_NAME = 'auth_session';
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   // Await the cookies() call
   const cookieStore = await cookies();
   // Ensure you initialize the Supabase client correctly for Route Handlers
