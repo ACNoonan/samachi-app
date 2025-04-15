@@ -1,12 +1,9 @@
-# samachi-app/create_glownet_test_data.py
 import os
 import requests
-import time
-import json
 import sys
+import time
 from faker import Faker
 from dotenv import load_dotenv
-from datetime import datetime, timedelta
 
 # --- Configuration ---
 # Construct the path to .env.local relative to this script file
@@ -28,7 +25,7 @@ if not GLOWNET_API_KEY:
     sys.exit(1)
 
 HEADERS = {
-    "Authorization": f"Token token={GLOWNET_API_KEY}",
+    "AUTHORIZATION": f"Token token={GLOWNET_API_KEY}",
     "Content-Type": "application/json",
     "Accept": "application/json"
 }
@@ -83,24 +80,50 @@ def ask_int(prompt, min_val=0):
         except ValueError:
             print("Invalid input. Please enter a whole number.")
 
-def create_event(name, start_date, end_date, timezone):
-    """Creates a single event."""
+def get_all_events():
+    """Fetches all events from the Glownet API."""
     url = f"{GLOWNET_API_BASE_URL}/api/v2/events"
-    payload = {
-        "event": {
-            "name": name,
-            "start_date": start_date,
-            "end_date": end_date,
-            "timezone": timezone
-        }
-    }
-    print(f"\nAttempting to create event: {name}...")
     try:
-        response = requests.post(url, headers=HEADERS, json=payload)
-        return handle_response(response, success_status_codes=(201,)) # Expect 201 Created
+        response = requests.get(url, headers=HEADERS)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            print(f"Error fetching events: API returned status {response.status_code}")
+            try:
+                error_details = response.json()
+                print(f"Error details: {error_details}")
+            except:
+                print(f"Response text: {response.text}")
+            return []
     except requests.exceptions.RequestException as e:
-        print(f"  Network error creating event '{name}': {e}")
-        return None
+        print(f"Network error while fetching events: {e}")
+        return []
+
+def display_events(events):
+    """Displays a numbered list of events."""
+    print("\n--- Available Events ---")
+    for idx, event in enumerate(events, 1):
+        print(f"{idx}. Name: {event.get('name', 'N/A')}")
+        print(f"   ID: {event.get('id', 'N/A')}")
+        print(f"   Slug: {event.get('slug', 'N/A')}")
+        print(f"   State: {event.get('state', 'N/A')}")
+        print("-" * 40)
+
+def select_event(events):
+    """Let user select an event from the list."""
+    while True:
+        try:
+            choice = input("\nEnter the number of the event to use (or 'q' to quit): ")
+            if choice.lower() == 'q':
+                return None
+            
+            idx = int(choice) - 1
+            if 0 <= idx < len(events):
+                return events[idx]
+            else:
+                print("Invalid selection. Please try again.")
+        except ValueError:
+            print("Please enter a valid number or 'q' to quit.")
 
 def create_customer(event_id):
     """Creates a single customer within the specified event."""
@@ -183,50 +206,37 @@ def topup_gtag(event_id, gtag_internal_id, credits):
 
 # --- Main Interactive Script ---
 if __name__ == "__main__":
-    print("--- Glownet Interactive Data Creator ---")
+    print("--- Glownet Asset Creator ---")
     print(f"API Base URL: {GLOWNET_API_BASE_URL}")
     print("-" * 40)
 
-    target_event_id = None
-    event_prefix = None
-    created_event_info = None
+    # Fetch all events
+    print("\nFetching available events...")
+    events = get_all_events()
+    
+    if not events:
+        print("No events found or error occurred while fetching events.")
+        sys.exit(1)
 
-    # 1. Determine Target Event
-    if ask_yes_no("Do you want to create a NEW event?"):
-        event_name = input("Enter the name for the new event: ").strip()
-        # Add prefix length validation
-        while True:
-            event_prefix = input("Enter a short prefix (1-9 chars, e.g., 'fest') for G-Tags: ").strip().lower()
-            if 1 <= len(event_prefix) <= 9:
-                break
-            else:
-                print("Error: Prefix must be between 1 and 9 characters long.")
-        # Use default dates/timezone for simplicity
-        now = datetime.now()
-        start_date = now.strftime("%d/%m/%Y %H:%M:%S")
-        end_date = (now + timedelta(days=7)).strftime("%d/%m/%Y %H:%M:%S")
-        timezone = "Madrid" # Or prompt user
+    # Display events and let user select one
+    display_events(events)
+    selected_event = select_event(events)
 
-        created_event_info = create_event(event_name, start_date, end_date, timezone)
-        if created_event_info and ('id' in created_event_info or 'slug' in created_event_info):
-            target_event_id = created_event_info.get('id') or created_event_info.get('slug')
-            print(f"Successfully created event '{event_name}' with ID/Slug: {target_event_id}")
-        else:
-            print(f"Failed to create event '{event_name}'. Cannot proceed.")
-            sys.exit(1)
-    else:
-        target_event_id = input("Enter the ID or Slug of the existing event to target: ").strip()
-        # Add prefix length validation
-        while True:
-            event_prefix = input("Enter the short prefix (1-9 chars, e.g., 'fest') for new G-Tags: ").strip().lower()
-            if 1 <= len(event_prefix) <= 9:
-                break
-            else:
-                print("Error: Prefix must be between 1 and 9 characters long.")
-        # Optionally add a check here to verify the event exists via get_event_details
-        print(f"Targeting existing event: {target_event_id}")
+    if not selected_event:
+        print("\nOperation cancelled by user.")
+        sys.exit(0)
 
+    target_event_id = selected_event.get('id') or selected_event.get('slug')
+    print(f"\nSelected event: {selected_event.get('name')} (ID: {target_event_id})")
     print("-" * 40)
+
+    # Get G-Tag prefix
+    while True:
+        event_prefix = input("Enter a short prefix (1-9 chars, e.g., 'fest') for G-Tags: ").strip().lower()
+        if 1 <= len(event_prefix) <= 9:
+            break
+        else:
+            print("Error: Prefix must be between 1 and 9 characters long.")
 
     customer_ids = []
     assigned_gtag_internal_ids = []
@@ -239,7 +249,7 @@ if __name__ == "__main__":
     total_unassigned_gtags_succeeded = 0
     total_topups_succeeded = 0
 
-    # 2. Create Customers
+    # Create Customers
     if ask_yes_no(f"Create customers for event '{target_event_id}'?"):
         customers_to_create = ask_int("How many customers to create?", min_val=1)
         print(f"\n--- Creating {customers_to_create} Customers ---")
@@ -254,7 +264,7 @@ if __name__ == "__main__":
         print(f"Finished creating customers: {total_customers_succeeded} succeeded out of {customers_to_create}.")
         print("-" * 40)
 
-    # 3. Register & Assign G-Tags (only if customers were created)
+    # Register & Assign G-Tags (only if customers were created)
     if total_customers_succeeded > 0:
         if ask_yes_no(f"Create and assign G-Tags to the {total_customers_succeeded} new customers?"):
             max_assignable = total_customers_succeeded
@@ -276,7 +286,7 @@ if __name__ == "__main__":
             print(f"Finished assigning G-Tags: {total_assigned_gtags_succeeded} succeeded out of {assigned_gtags_to_create}.")
             print("-" * 40)
 
-            # 4. Topup Assigned G-Tags (only if assigned tags were created)
+            # Topup Assigned G-Tags (only if assigned tags were created)
             if total_assigned_gtags_succeeded > 0:
                 if ask_yes_no(f"Top up the {total_assigned_gtags_succeeded} newly assigned G-Tags?"):
                     topup_balance = ask_int("Enter the balance (in cents) to add to each tag", min_val=0)
@@ -292,7 +302,7 @@ if __name__ == "__main__":
                         print("Skipping topup as balance entered is 0.")
                     print("-" * 40)
 
-    # 5. Register Unassigned G-Tags
+    # Register Unassigned G-Tags
     if ask_yes_no(f"Create unassigned G-Tags for event '{target_event_id}'?"):
         unassigned_gtags_to_create = ask_int("How many unassigned G-Tags to create?", min_val=1)
         print(f"\n--- Registering {unassigned_gtags_to_create} Unassigned G-Tags ---")
@@ -306,14 +316,11 @@ if __name__ == "__main__":
         print(f"Finished registering unassigned G-Tags: {total_unassigned_gtags_succeeded} succeeded out of {unassigned_gtags_to_create}.")
         print("-" * 40)
 
-    # 6. Final Summary
+    # Final Summary
     print("\n" + "=" * 40)
-    print("--- Data Creation Summary ---")
-    print(f"Target Event ID/Slug: {target_event_id}")
-    if created_event_info:
-         print(f"Event Status: Newly Created")
-    else:
-         print(f"Event Status: Used Existing")
+    print("--- Asset Creation Summary ---")
+    print(f"Target Event: {selected_event.get('name')}")
+    print(f"Event ID/Slug: {target_event_id}")
 
     if customers_to_create > 0:
         print(f"Customers: {total_customers_succeeded} / {customers_to_create} attempted")
@@ -328,4 +335,4 @@ if __name__ == "__main__":
         print("No assets were requested to be created in this run.")
 
     print("=" * 40)
-    print("Interactive Creation Script finished.")
+    print("Asset Creation Script finished.") 

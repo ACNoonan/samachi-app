@@ -1,0 +1,20 @@
+{
+  "venue_images": {
+    "802": {
+      "image_url": "/novi1.png",
+      "image_alt": "Noviciado"
+    },
+    "803": {
+      "image_url": "/barrage-club.png",
+      "image_alt": "Barrage Club"
+    },
+    "3": {
+      "image_url": "/berhta-club.png",
+      "image_alt": "Berhta Club"  
+    },
+    "804": {
+      "image_url": "/bloom-festival.png",
+      "image_alt": "Bloom Festival"
+    }
+  }
+} 

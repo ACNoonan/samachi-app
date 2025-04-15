@@ -27,7 +27,7 @@ async function trackSyncStatus(supabase: any, venueId: string, status: SyncStatu
 }
 
 // Main sync logic
-async function syncVenues(type: SyncType = 'full') {
+async function syncVenues(type: SyncType = 'full', venueImages: Record<string, { image_url: string, image_alt: string }> = {}) {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
   
@@ -41,21 +41,25 @@ async function syncVenues(type: SyncType = 'full') {
     }
 
     // Prepare venue data with enhanced fields
-    const venuesToUpsert = glownetEvents.map((event) => ({
-      glownet_event_id: event.id,
-      name: event.name,
-      status: event.state,
-      start_date: event.start_date,
-      end_date: event.end_date,
-      timezone: event.timezone,
-      currency: event.currency,
-      address: null, // To be filled manually/via another service
-      image_url: null, // To be filled manually/via another service
-      max_balance: event.maximum_gtag_standard_balance,
-      max_virtual_balance: event.maximum_gtag_virtual_balance,
-      last_synced: new Date().toISOString(),
-      sync_status: 'success' as SyncStatus
-    }));
+    const venuesToUpsert = glownetEvents.map((event) => {
+      // Get image data if available
+      const imageData = venueImages[event.id.toString()] || {};
+      
+      return {
+        glownet_event_id: event.id,
+        name: event.name,
+        status: event.state,
+        start_date: event.start_date,
+        end_date: event.end_date,
+        timezone: event.timezone,
+        currency: event.currency,
+        image_url: imageData.image_url || null,
+        max_balance: event.maximum_gtag_standard_balance,
+        max_virtual_balance: event.maximum_gtag_virtual_balance,
+        last_synced: new Date().toISOString(),
+        sync_status: 'success' as SyncStatus
+      };
+    });
 
     // Perform upsert
     const { data, error } = await supabase
@@ -122,9 +126,9 @@ export async function POST(request: Request) {
   
   rateLimitStore.set(clientIP, [...validRequests, now]);
 
-  // Get sync type from request
-  const { type = 'full' } = await request.json();
-  const result = await syncVenues(type as SyncType);
+  // Get sync type and venue images from request
+  const { type = 'full', venue_images = {} } = await request.json();
+  const result = await syncVenues(type as SyncType, venue_images);
   
   return NextResponse.json(
     result.error ? { error: result.error } : { message: result.message, data: result.data },
