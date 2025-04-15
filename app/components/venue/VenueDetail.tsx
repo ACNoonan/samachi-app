@@ -1,64 +1,205 @@
-'use client';
+"use client"
 
-import React, { useState, useEffect } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { 
-  ArrowLeft, Star, MapPin, Calendar, Clock, Phone, Globe, 
-  ChevronUp, Share2, Heart, Check 
-} from 'lucide-react';
-import { Button } from '@/app/components/ui/button';
-import { CheckInModal } from './CheckInModal';
-import Image from 'next/image';
-import { Skeleton } from "@/app/components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "@/app/components/ui/alert";
+import * as React from "react"
+import { useState, useEffect } from "react"
+import { motion, useMotionValue } from "framer-motion"
+import {
+  Share,
+  MapPin,
+  Users, // Kept for host info
+  Calendar, // Kept for booking card placeholder
+  ChevronLeft,
+  ChevronRight,
+  Wifi, // Example amenity
+  Tv,   // Example amenity
+  Coffee,// Example amenity
+  Car,  // Example amenity
+  UtensilsCrossed, // Example amenity
+  Clock, // Added for Action Card
+  Phone, // Added for Action Card
+  Globe, // Added for Action Card
+  Check  // Added for Action Card
+} from "lucide-react"
+
+import { cn } from "@/lib/utils" // Assuming utils path
+import { Button } from "@/app/components/ui/button" // Corrected path
+import { Card, CardContent, CardFooter, CardHeader } from "@/app/components/ui/card" // Corrected path
+import { Separator } from "@/app/components/ui/separator" // Corrected path
+import Image from 'next/image'; // Use Next Image
+import { Skeleton } from "@/app/components/ui/skeleton"; // Corrected path
+import { Alert, AlertDescription, AlertTitle } from "@/app/components/ui/alert"; // Corrected path
 import { Terminal } from "lucide-react";
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { CheckInModal } from './CheckInModal'; // Assuming CheckInModal is in the same directory
 
-// Interface matching the expected API response from /api/venues/[venueId]
+// --- Image Swiper Component ---
+interface ImageSwiperProps extends React.HTMLAttributes<HTMLDivElement> {
+  images: string[]
+}
+
+function ImageSwiper({ images, className, ...props }: ImageSwiperProps) {
+  const [imgIndex, setImgIndex] = React.useState(0)
+  const dragX = useMotionValue(0)
+
+  const onDragEnd = () => {
+    const x = dragX.get()
+    if (x <= -10 && imgIndex < images.length - 1) {
+      setImgIndex((prev) => prev + 1)
+    } else if (x >= 10 && imgIndex > 0) {
+      setImgIndex((prev) => prev - 1)
+    }
+  }
+
+  if (!images || images.length === 0) {
+    return (
+      <div className={cn("relative aspect-video w-full overflow-hidden rounded-lg bg-muted flex items-center justify-center", className)}>
+        <span className="text-muted-foreground">No Image Available</span>
+      </div>
+    );
+  }
+
+  // Use only the first image if only one is provided
+  if (images.length === 1) {
+     return (
+       <div className={cn("relative aspect-video w-full overflow-hidden rounded-lg", className)} {...props}>
+         <Image
+           src={images[0]}
+           alt={`Venue image 1`}
+           fill
+           style={{ objectFit: "cover" }}
+           className="pointer-events-none"
+           priority // Prioritize the main image
+         />
+       </div>
+     );
+   }
+
+
+  return (
+    <div
+      className={cn(
+        "group relative aspect-video w-full overflow-hidden rounded-lg", // Use aspect-video for better ratio
+        className
+      )}
+      {...props}
+    >
+      {/* Swiper Buttons & Indicator */}
+      <div className="pointer-events-none absolute inset-0 z-10">
+        {imgIndex > 0 && (
+          <div className="absolute left-2 top-1/2 -translate-y-1/2 md:left-5">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="pointer-events-auto h-8 w-8 rounded-full bg-white/80 opacity-0 transition-opacity group-hover:opacity-100"
+              onClick={() => setImgIndex((prev) => prev - 1)}
+            >
+              <ChevronLeft className="h-4 w-4 text-neutral-600" />
+            </Button>
+          </div>
+        )}
+
+        {imgIndex < images.length - 1 && (
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 md:right-5">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="pointer-events-auto h-8 w-8 rounded-full bg-white/80 opacity-0 transition-opacity group-hover:opacity-100"
+              onClick={() => setImgIndex((prev) => prev + 1)}
+            >
+              <ChevronRight className="h-4 w-4 text-neutral-600" />
+            </Button>
+          </div>
+        )}
+
+        <div className="absolute bottom-2 w-full flex justify-center">
+          <div className="flex min-w-9 items-center justify-center rounded-md bg-black/80 px-2 py-0.5 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
+            {imgIndex + 1}/{images.length}
+          </div>
+        </div>
+      </div>
+
+      {/* Swiper Images */}
+      <motion.div
+        drag="x"
+        dragConstraints={{ left: 0, right: 0 }}
+        dragMomentum={false}
+        style={{ x: dragX }}
+        animate={{ translateX: `-${imgIndex * 100}%` }}
+        onDragEnd={onDragEnd}
+        transition={{ damping: 18, stiffness: 90, type: "spring", duration: 0.2 }}
+        className="flex h-full cursor-grab items-center rounded-[inherit] active:cursor-grabbing"
+      >
+        {images.map((src, i) => (
+          <motion.div
+            key={i}
+            className="h-full w-full shrink-0 overflow-hidden bg-neutral-800 object-cover"
+          >
+            <Image
+                src={src}
+                alt={`Venue image ${i+1}`}
+                fill
+                style={{ objectFit: "cover" }}
+                className="pointer-events-none"
+                priority={i === 0} // Prioritize first image
+              />
+          </motion.div>
+        ))}
+      </motion.div>
+    </div>
+  )
+}
+
+// --- Amenity Component ---
+interface AmenityProps {
+  icon: React.ReactNode
+  label: string
+}
+
+function Amenity({ icon, label }: AmenityProps) {
+  return (
+    <div className="flex items-center gap-3"> {/* Increased gap */}
+      <div className="text-muted-foreground">{icon}</div>
+      <span>{label}</span>
+    </div>
+  )
+}
+
+// --- Venue Detail Data Interface (Matches API response) ---
 interface VenueDetailData {
-  id: string; // UUID
+  id: string;
   name: string;
   glownet_event_id: number | null;
   address: string | null;
-  image_url: string | null;
+  image_url: string | null; // Can be a single image URL or comma-separated list
   created_at: string;
   updated_at: string;
-  // Add other fields returned by the API if needed
-  // Placeholder fields (if needed temporarily, but prefer real data)
-  description?: string;
-  rating?: number;
-  hours?: string;
-  phone?: string;
-  website?: string;
-  images?: string[];
+  description?: string | null; // Keep description
+  // Add other fields that might be relevant from your 'venues' table
+  // e.g., phone, website, hours, specific amenity flags
+  phone?: string | null;
+  website?: string | null;
+  hours?: string | null;
+  // Placeholder for host info - you'll need to fetch/join this if needed
+  host_name?: string | null;
+  host_image_url?: string | null;
 }
 
-// Mock venue data - Keep for reference or fallback during development
-// const mockVenueData = { ... };
 
-export function VenueDetail() { // Removed React.FC
+// --- Main Venue Detail Component ---
+export function VenueDetail() {
   const params = useParams();
   const router = useRouter();
-  const searchParams = useSearchParams(); // Hook to read query parameters
+  const searchParams = useSearchParams();
   const venueId = params.venueId as string;
-
-  // Read membershipId from URL query parameter
   const membershipIdFromQuery = searchParams.get('membershipId');
 
   const [venue, setVenue] = useState<VenueDetailData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const [bottomSheetVisible, setBottomSheetVisible] = useState(true);
   const [showCheckInModal, setShowCheckInModal] = useState(false);
-  const [favorite, setFavorite] = useState(false); // Keep local state for favorite
 
-  // ***** PLACEHOLDER: Fetch or determine the user's membership ID for this venue *****
-  // In a real app, this might come from a user context, a parent component,
-  // or another fetch useEffect based on profileId and venueId.
-  const currentUserMembershipId: string | null = "mock-membership-uuid-123"; // Replace with actual logic
-  // *******************************************************************************
-
-  useEffect(() => {
+  // Fetch venue details
+   useEffect(() => {
     if (!venueId) {
       setError('No Venue ID provided.');
       setIsLoading(false);
@@ -73,6 +214,7 @@ export function VenueDetail() { // Removed React.FC
         const response = await fetch(`/api/venues/${venueId}`);
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
+          // Use specific error message from API if available
           throw new Error(errorData.error || `Failed to fetch venue: ${response.statusText}`);
         }
         const data: VenueDetailData = await response.json();
@@ -80,7 +222,8 @@ export function VenueDetail() { // Removed React.FC
         setVenue(data);
       } catch (err: any) {
         console.error("Error fetching venue details:", err);
-        setError(err.message);
+        // Set the specific error message for display
+        setError(err.message || 'An unexpected error occurred.');
         setVenue(null);
       } finally {
         setIsLoading(false);
@@ -90,75 +233,67 @@ export function VenueDetail() { // Removed React.FC
     fetchVenueDetails();
   }, [venueId]);
 
-  // --- Loading State --- 
+
+  // --- Loading State ---
   if (isLoading) {
     return (
-      <div className="p-4 space-y-4">
-          <Skeleton className="h-10 w-10 rounded-full" />
-          <Skeleton className="h-64 w-full" />
-          <Skeleton className="h-8 w-3/4" />
-          <Skeleton className="h-6 w-1/2" />
-          <Skeleton className="h-20 w-full" />
+      <div className="container mx-auto px-4 py-6 space-y-6">
+        <Skeleton className="h-8 w-1/4" /> {/* Back button area */}
+        <Skeleton className="aspect-video w-full rounded-lg" /> {/* Image Swiper */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+            <div className="lg:col-span-2 space-y-4">
+                <Skeleton className="h-8 w-3/4" /> {/* Title */}
+                <Skeleton className="h-6 w-1/2" /> {/* Location */}
+                <Skeleton className="h-20 w-full" /> {/* Description */}
+                 <Skeleton className="h-24 w-full" /> {/* Amenities */}
+            </div>
+            <div className="lg:col-span-1">
+                 <Skeleton className="h-64 w-full rounded-lg" /> {/* Booking Card */}
+            </div>
+        </div>
       </div>
     );
   }
 
-  // --- Error State --- 
+  // --- Error State ---
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-6">
-        <Alert variant="destructive" className="max-w-md mb-4">
-            <Terminal className="h-4 w-4" />
-            <AlertTitle>Error Loading Venue</AlertTitle>
-            <AlertDescription>
-                {error}
-            </AlertDescription>
-        </Alert>
-        <Button onClick={() => router.push('/discover')}>
-          Back to Discover
-        </Button>
-      </div>
-    );
+       <div className="container mx-auto px-4 py-6 flex flex-col items-center justify-center min-h-[calc(100vh-10rem)]">
+         <Alert variant="destructive" className="max-w-md mb-4">
+           <Terminal className="h-4 w-4" />
+           <AlertTitle>Error Loading Venue</AlertTitle>
+           <AlertDescription>{error}</AlertDescription>
+         </Alert>
+         <Button onClick={() => router.push('/discover')}>
+           Back to Discover
+         </Button>
+       </div>
+     );
   }
 
-  // --- Venue Not Found State (handled by API, but good fallback) ---
+  // --- Venue Not Found State ---
   if (!venue) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-6">
-        <Alert className="max-w-md mb-4">
-            <Terminal className="h-4 w-4" />
-            <AlertTitle>Venue Not Found</AlertTitle>
-            <AlertDescription>
-                The requested venue could not be found.
-            </AlertDescription>
-        </Alert>
-        <Button onClick={() => router.push('/discover')}>
-          Back to Discover
-        </Button>
-      </div>
-    );
-  }
+     return (
+       <div className="container mx-auto px-4 py-6 flex flex-col items-center justify-center min-h-[calc(100vh-10rem)]">
+         <Alert className="max-w-md mb-4">
+           <Terminal className="h-4 w-4" />
+           <AlertTitle>Venue Not Found</AlertTitle>
+           <AlertDescription>
+             The requested venue could not be found.
+           </AlertDescription>
+         </Alert>
+         <Button onClick={() => router.push('/discover')}>
+           Back to Discover
+         </Button>
+       </div>
+     );
+   }
 
-  // --- Render Venue Details (using fetched 'venue' state) ---
+   // Prepare image array (handle single or multiple images)
+   const venueImages = venue.image_url
+       ? venue.image_url.split(',').map((url: string) => url.trim()) // Added type for url
+       : []; // Default to empty array if no image_url
 
-  const handleShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: venue.name,
-          text: `Check out ${venue.name}!`,
-          url: window.location.href, // Share current page URL
-        });
-        console.log('Successfully shared');
-      } catch (error) {
-        console.error('Error sharing:', error);
-        // TODO: Show fallback share options or error message
-      }
-    } else {
-      console.log('Web Share API not supported');
-      // TODO: Show fallback (e.g., copy link button)
-    }
-  };
 
   // Prepare data for CheckInModal
   const checkInVenueData = {
@@ -167,151 +302,145 @@ export function VenueDetail() { // Removed React.FC
       location: venue.address || 'Location not specified'
   };
 
+
   return (
-    <div className="relative h-screen overflow-hidden">
-      {/* Header with back button */}
-      <div className="absolute top-0 left-0 right-0 p-4 z-20">
-        <div className="flex justify-between">
-          <button 
-            onClick={() => router.back()}
-            className="w-10 h-10 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-md"
-            aria-label="Go back"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          
-          <div className="flex gap-2">
-            <button 
-              onClick={handleShare}
-              className="w-10 h-10 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-md"
-              aria-label="Share venue"
-            >
-              <Share2 className="h-5 w-5" />
-            </button>
-            <button 
-              onClick={() => setFavorite(!favorite)}
-              className={`w-10 h-10 rounded-full backdrop-blur-sm flex items-center justify-center shadow-md ${
-                favorite ? 'bg-primary text-white' : 'bg-white/80'
-              }`}
-              aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
-            >
-              <Heart className="h-5 w-5" fill={favorite ? 'currentColor' : 'none'} />
-            </button>
-          </div>
-        </div>
-      </div>
-      
-      {/* Main image - Use venue.image_url */} 
-      <div className="h-2/3 relative bg-gray-300"> {/* Added background */} 
-        {venue.image_url ? (
-            <Image
-            src={venue.image_url} // Use real image URL
-            alt={venue.name}
-            layout="fill"
-            objectFit="cover"
-            priority
-            className="z-10"
-            />
-        ) : (
-            <div className="absolute inset-0 flex items-center justify-center z-0">
-                <span className="text-gray-500">No Image Available</span>
-            </div>
-        )}
-        <div className="absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-black/30 to-transparent z-10" />
-      </div>
-      
-      {/* Bottom sheet with venue details */}
-      <div 
-        className={`absolute bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl rounded-t-3xl shadow-xl transition-transform duration-300 ease-in-out transform z-30 ${
-          bottomSheetVisible ? 'translate-y-0' : 'translate-y-[calc(100%-80px)]'
-        }`}
-        style={{ maxHeight: 'calc(100% - 60px)' }}
-      >
-        {/* Bottom sheet header with drag indicator */}
-        <div 
-          className="p-4 flex flex-col items-center cursor-grab"
-          onClick={() => setBottomSheetVisible(!bottomSheetVisible)}
-          aria-label={bottomSheetVisible ? "Collapse details" : "Expand details"}
-        >
-          <div className="w-10 h-1 bg-gray-300 rounded-full mb-2" />
-          
-          <div className="flex justify-between items-start w-full">
-            <div>
-              <h1 className="text-xl font-semibold">{venue.name}</h1>
-              <div className="flex items-center flex-wrap">
-                <MapPin className="h-3 w-3 text-muted-foreground mr-1" />
-                <p className="text-xs text-muted-foreground mr-2">{venue.address || 'Address not available'}</p>
-              </div>
-            </div>
-            <ChevronUp className={`h-5 w-5 text-muted-foreground transition-transform ${
-              bottomSheetVisible ? 'rotate-180' : 'rotate-0'
-            }`} />
-          </div>
-        </div>
-        
-        {/* Bottom sheet content */}
-        <div className="px-4 pb-32 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 140px)' }}>
-          <p className="text-sm mb-6">{venue.description || 'No description available.'}</p>
-          
-          <div className="space-y-4 mb-6">
-            {venue.hours && (
-                <div className="flex items-start">
-                    <Clock className="h-5 w-5 text-primary mr-3 mt-0.5 shrink-0" />
-                    <div><h3 className="text-sm font-medium">Hours</h3><p className="text-xs text-muted-foreground break-words">{venue.hours}</p></div>
-                </div>
-            )}
-            
-            {venue.address && (
-                <div className="flex items-start">
-                    <MapPin className="h-5 w-5 text-primary mr-3 mt-0.5 shrink-0" />
-                    <div><h3 className="text-sm font-medium">Address</h3><p className="text-xs text-muted-foreground break-words">{venue.address}</p></div>
-                </div>
-            )}
-            
-            {venue.phone && (
-                <div className="flex items-start">
-                    <Phone className="h-5 w-5 text-primary mr-3 mt-0.5 shrink-0" />
-                    <div><h3 className="text-sm font-medium">Contact</h3><p className="text-xs text-muted-foreground break-words">{venue.phone}</p></div>
-                </div>
-            )}
-            
-            {venue.website && (
-                <div className="flex items-start">
-                    <Globe className="h-5 w-5 text-primary mr-3 mt-0.5 shrink-0" />
-                    <div><h3 className="text-sm font-medium">Website</h3><a href={`https://${venue.website}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline break-all">{venue.website}</a></div>
-                </div>
-            )}
-          </div>
-          
-          <Button
-            onClick={() => setShowCheckInModal(true)}
-            className="w-full glass-button"
-            disabled={!membershipIdFromQuery}
-          >
-            Check In Now
-            <Check className="ml-2 h-4 w-4" />
+    <div className="bg-background min-h-screen">
+      {/* Simplified Header (Back button only) */}
+      <header className="max-w-lg mx-auto px-4 pt-4"> {/* Constrain header */}
+         <Button variant="ghost" size="icon" onClick={() => router.back()} className="mb-4">
+            <ChevronLeft className="h-5 w-5" />
+            <span className="sr-only">Go back</span>
           </Button>
-          {!membershipIdFromQuery && (
-                <p className="text-xs text-center text-muted-foreground mt-2">
-                    (You must access this page via your Memberships list to check in)
-                </p>
-            )}
+      </header>
+
+      <main className="max-w-lg mx-auto px-4 pb-10"> {/* Constrain main, remove container */}
+        {/* Image Gallery - Now using ImageSwiper */}
+        <div className="mb-6">
+          <ImageSwiper images={venueImages} />
         </div>
-      </div>
-      
-      {/* Pass membershipId from query to modal */}
-      {showCheckInModal && membershipIdFromQuery && (
-        <CheckInModal
-            venue={checkInVenueData}
-            membershipId={membershipIdFromQuery}
-            onClose={() => setShowCheckInModal(false)}
-        />
-      )}
-       {/* Show message if check-in modal opened without ID (e.g., direct navigation) */}
+
+        {/* Single Column Layout - Removed grid */}
+        
+          {/* Details Section - Removed lg:col-span-2 */}
+          <div className="mb-8"> {/* Added margin-bottom */} 
+             {/* Title & Location Section */}
+             <div className="mb-6 pb-6 border-b">
+                <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-1">{venue.name}</h1>
+                <div className="flex items-center text-muted-foreground">
+                    <MapPin className="h-4 w-4 mr-1.5" />
+                    <span>{venue.address || 'Location not specified'}</span>
+                </div>
+             </div>
+
+             {/* Host Info (Placeholder) - Adapt if you have host data */}
+             { (venue.host_name || venue.host_image_url) && (
+                 <div className="flex items-center justify-between pb-6 border-b">
+                    <div>
+                        <h2 className="text-xl font-semibold">Hosted by {venue.host_name || 'the venue'}</h2>
+                         {/* Add more host details if available */}
+                    </div>
+                    {venue.host_image_url && (
+                        <div className="h-12 w-12 rounded-full overflow-hidden bg-muted">
+                        <Image
+                            src={venue.host_image_url}
+                            alt={venue.host_name || 'Host'}
+                            width={48}
+                            height={48}
+                            style={{ objectFit: "cover" }}
+                            className="h-full w-full object-cover"
+                            />
+                        </div>
+                    )}
+                 </div>
+             )}
+
+            {/* Description */}
+            <div className="py-6 border-b">
+              <h2 className="text-xl font-semibold mb-3">About this venue</h2>
+              <p className="text-base leading-relaxed whitespace-pre-line">
+                  {venue.description || 'No description available.'}
+              </p>
+              {/* Add 'Read more' functionality if descriptions are long */}
+            </div>
+
+            {/* Amenities (Placeholder - Adapt based on your actual venue data) */}
+            <div className="py-6">
+              <h2 className="text-xl font-semibold mb-4">What this place offers</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
+                {/* Example amenities - Replace/populate based on venue data */}
+                <Amenity icon={<Wifi className="h-5 w-5" />} label="Wifi Available" />
+                <Amenity icon={<Car className="h-5 w-5" />} label="Parking Onsite" />
+                <Amenity icon={<UtensilsCrossed className="h-5 w-5" />} label="Food Served" />
+                {/* Add more based on your data structure */}
+              </div>
+              {/* <Button variant="outline" className="mt-6">Show all amenities</Button> */}
+            </div>
+          </div>
+
+          {/* Action Card Section - Moved here, removed lg:col-span-1 */}
+          <div> {/* Removed sticky container */} 
+            <Card className="shadow-lg border">
+              <CardHeader className="pb-4">
+                 {/* Simplified Header - maybe just title or key info */}
+                 <h3 className="text-lg font-semibold">Venue Actions</h3>
+              </CardHeader>
+              <CardContent>
+                 {/* Add relevant info like hours, phone, website if available */} 
+                  {venue.hours && (
+                     <div className="flex items-center text-sm mb-2">
+                         <Clock className="h-4 w-4 mr-2 text-muted-foreground" /> 
+                         <span>{venue.hours}</span>
+                     </div>
+                  )}
+                   {venue.phone && (
+                     <div className="flex items-center text-sm mb-2">
+                         <Phone className="h-4 w-4 mr-2 text-muted-foreground" /> 
+                         <span>{venue.phone}</span>
+                     </div>
+                  )}
+                   {venue.website && (
+                     <div className="flex items-center text-sm mb-4">
+                         <Globe className="h-4 w-4 mr-2 text-muted-foreground" /> 
+                         <a href={!venue.website.startsWith('http') ? `https://${venue.website}` : venue.website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate">
+                             {venue.website}
+                          </a>
+                     </div>
+                  )}
+                  
+                 <Separator className="my-4" /> {/* Added Separator */} 
+
+                 <Button
+                   onClick={() => setShowCheckInModal(true)}
+                   className="w-full"
+                   disabled={!membershipIdFromQuery} // Disable if no membershipId in URL
+                 >
+                   Check In Now
+                   <Check className="ml-2 h-4 w-4" /> 
+                 </Button>
+                 {!membershipIdFromQuery && (
+                     <p className="text-xs text-center text-muted-foreground mt-2">
+                         Access via Memberships to check in
+                     </p>
+                 )}
+               </CardContent>
+            </Card>
+          </div>
+        {/* End Single Column Layout */}
+      </main>
+
+      {/* Render CheckInModal */}
+       {showCheckInModal && membershipIdFromQuery && (
+         <CheckInModal
+           venue={checkInVenueData}
+           membershipId={membershipIdFromQuery}
+           onClose={() => setShowCheckInModal(false)}
+         />
+       )}
+       {/* Optional: Handle case where Check In is clicked without membershipId */}
        {showCheckInModal && !membershipIdFromQuery && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
               <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowCheckInModal(false)} />
-              <div className="bg-white p-6 rounded-lg shadow-xl z-10 max-w-sm w-full">
+              <div className="bg-background p-6 rounded-lg shadow-xl z-10 max-w-sm w-full border">
                   <h3 className="text-lg font-semibold mb-2">Cannot Check In</h3>
                   <p className="text-sm text-muted-foreground mb-4">Membership details not found. Please access this venue through your dashboard membership list.</p>
                   <Button onClick={() => setShowCheckInModal(false)} className="w-full">Close</Button>
