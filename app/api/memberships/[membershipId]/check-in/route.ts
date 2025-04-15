@@ -1,10 +1,22 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { getGlownetCustomerDetails, type GlownetCustomer } from '@/lib/glownet';
 
+// Define the expected structure for the Supabase query result
+type MembershipWithVenue = {
+  id: string; 
+  user_id: string; 
+  venue_id: string; 
+  glownet_customer_id: number | null;
+  status: string; 
+  venues: { 
+    glownet_event_id: number | null;
+  } | null;
+};
+
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { membershipId: string } }
 ) {
   const membershipId = params.membershipId;
@@ -27,15 +39,15 @@ export async function GET(
       .from('memberships')
       .select(`
         id,
-        user_id, // Changed from profile_id for consistency if schema updated
+        user_id,
         venue_id,
         glownet_customer_id,
         status,
         venues ( glownet_event_id )
       `)
       .eq('id', membershipId)
-      .eq('user_id', userId) // Ensure the membership belongs to the authenticated user
-      .single();
+      .eq('user_id', userId)
+      .single<MembershipWithVenue>();
 
     if (membershipError) {
       console.error(`Error fetching membership ${membershipId} for user ${userId}:`, membershipError);
@@ -73,8 +85,7 @@ export async function GET(
       membershipId: membership.id,
       userId: membership.user_id,
       status: membership.status,
-      glownetCheckedIn: glownetData.checked_in, // Example field
-      glownetBalance: glownetData.balance, // Example field
+      glownetBalances: glownetData.balances,
       // Include other relevant fields from glownetData
     });
 
