@@ -138,11 +138,14 @@ export function deleteGlownet<T = unknown>(
 const GlownetEventSchema = z.object({
   id: z.number(),
   name: z.string(),
-  slug: z.string().optional().nullable(),
   start_date: z.string(),
   end_date: z.string(),
   timezone: z.string(),
-  // Add other relevant fields based on glownet_api_docs.json
+  slug: z.string().optional().nullable(),
+  state: z.string(),
+  currency: z.string(),
+  maximum_gtag_standard_balance: z.number(),
+  maximum_gtag_virtual_balance: z.number()
 });
 
 export type GlownetEvent = z.infer<typeof GlownetEventSchema>;

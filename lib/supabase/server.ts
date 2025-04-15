@@ -17,11 +17,11 @@ export function createClient(cookieStore: ReadonlyRequestCookies) {
   return createServerClient(supabaseUrl, supabaseServiceRoleKey, {
     cookies: {
       get(name: string) {
-        return cookieStore.get(name)?.value;
+        const cookie = cookieStore.get(name);
+        return cookie?.value;
       },
       set(name: string, value: string, options: CookieOptions) {
         try {
-          // Use the cookieStore instance directly
           cookieStore.set({ name, value, ...options });
         } catch (error) {
           // The `set` method was called from a Server Component.
@@ -31,7 +31,6 @@ export function createClient(cookieStore: ReadonlyRequestCookies) {
       },
       remove(name: string, options: CookieOptions) {
         try {
-          // Use the cookieStore instance directly
           cookieStore.set({ name, value: '', ...options });
         } catch (error) {
           // The `delete` method was called from a Server Component.

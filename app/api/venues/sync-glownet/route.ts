@@ -3,90 +3,160 @@ import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { getAllGlownetEvents, type GlownetEvent } from '@/lib/glownet';
 
+// Rate limiting setup
+const RATE_LIMIT = 10; // requests per minute
+const rateLimitStore = new Map<string, number[]>();
+
 // Environment variable for security
-const SYNC_SECRET = process.env.GLOWNET_SYNC_SECRET;
+const API_KEY = process.env.GLOWNET_API_KEY;
 
-export async function POST(request: Request) {
-  // 1. Security Check
-  const authHeader = request.headers.get('Authorization');
-  const providedSecret = authHeader?.split(' ')[1]; // Assuming "Bearer YOUR_SECRET"
+// Sync types
+type SyncType = 'full' | 'incremental';
+type SyncStatus = 'pending' | 'success' | 'failed';
 
-  if (!SYNC_SECRET) {
-    console.error('GLOWNET_SYNC_SECRET is not set in environment variables.');
-    return NextResponse.json({ error: 'Internal server configuration error.' }, { status: 500 });
-  }
+// Track sync status in Supabase
+async function trackSyncStatus(supabase: any, venueId: string, status: SyncStatus, error?: string) {
+  await supabase
+    .from('venues')
+    .update({ 
+      sync_status: status,
+      last_sync_attempt: new Date().toISOString(),
+      sync_error: error
+    })
+    .eq('id', venueId);
+}
 
-  if (providedSecret !== SYNC_SECRET) {
-    console.warn('Unauthorized attempt to access sync-glownet endpoint.');
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+// Main sync logic
+async function syncVenues(type: SyncType = 'full') {
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+  
   try {
-    // 2. Fetch Events from Glownet
-    console.log('Starting Glownet event sync...');
+    console.log(`Starting ${type} Glownet venue sync...`);
     const glownetEvents: GlownetEvent[] = await getAllGlownetEvents();
-    console.log(`Fetched ${glownetEvents.length} events from Glownet.`);
-
-    if (!glownetEvents || glownetEvents.length === 0) {
+    
+    if (!glownetEvents?.length) {
       console.log('No Glownet events found to sync.');
-      return NextResponse.json({ message: 'No Glownet events found to sync.' });
+      return { message: 'No events to sync', status: 200 };
     }
 
-    // 3. Prepare Data for Supabase
+    // Prepare venue data with enhanced fields
     const venuesToUpsert = glownetEvents.map((event) => ({
       glownet_event_id: event.id,
       name: event.name,
-      address: event.timezone, // Using timezone as a placeholder for address - adjust as needed
-      image_url: null, // Placeholder - Add logic to fetch/generate image URL if available
-      // Add other fields from your 'venues' table schema here, mapping from 'event' properties
-      // e.g., start_date: event.start_date, end_date: event.end_date, etc.
+      status: event.state,
+      start_date: event.start_date,
+      end_date: event.end_date,
+      timezone: event.timezone,
+      currency: event.currency,
+      address: null, // To be filled manually/via another service
+      image_url: null, // To be filled manually/via another service
+      max_balance: event.maximum_gtag_standard_balance,
+      max_virtual_balance: event.maximum_gtag_virtual_balance,
+      last_synced: new Date().toISOString(),
+      sync_status: 'success' as SyncStatus
     }));
 
-    // 4. Upsert into Supabase
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
-
-    console.log(`Attempting to upsert ${venuesToUpsert.length} venues...`);
+    // Perform upsert
     const { data, error } = await supabase
       .from('venues')
       .upsert(venuesToUpsert, {
-        onConflict: 'glownet_event_id', // Specify the conflict target
-        ignoreDuplicates: false, // Ensure updates happen
+        onConflict: 'glownet_event_id',
+        ignoreDuplicates: false,
       })
-      .select('id, name, glownet_event_id'); // Select some data to confirm success
+      .select('id, name, glownet_event_id');
 
-    if (error) {
-      console.error('Error upserting venues to Supabase:', error);
-      throw new Error(`Supabase upsert failed: ${error.message}`);
+    if (error) throw error;
+
+    // Track sync status for each venue
+    for (const venue of data || []) {
+      await trackSyncStatus(supabase, venue.id, 'success');
     }
 
-    console.log('Successfully upserted/updated venues:', data);
-
-    // 5. Return Success Response
-    return NextResponse.json({
-        message: `Successfully synced ${data?.length ?? 0} venues from Glownet.`,
-        syncedVenues: data
-    });
+    return {
+      message: `Successfully synced ${data?.length ?? 0} venues`,
+      data,
+      status: 200
+    };
 
   } catch (error: any) {
     console.error('----------------------------------------');
-    console.error('VENUE SYNC API ROUTE CRITICAL ERROR:');
+    console.error('VENUE SYNC ERROR:');
     console.error('Timestamp:', new Date().toISOString());
-    console.error('Error Name:', error.name);
-    console.error('Error Message:', error.message);
-    console.error('Error Stack:', error.stack);
+    console.error('Error:', error);
     console.error('----------------------------------------');
 
-    const message = error.message.includes('Glownet API') || error.message.includes('Supabase')
-        ? error.message
-        : 'An internal server error occurred during venue synchronization.';
-    const status = error.message.includes('Unauthorized') ? 401 : 500;
+    // Track failed status if possible
+    if (error.venue_id) {
+      await trackSyncStatus(supabase, error.venue_id, 'failed', error.message);
+    }
 
-    return NextResponse.json({ error: message }, { status: status });
+    return {
+      error: error.message || 'Sync failed',
+      status: error.status || 500
+    };
   }
 }
 
-// Optional: Add a GET handler for simple testing or status check if needed
-// export async function GET() {
-//   return NextResponse.json({ status: 'Venue sync endpoint is active. Use POST to trigger sync.' });
-// } 
+// Activation Points:
+
+// 1. Manual Sync via API endpoint
+export async function POST(request: Request) {
+  // Security check using GLOWNET_API_KEY
+  const API_KEY = process.env.GLOWNET_API_KEY;
+
+  if (!API_KEY) {
+    console.error('GLOWNET_API_KEY is not set in environment variables.');
+    return NextResponse.json({ error: 'Internal server configuration error.' }, { status: 500 });
+  }
+
+  // Rate limiting
+  const clientIP = request.headers.get('x-forwarded-for') || 'unknown';
+  const now = Date.now();
+  const recentRequests = rateLimitStore.get(clientIP) || [];
+  const validRequests = recentRequests.filter(time => now - time < 60000);
+  
+  if (validRequests.length >= RATE_LIMIT) {
+    return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
+  }
+  
+  rateLimitStore.set(clientIP, [...validRequests, now]);
+
+  // Get sync type from request
+  const { type = 'full' } = await request.json();
+  const result = await syncVenues(type as SyncType);
+  
+  return NextResponse.json(
+    result.error ? { error: result.error } : { message: result.message, data: result.data },
+    { status: result.status }
+  );
+}
+
+// 2. Scheduled Sync via Vercel Cron
+export const config = {
+  runtime: 'edge',
+  regions: ['iad1'],  // Specify regions if needed
+};
+
+// This function is triggered by Vercel Cron
+// Configure in vercel.json:
+// {
+//   "crons": [{
+//     "path": "/api/venues/sync-glownet",
+//     "schedule": "0 */6 * * *"
+//   }]
+// }
+export async function GET(request: Request) {
+  // Only allow requests from Vercel Cron
+  const isCron = request.headers.get('x-vercel-cron') === 'true';
+  
+  if (!isCron) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const result = await syncVenues('incremental');
+  return NextResponse.json(
+    result.error ? { error: result.error } : { message: result.message },
+    { status: result.status }
+  );
+} 

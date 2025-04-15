@@ -11,7 +11,13 @@ from datetime import datetime, timedelta
 # --- Configuration ---
 # Construct the path to .env.local relative to this script file
 script_dir = os.path.dirname(os.path.abspath(__file__))
-dotenv_path = os.path.join(script_dir, '.env.local')
+parent_dir = os.path.dirname(script_dir)  # Go up one level
+dotenv_path = os.path.join(parent_dir, '.env.local')
+
+print(f"Looking for .env.local at: {dotenv_path}")
+if not os.path.exists(dotenv_path):
+    print(f"Warning: .env.local not found at {dotenv_path}")
+    
 load_dotenv(dotenv_path=dotenv_path)
 
 GLOWNET_API_BASE_URL = os.getenv("GLOWNET_API_BASE_URL", "https://opera.glownet.com")

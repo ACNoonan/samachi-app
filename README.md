@@ -1,4 +1,4 @@
-# Samachi: Connecting Communities Through Seamless Venue Access
+# Samachi
 
 [![Samachi Logo](placeholder.png)](https://samachi.com) 
 

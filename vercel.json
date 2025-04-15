@@ -1,0 +1,6 @@
+{
+    "crons": [{
+      "path": "/api/venues/sync-glownet",
+      "schedule": "0 */6 * * *"
+    }]
+  }
