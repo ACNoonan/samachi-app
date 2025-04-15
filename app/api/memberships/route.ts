@@ -40,15 +40,13 @@ export async function GET(request: Request) {
       .select(`
         id,
         status,
-        glownet_customer_id,
         created_at,
         user_id, // Keep user_id selected for filtering
         venues (
           id,
           name,
           address,
-          image_url,
-          glownet_event_id
+          image_url
         )
       `)
       .eq('user_id', userId) // Filter by the authenticated user ID

@@ -74,15 +74,18 @@ export const CardLanding = () => {
     router.push(targetUrl);
   };
 
-  // Combined Loading State (only check cardStatus loading if not logged in)
-  if (!authLoading && cardStatus === 'loading') {
-    return <div>Loading...</div>;
+  // Combined Loading State: Show loading if either auth or card status is loading
+  if (authLoading || (!user && cardStatus === 'loading')) {
+    // Display a simple loading indicator while checking auth or card status
+    // Ensure this div takes up space and is visible (e.g., using min-h-screen or similar)
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        Loading...
+      </div>
+    );
   }
 
-  // Should be redirected if user is logged in
-  if (authLoading || !user) {
-    return null;
-  }
+  // At this point, auth is loaded (authLoading is false) and user is null (not logged in)
 
   // Handle card check results before showing buttons
   if (cardStatus === 'not_found') {

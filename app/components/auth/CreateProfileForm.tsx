@@ -6,8 +6,8 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { toast } from 'sonner';
-import { useSimpleAuth } from '@/app/context/AuthContext';
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import { useAuth } from '@/app/context/AuthContext';
+import dynamic from 'next/dynamic';
 import { ArrowLeft } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -21,34 +21,52 @@ import {
   FormMessage,
 } from '@/app/components/ui/form';
 
+// Dynamically import WalletMultiButton with SSR disabled
+const WalletMultiButtonDynamic = dynamic(
+  async () => (await import('@solana/wallet-adapter-react-ui')).WalletMultiButton,
+  { ssr: false }
+);
+
 // 1. Define Zod Schema
 const profileFormSchema = z.object({
   username: z.string().min(3, { message: 'Username must be at least 3 characters.' })
                   .regex(/^[a-zA-Z0-9_]+$/, { message: 'Username can only contain letters, numbers, and underscores.' }),
+  email: z.string().email({ message: 'Please enter a valid email address.' }),
   password: z.string().min(8, { message: 'Password must be at least 8 characters.' }),
-  twitterHandle: z.string().optional().or(z.literal('')), // Optional, allow empty string
-  telegramHandle: z.string().optional().or(z.literal('')), // Optional, allow empty string
+  // twitterHandle: z.string().optional().or(z.literal('')), // Removed
+  // telegramHandle: z.string().optional().or(z.literal('')), // Removed
   // Note: cardId and walletAddress are not direct form fields managed by RHF here
 });
+
+// Define the form data type explicitly as a simple object type
+type ProfileFormData = {
+  username: string;
+  email: string;
+  password: string;
+};
 
 export const CreateProfileForm: React.FC = () => {
   console.log("[CreateProfileForm] Component rendering start.");
 
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login } = useSimpleAuth();
+  const { supabase, session, user, isLoading, logout } = useAuth();
   const { publicKey, connected } = useWallet();
 
   const cardIdFromQuery = searchParams.get('cardId');
 
-  // 2. Initialize react-hook-form
-  const form = useForm<z.infer<typeof profileFormSchema>>({
-    resolver: zodResolver(profileFormSchema),
+  // Use the simple zodResolver
+  const resolver = zodResolver(profileFormSchema);
+
+  // 2. Initialize react-hook-form with the explicit, simple ProfileFormData type
+  const form = useForm<ProfileFormData>({ 
+    resolver, 
     defaultValues: {
       username: '',
+      email: '',
       password: '',
-      twitterHandle: '',
-      telegramHandle: '',
+      // twitterHandle: '', // Removed
+      // telegramHandle: '', // Removed
     },
   });
 
@@ -63,7 +81,7 @@ export const CreateProfileForm: React.FC = () => {
   }, [cardIdFromQuery, router]);
 
   // 3. Define onSubmit handler using form data
-  async function onSubmit(values: z.infer<typeof profileFormSchema>) {
+  async function onSubmit(values: ProfileFormData) {
     if (!cardIdFromQuery) {
       toast.error('Cannot create profile without a card ID.');
       return;
@@ -79,9 +97,10 @@ export const CreateProfileForm: React.FC = () => {
         },
         body: JSON.stringify({
           username: values.username,
+          email: values.email,
           password: values.password,
-          twitterHandle: values.twitterHandle || null,
-          telegramHandle: values.telegramHandle || null,
+          // twitterHandle: values.twitterHandle || null, // Removed
+          // telegramHandle: values.telegramHandle || null, // Removed
           walletAddress: publicKey?.toBase58() || null, // Get current wallet state on submit
           cardId: cardIdFromQuery,
         }),
@@ -94,7 +113,6 @@ export const CreateProfileForm: React.FC = () => {
       }
 
       toast.success(data.message || 'Profile created and card claimed successfully!');
-      login(); // Set logged in state
       router.push('/dashboard'); // Redirect to dashboard
 
     } catch (error: any) {
@@ -145,6 +163,27 @@ export const CreateProfileForm: React.FC = () => {
             )}
           />
 
+          {/* Email */}
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Email <span className="text-red-500">*</span></FormLabel>
+                <FormControl>
+                  <Input
+                    type="email"
+                    placeholder="you@example.com"
+                    className="bg-white/50 backdrop-blur-sm border-gray-200"
+                    disabled={form.formState.isSubmitting}
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
           {/* Password */}
           <FormField
             control={form.control}
@@ -167,53 +206,13 @@ export const CreateProfileForm: React.FC = () => {
             )}
           />
 
-          {/* Twitter (Optional) */}
-           <FormField
-            control={form.control}
-            name="twitterHandle"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>X / Twitter Handle (Optional)</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="@yourhandle"
-                    className="bg-white/50 backdrop-blur-sm border-gray-200"
-                    disabled={form.formState.isSubmitting}
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Telegram (Optional) */}
-          <FormField
-            control={form.control}
-            name="telegramHandle"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Telegram Handle (Optional)</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="@yourhandle"
-                    className="bg-white/50 backdrop-blur-sm border-gray-200"
-                    disabled={form.formState.isSubmitting}
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
           {/* Wallet Connect (Optional) - Stays outside RHF as it's not a direct form input */}
           <div className="space-y-2 border-t pt-6 mt-4">
             <FormLabel>Connect Wallet (Optional)</FormLabel>
              <p className="text-sm text-muted-foreground pb-2">
               Connect your Solana wallet to link it to your profile.
             </p>
-            <WalletMultiButton style={{ width: '100%', justifyContent: 'center' }} disabled={form.formState.isSubmitting} />
+            <WalletMultiButtonDynamic style={{ width: '100%', justifyContent: 'center' }} disabled={form.formState.isSubmitting} />
             {connected && publicKey && (
               <p className="text-xs text-green-600 pt-1">Wallet Connected: {publicKey.toBase58().substring(0, 4)}...{publicKey.toBase58().substring(publicKey.toBase58().length - 4)}</p>
             )}

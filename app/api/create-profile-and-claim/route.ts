@@ -26,7 +26,7 @@ const SESSION_COOKIE_NAME = 'auth_session';
 
 export async function POST(request: Request) {
   // Await the cookies() call
-  const cookieStore = await cookies(); 
+  const cookieStore = await cookies();
   // Ensure you initialize the Supabase client correctly for Route Handlers
   const supabase = createServerSupabaseClient(cookieStore);
 
@@ -49,7 +49,8 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Password must be at least 6 characters long.' }, { status: 400 });
     }
 
-    // 2. Lookup Glownet Event ID using Gtag UID (cardId)
+    // 2. Lookup Glownet Event ID using Gtag UID (cardId) - PAUSED
+    /*
     let glownetLookupData: GlownetLookupResponse;
     try {
         glownetLookupData = await getGlownetEventDetailsByGtagUid(cardId);
@@ -59,16 +60,37 @@ export async function POST(request: Request) {
         if (lookupError.message?.includes('404')) {
              return NextResponse.json({ error: `Card identifier (gtag) '${cardId}' not found in Glownet.` }, { status: 404 });
         }
-        return NextResponse.json({ error: 'Failed to verify card identifier with Glownet.' }, { status: 500 });
+         // TEMPORARILY treat Glownet errors as non-blocking for development
+        console.warn(`Glownet lookup failed, proceeding with registration anyway (TEMPORARY): ${lookupError.message}`);
+        // return NextResponse.json({ error: 'Failed to verify card identifier with Glownet.' }, { status: 503 }); // Use 503 Service Unavailable
     }
-    const glownetEventId = glownetLookupData.event_id;
+    const glownetEventId = glownetLookupData?.event_id; // May be undefined if lookup failed
     console.log(`Glownet lookup successful: Found event_id ${glownetEventId} for card ${cardId}`);
+    */
 
-    // 3. Find Corresponding Samachi Venue in Supabase
+    // 3. Find Corresponding Samachi Venue in Supabase - PAUSED / MODIFIED
+    // We need a venue ID to create the membership link.
+    // TEMPORARY: Fetch the first available venue as a placeholder.
+    // IMPORTANT: Assumes at least one venue exists in the 'venues' table.
+    let samachiVenueId: string | null = null;
+    const { data: defaultVenueData, error: defaultVenueError } = await supabase
+        .from('venues')
+        .select('id')
+        .limit(1) // Get the first one
+        .maybeSingle();
+
+    if (defaultVenueError || !defaultVenueData) {
+        console.error("CRITICAL: Could not fetch a default venue ID from Supabase.", defaultVenueError);
+        return NextResponse.json({ error: 'System configuration error: No default venue found.' }, { status: 500 });
+    }
+    samachiVenueId = defaultVenueData.id;
+    console.log(`TEMPORARY: Using default venue ID: ${samachiVenueId}`);
+
+    /* // Original venue lookup based on glownetEventId
     const { data: venueData, error: venueError } = await supabase
         .from('venues')
         .select('id, name, glownet_event_id') // Select venue UUID and name
-        .eq('glownet_event_id', glownetEventId)
+        .eq('glownet_event_id', glownetEventId) // This line depends on the Glownet lookup
         .maybeSingle(); // Could be single or null
 
     if (venueError) {
@@ -77,10 +99,18 @@ export async function POST(request: Request) {
     }
     if (!venueData) {
         console.error(`No Samachi venue found in Supabase for glownet_event_id ${glownetEventId}. Venue might need syncing.`);
-        return NextResponse.json({ error: 'Associated venue not found in our system. Please sync venues.' }, { status: 404 });
+         // TEMPORARILY allow proceeding even if venue not found based on glownet ID
+        console.warn(`No Samachi venue found for glownet_event_id ${glownetEventId}, but proceeding (TEMPORARY).`);
+        // return NextResponse.json({ error: 'Associated venue not found in our system. Please sync venues.' }, { status: 404 });
     }
-    const samachiVenueId = venueData.id; // This is the Supabase UUID for the venue
-    console.log(`Found matching Samachi venue: ID ${samachiVenueId}, Name: ${venueData.name}`);
+     samachiVenueId = venueData?.id; // May be null if not found and we are proceeding temporarily
+    // console.log(`Found matching Samachi venue: ID ${samachiVenueId}, Name: ${venueData?.name}`);
+     if (!samachiVenueId) {
+         console.error("CRITICAL: Proceeding without a valid samachiVenueId. Membership link will fail.");
+         // This case should ideally not happen if we enforce finding a venue or using a default
+         return NextResponse.json({ error: 'Could not determine target venue.' }, { status: 500 });
+     }
+    */
 
 
     // 4. Find the Membership Card in Supabase and check its status
@@ -160,10 +190,13 @@ export async function POST(request: Request) {
 
     // NOTE: The trigger 'handle_new_user' has automatically created the profile in public.profiles.
 
-    // 7. Create Glownet Customer & Assign Tag
+    // 7. Create Glownet Customer & Assign Tag - PAUSED
+    /*
     let glownetCustomerId: number | null = null;
     try {
-      console.log(`Creating Glownet customer for user ${userId} at event ${glownetEventId}...`);
+      console.log(`Creating Glownet customer for user ${userId} at event ${glownetEventId}...`); // glownetEventId might be undefined here now
+      if (!glownetEventId) { throw new Error("Glownet Event ID is missing, cannot create Glownet customer."); } // Add check
+
       const glownetCustomer = await createGlownetCustomer(glownetEventId, {
         customer: { first_name: username, email: email }
       });
@@ -179,25 +212,44 @@ export async function POST(request: Request) {
       console.log(`Successfully assigned gtag ${cardId} to Glownet customer ${glownetCustomerId}.`);
 
     } catch (glownetError: any) {
-      console.error(`CRITICAL ERROR creating Glownet customer/assigning tag for user ${userId}. Manual cleanup needed.`, glownetError);
-      // Attempt to delete the Supabase user since the Glownet part failed
-      try {
-        const { error: deleteError } = await supabase.auth.admin.deleteUser(userId);
-        if (deleteError) console.error(`Failed to delete Supabase user ${userId} after Glownet error:`, deleteError);
-        else console.log(`Successfully deleted Supabase user ${userId} due to Glownet error.`);
-      } catch (adminDeleteError) {
-        console.error(`Exception during Supabase user cleanup for ${userId}:`, adminDeleteError);
-      }
-      return NextResponse.json({ error: 'Failed to setup Glownet account. User creation rolled back.' }, { status: 500 });
+      console.error(`NON-CRITICAL ERROR (TEMPORARY): Glownet sync failed for user ${userId}. Will need manual/background sync later.`, glownetError);
+      // TEMPORARILY DO NOT ROLL BACK USER CREATION
+      // Log this failure prominently for later debugging/syncing.
+      // Consider adding a flag to the user profile or membership record indicating Glownet sync is needed.
+
+      // // Original Rollback logic:
+      // console.error(`CRITICAL ERROR creating Glownet customer/assigning tag for user ${userId}. Manual cleanup needed.`, glownetError);
+      // // Attempt to delete the Supabase user since the Glownet part failed
+      // try {
+      //   const { error: deleteError } = await supabase.auth.admin.deleteUser(userId);
+      //   if (deleteError) console.error(`Failed to delete Supabase user ${userId} after Glownet error:`, deleteError);
+      //   else console.log(`Successfully deleted Supabase user ${userId} due to Glownet error.`);
+      // } catch (adminDeleteError) {
+      //   console.error(`Exception during Supabase user cleanup for ${userId}:`, adminDeleteError);
+      // }
+      // return NextResponse.json({ error: 'Failed to setup Glownet account. User creation rolled back.' }, { status: 500 });
     }
+    */
 
     // 8. Create Membership Record in Supabase
     let membershipId: string | null = null;
     try {
       console.log(`Creating membership record for user ${userId}, venue ${samachiVenueId}, card ${supabaseCardId}`);
+       if (!samachiVenueId) {
+          console.error("CRITICAL ERROR: Cannot create membership record without a valid venue ID.");
+          throw new Error("Missing venue ID for membership creation."); // Throw to trigger cleanup below
+       }
+
       const { data: newMembership, error: membershipError } = await supabase
           .from('memberships')
-          .insert({ user_id: userId, venue_id: samachiVenueId, card_id: supabaseCardId, glownet_customer_id: glownetCustomerId, status: 'active' })
+          .insert({
+              user_id: userId,
+              venue_id: samachiVenueId, // Use the (potentially default) venue ID
+              card_id: supabaseCardId,
+              // glownet_customer_id: glownetCustomerId, // Omit Glownet ID for now
+              status: 'active'
+              // Omit glownet_event_id, card_identifier, glownet_sync_status for now
+           })
           .select('id')
           .single();
 

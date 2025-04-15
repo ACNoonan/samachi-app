@@ -65,6 +65,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       // Consider setting isLoading false only after BOTH session AND profile check are done
       // This might need adjustment based on how initial loading feels
+      setIsLoading(false); // Ensure loading stops after profile fetch attempt
     }
   };
 
@@ -113,8 +114,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           // Optionally redirect here or let components handle it
           // router.push('/login'); // Example redirect on logout
         }
-         // Ensure loading is false after state change and profile fetch
-         setIsLoading(false);
+         // Ensure loading is false after state change and profile fetch - REMOVED as fetchProfile handles it now
+         // setIsLoading(false);
       }
     );
 

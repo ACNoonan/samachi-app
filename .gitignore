@@ -42,3 +42,6 @@ next-env.d.ts
 
 # AI instructions
 repo.md
+
+#supabase
+supabase/
