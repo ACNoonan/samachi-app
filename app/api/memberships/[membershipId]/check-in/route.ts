@@ -15,16 +15,11 @@ type MembershipWithVenue = {
   } | null;
 };
 
-// Define the type for the route parameters object
-type CheckInParams = {
-  params: { membershipId: string };
-};
-
 export async function GET(
   request: NextRequest,
-  { params }: CheckInParams
+  context: { params: { membershipId: string } }
 ) {
-  const membershipId = params.membershipId;
+  const membershipId = context.params.membershipId;
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
