@@ -145,15 +145,40 @@ export function WalletDashboard() {
     setInitialLoadComplete(true);
     console.log('WalletDashboard: Data fetch complete.');
 
-  }, [user, connected, publicKey, connection, authLoading, refreshing]); // Dependencies for useCallback
+  }, [user, connected, publicKey, connection, authLoading]); // Remove refreshing from dependencies
 
-  // Initial data fetch - run when auth loading completes or wallet connection changes
+  // Track key connection changes that should trigger a refresh
+  const [prevConnected, setPrevConnected] = useState<boolean | null>(null);
+  const [prevPublicKey, setPrevPublicKey] = useState<string | null>(null);
+  const [prevUser, setPrevUser] = useState<any>(null);
+
+  // Initial data fetch - run when auth loading completes or wallet connection changes significantly
   useEffect(() => {
-    if (!authLoading) {  // Only run once auth loading is complete
-        console.log('WalletDashboard: Auth loading complete, triggering data fetch');
-        fetchData();
+    // Skip if still loading auth
+    if (authLoading) return;
+    
+    const publicKeyStr = publicKey?.toString() || null;
+    const userChanged = prevUser !== user;
+    const connectionChanged = prevConnected !== connected;
+    const publicKeyChanged = prevPublicKey !== publicKeyStr;
+    
+    // Only fetch if:
+    // 1. First load (prevConnected is null)
+    // 2. Connection state changed
+    // 3. Public key changed
+    // 4. User changed
+    if (prevConnected === null || connectionChanged || publicKeyChanged || userChanged) {
+      console.log('WalletDashboard: Key dependencies changed, fetching data...');
+      
+      // Update previous values
+      setPrevConnected(connected);
+      setPrevPublicKey(publicKeyStr);
+      setPrevUser(user);
+      
+      // Execute the fetch
+      fetchData();
     }
-  }, [authLoading, fetchData, connected, publicKey]); // Include wallet connection states as dependencies
+  }, [authLoading, user, connected, publicKey, fetchData]);
 
   // --- Derived/Calculated Values --- Map Glownet data
   const connectedWalletValue = solBalance !== null ? solBalance * 150 : null; // Placeholder value
@@ -171,6 +196,7 @@ export function WalletDashboard() {
 
   // --- UI Functions ---
   const handleRefresh = () => {
+      if (refreshing) return; // Prevent multiple simultaneous refreshes
       setRefreshing(true);
       fetchData(); // Call the memoized fetch function
   };
