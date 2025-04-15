@@ -26,6 +26,15 @@ interface Membership {
   } | null; // Venue can be null if join failed, filter applied in API
 }
 
+// Define structure for venue data
+interface Venue {
+  id: string;
+  name: string;
+  address: string | null;
+  image_url: string | null;
+  glownet_event_id: number | null;
+}
+
 export function Dashboard() {
   const router = useRouter();
   const [showStakingModal, setShowStakingModal] = useState(false);
@@ -35,12 +44,10 @@ export function Dashboard() {
   const [isLoadingMemberships, setIsLoadingMemberships] = useState(true);
   const [membershipsError, setMembershipsError] = useState<string | null>(null);
 
-  const featuredVenues = [
-    { id: '1', name: 'El Noviciado', location: 'Social Club, Madrid', image: '/novi1.png' },
-    { id: '2', name: 'Bloom Festival', location: 'Festival, Malta', image: '/bloom-festival.png' },
-    { id: '3', name: 'Barrage Club', location: 'Nightclub, Greece', image: '/barrage-club.png' },
-    { id: '4', name: 'Berhta Club', location: 'Social Club, Washington D.C.', image: '/bertha-club.png' },
-  ];
+  // State for featured venues
+  const [featuredVenues, setFeaturedVenues] = useState<Venue[]>([]);
+  const [isLoadingVenues, setIsLoadingVenues] = useState(true);
+  const [venuesError, setVenuesError] = useState<string | null>(null);
 
   const stakedAmount = 1.25;
   const stakedSymbol = 'SOL';
@@ -72,6 +79,33 @@ export function Dashboard() {
     };
 
     fetchMemberships();
+  }, []);
+
+  // Fetch featured venues from Supabase
+  useEffect(() => {
+    const fetchFeaturedVenues = async () => {
+      setIsLoadingVenues(true);
+      setVenuesError(null);
+      try {
+        console.log("Dashboard: Fetching featured venues...");
+        const response = await fetch('/api/venues?featured=true&limit=4');
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Failed to fetch venues: ${response.statusText}`);
+        }
+        const data: Venue[] = await response.json();
+        console.log(`Dashboard: Fetched ${data.length} featured venues.`);
+        setFeaturedVenues(data || []); // Ensure it's an array
+      } catch (err: any) {
+        console.error("Dashboard: Error fetching featured venues:", err);
+        setVenuesError(err.message || 'An unexpected error occurred.');
+        setFeaturedVenues([]);
+      } finally {
+        setIsLoadingVenues(false);
+      }
+    };
+
+    fetchFeaturedVenues();
   }, []);
 
   const handleMembershipClick = (venueId: string, membershipId: string) => {
@@ -197,30 +231,61 @@ export function Dashboard() {
           </Link>
         </div>
         
-        <div className="flex overflow-x-auto pb-2 -mx-2 scrollbar-none">
-          {featuredVenues.map((venue) => (
-            <div key={venue.id} className="px-2 min-w-[250px]">
-              <Link href={`/venue/${venue.id}`}>
-                <div 
-                  className="glass-card h-48 overflow-hidden relative block cursor-pointer"
-                >
-                  <img 
-                    src={venue.image} 
-                    alt={venue.name} 
-                    className="h-full w-full object-cover"
-                  />
-                  <div className="absolute bottom-0 left-0 right-0 p-4 bg-black/40 backdrop-blur-sm">
-                    <h3 className="text-base font-semibold mb-1 text-white">{venue.name}</h3>
-                    <p className="text-xs text-white/80 flex items-center">
-                      <MapPin className="h-3 w-3 mr-1" />
-                      {venue.location}
-                    </p>
+        {isLoadingVenues ? (
+          <div className="flex overflow-x-auto pb-2 -mx-2 scrollbar-none">
+            {[1, 2, 3, 4].map((_, index) => (
+              <div key={index} className="px-2 min-w-[250px]">
+                <Skeleton className="h-48 w-full rounded-lg" />
+              </div>
+            ))}
+          </div>
+        ) : venuesError ? (
+          <Alert variant="destructive">
+            <Terminal className="h-4 w-4" />
+            <AlertTitle>Error Loading Featured Venues</AlertTitle>
+            <AlertDescription>{venuesError}</AlertDescription>
+          </Alert>
+        ) : featuredVenues.length === 0 ? (
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertTitle>No Featured Venues</AlertTitle>
+            <AlertDescription>
+              Check back later for featured venues.
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <div className="flex overflow-x-auto pb-2 -mx-2 scrollbar-none">
+            {featuredVenues.map((venue) => (
+              <div key={venue.id} className="px-2 min-w-[250px]">
+                <Link href={`/venue/${venue.id}`}>
+                  <div 
+                    className="glass-card h-48 overflow-hidden relative block cursor-pointer"
+                  >
+                    {venue.image_url ? (
+                      <img 
+                        src={venue.image_url} 
+                        alt={venue.name} 
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center text-gray-500">
+                        <Building className="h-12 w-12 mb-2 text-gray-400"/>
+                        <span>No Image</span>
+                      </div>
+                    )}
+                    <div className="absolute bottom-0 left-0 right-0 p-4 bg-black/40 backdrop-blur-sm">
+                      <h3 className="text-base font-semibold mb-1 text-white">{venue.name}</h3>
+                      <p className="text-xs text-white/80 flex items-center">
+                        <MapPin className="h-3 w-3 mr-1" />
+                        {venue.address || 'Location not specified'}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              </Link>
-            </div>
-          ))}
-        </div>
+                </Link>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {showStakingModal && (

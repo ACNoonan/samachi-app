@@ -20,7 +20,6 @@ interface Asset {
     symbol: string;
     amount: number;
     value: number; // Value in display currency (e.g., EUR)
-    // removed staked: number; - Needs clarification on source
 }
 
 // Define structure for Glownet data fetched from API
@@ -39,6 +38,7 @@ export function WalletDashboard() {
   // UI State
   const [hideBalances, setHideBalances] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
 
@@ -49,43 +49,56 @@ export function WalletDashboard() {
 
   // --- Data Fetching --- (Using useCallback for handleRefresh)
   const fetchData = useCallback(async () => {
-    if (!user) return; // Don't fetch if not logged in
-
-    setIsLoadingData(true);
+    // Skip fetching if user is not authenticated yet
+    if (authLoading) return;
+    
+    // Clear previous errors before new fetch attempt
     setDataError(null);
+    
+    // Only show loading indicator if this is not a refresh operation
+    if (!refreshing) {
+      setIsLoadingData(true);
+    }
+    
     setRefreshing(true); // Indicate refresh start
+    console.log('WalletDashboard: Starting data fetch...');
 
     let fetchedSol: number | null = null;
     let fetchedGlownet: GlownetWalletData | null = null;
     let errorMessages: string[] = [];
 
-    // Fetch Glownet Data
-    try {
-        console.log('Fetching Glownet wallet details...');
-        const response = await fetch('/api/wallet/glownet-details');
-        const result = await response.json();
-        if (!response.ok) {
-            throw new Error(result.error || 'Failed to fetch Glownet data');
+    // Fetch Glownet Data - Only if user is logged in
+    if (user) {
+        try {
+            console.log('WalletDashboard: Fetching Glownet wallet details...');
+            const response = await fetch('/api/wallet/glownet-details');
+            if (!response.ok) {
+                const result = await response.json().catch(() => ({}));
+                throw new Error(result.error || `Failed to fetch Glownet data: ${response.statusText}`);
+            }
+            const result = await response.json();
+            
+            if (result.glownetData) {
+                fetchedGlownet = result.glownetData;
+                console.log('WalletDashboard: Glownet data received:', fetchedGlownet);
+            } else {
+                console.log('WalletDashboard: No active Glownet membership found or empty data returned.');
+            }
+        } catch (error: any) {
+            console.error('WalletDashboard: Error fetching Glownet data:', error);
+            errorMessages.push(error.message || 'Could not load Glownet balances.');
         }
-        if (result.glownetData) {
-            fetchedGlownet = result.glownetData;
-            console.log('Glownet data received:', fetchedGlownet);
-        } else {
-            console.log('No active Glownet membership found or empty data returned.');
-            // Keep fetchedGlownet as null
-        }
-    } catch (error: any) {
-        console.error('Error fetching Glownet data:', error);
-        errorMessages.push(error.message || 'Could not load Glownet balances.');
+    } else {
+        console.log('WalletDashboard: User not logged in, skipping Glownet data fetch.');
     }
 
     // Fetch Solana Data if wallet connected
     if (connected && publicKey && connection) {
         try {
-            console.log('Fetching SOL balance...');
+            console.log('WalletDashboard: Fetching SOL balance...');
             const lamports = await connection.getBalance(publicKey);
             fetchedSol = lamports / LAMPORTS_PER_SOL;
-            console.log('SOL balance received:', fetchedSol);
+            console.log('WalletDashboard: SOL balance received:', fetchedSol);
             
             // Update Assets List (Start with SOL)
             const updatedAssets: Asset[] = [];
@@ -98,19 +111,21 @@ export function WalletDashboard() {
                 amount: fetchedSol,
                 value: fetchedSol * solPriceEur
             });
-            console.log('Updated assets list:', updatedAssets);
+            console.log('WalletDashboard: Updated assets list:', updatedAssets);
             setWalletAssets(updatedAssets);
 
         } catch (error: any) {
-            console.error('Error fetching SOL balance:', error);
+            console.error('WalletDashboard: Error fetching SOL balance:', error);
             errorMessages.push(error.message || 'Could not load Solana balance.');
         }
     } else {
-        console.log('Solana wallet not connected, skipping balance fetch.');
+        console.log('WalletDashboard: Solana wallet not connected, skipping balance fetch.');
+        // If wallet not connected, ensure we have an empty asset list
+        setWalletAssets([]);
     }
 
     // Update State
-    console.log('Updating state with:', { solBalance: fetchedSol, glownetData: fetchedGlownet });
+    console.log('WalletDashboard: Updating state with:', { solBalance: fetchedSol, glownetData: fetchedGlownet });
     setSolBalance(fetchedSol);
     setGlownetData(fetchedGlownet);
 
@@ -118,19 +133,27 @@ export function WalletDashboard() {
     if (errorMessages.length > 0) {
         const combinedError = errorMessages.join(' \n ');
         setDataError(combinedError);
-        toast.error("Error loading wallet data", { description: combinedError });
+        // Only show toast if these are actual errors (not just "wallet not connected" situations)
+        if (user || connected) {
+            toast.error("Error loading wallet data", { description: combinedError });
+        }
     }
 
+    // Complete loading regardless of success/failure
     setIsLoadingData(false);
-    setRefreshing(false); // Indicate refresh end
+    setRefreshing(false);
+    setInitialLoadComplete(true);
+    console.log('WalletDashboard: Data fetch complete.');
 
-  }, [user, connected, publicKey, connection]); // Dependencies for useCallback
+  }, [user, connected, publicKey, connection, authLoading, refreshing]); // Dependencies for useCallback
 
-  // Initial data fetch
+  // Initial data fetch - run when auth loading completes or wallet connection changes
   useEffect(() => {
-      fetchData();
-  }, [fetchData]); // Triggered by fetchData changes (including dependencies)
-
+    if (!authLoading) {  // Only run once auth loading is complete
+        console.log('WalletDashboard: Auth loading complete, triggering data fetch');
+        fetchData();
+    }
+  }, [authLoading, fetchData, connected, publicKey]); // Include wallet connection states as dependencies
 
   // --- Derived/Calculated Values --- Map Glownet data
   const connectedWalletValue = solBalance !== null ? solBalance * 150 : null; // Placeholder value
@@ -148,6 +171,7 @@ export function WalletDashboard() {
 
   // --- UI Functions ---
   const handleRefresh = () => {
+      setRefreshing(true);
       fetchData(); // Call the memoized fetch function
   };
 
@@ -169,7 +193,7 @@ export function WalletDashboard() {
   // --- Render Logic ---
 
   // Render Loading State
-  if (authLoading || (isLoadingData && !refreshing)) { // Show skeleton only on initial load
+  if (authLoading || (isLoadingData && !initialLoadComplete)) { // Show skeleton during initial load
       return (
           <div className="flex flex-col pt-10 pb-20 px-6 space-y-8">
               <Skeleton className="h-8 w-1/3" />
@@ -182,7 +206,7 @@ export function WalletDashboard() {
   }
 
   // Render Not Logged In State
-  if (!user) {
+  if (!user && !authLoading) {
        return (
          <div className="flex flex-col items-center justify-center min-h-[60vh] p-6">
             <Wallet className="h-12 w-12 text-muted-foreground mb-4"/>
@@ -193,7 +217,7 @@ export function WalletDashboard() {
   }
 
   // Render Error State (only if not loading and error exists)
-  if (dataError && !isLoadingData) {
+  if (dataError && !isLoadingData && initialLoadComplete && !user) {
        return (
          <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center">
             <Info className="h-12 w-12 text-destructive mb-4"/>
@@ -229,6 +253,13 @@ export function WalletDashboard() {
         <p className="text-muted-foreground">Manage your Solana & Glownet assets</p>
       </div>
 
+      {refreshing && (
+        <div className="mb-4 text-center text-sm text-muted-foreground">
+          <RefreshCw className="h-3 w-3 inline-block mr-1 animate-spin" />
+          Refreshing data...
+        </div>
+      )}
+
       {/* Total Balance Card */}
       <div className="glass-card p-6 mb-8 animate-fade-in">
         <div className="flex justify-between items-start mb-6">
@@ -252,7 +283,7 @@ export function WalletDashboard() {
             >
               <RefreshCw className={`h-4 w-4 text-muted-foreground ${refreshing ? 'animate-spin' : 'hover:opacity-70'}`} />
             </button>
-            <span className="text-xs text-muted-foreground ml-1">Last updated just now</span>
+            <span className="text-xs text-muted-foreground ml-1">Last updated {refreshing ? 'updating...' : 'just now'}</span>
           </div>
         </div>
 
@@ -307,7 +338,7 @@ export function WalletDashboard() {
 
           <Button
             className="w-full glass-button"
-            onClick={() => router.push('/venues')} // Assuming there's a venues page to join
+            onClick={() => router.push('/discover')} // Navigate to discover page to find venues
           >
             Join a Venue
           </Button>
@@ -325,12 +356,15 @@ export function WalletDashboard() {
 
         <div className="space-y-3">
           {/* Display loading skeleton for assets if still loading */}
-          {isLoadingData && walletAssets.length === 0 && (
+          {(isLoadingData && !initialLoadComplete) && (
+            <>
               <Skeleton className="h-20 w-full rounded-lg" />
+              <Skeleton className="h-20 w-full rounded-lg" />
+            </>
           )}
 
           {/* Display assets or empty state */}
-          {!isLoadingData && walletAssets.length > 0 ? walletAssets.map((asset: Asset) => (
+          {initialLoadComplete && walletAssets.length > 0 ? walletAssets.map((asset: Asset) => (
             <div key={asset.id} className="glass-card p-4">
               <div className="flex justify-between items-center">
                 <div className="flex items-center">
@@ -350,14 +384,13 @@ export function WalletDashboard() {
                   <p className="text-xs text-muted-foreground">{formatAmount(asset.amount, asset.symbol)}</p>
                 </div>
               </div>
-              {/* Removed staked display for assets */}
             </div>
-          )) : (!isLoadingData && walletAssets.length === 0 && (
-              <div className="glass-card p-4 text-center text-muted-foreground">
-                  <Info className="h-5 w-5 mx-auto mb-2"/>
-                  No Solana assets found or wallet not connected.
-              </div>
-           ))}
+          )) : (initialLoadComplete && (
+            <div className="glass-card p-4 text-center text-muted-foreground">
+              <Info className="h-5 w-5 mx-auto mb-2"/>
+              {connected ? 'No Solana assets found.' : 'Wallet not connected. Connect your wallet to view assets.'}
+            </div>
+          ))}
         </div>
       </div>
     </div>

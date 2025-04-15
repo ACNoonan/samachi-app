@@ -6,49 +6,25 @@ import { Input } from '@/app/components/ui/input';
 import { VenueList } from './VenueList';
 import { VenueMap } from './VenueMap';
 import { Skeleton } from '@/app/components/ui/skeleton';
-import { Alert, AlertDescription, AlertTitle } from "@/app/components/ui/alert"
-import { Terminal } from "lucide-react"
+import { Alert, AlertDescription, AlertTitle } from "@/app/components/ui/alert";
+import { Terminal } from "lucide-react";
 
-// Define the expected structure of a Venue (used for both fetched and mock)
+// Define the expected structure of a Venue from Supabase
 interface Venue {
-  id: string; // Supabase ID or mock ID
+  id: string;
   name: string;
   description: string | null;
-  address: string | null; // Real data uses address
-  location?: string | null; // Mock data used location
-  image_url: string | null; // Real data uses image_url
-  image?: string | null; // Mock data used image
-  glownet_event_id?: number | null; // Real data has this, make optional for mock
-  // Add other fields if returned by /api/venues
+  address: string | null;
+  image_url: string | null;
+  glownet_event_id: number | null;
 }
-
-// Align mock data with the Venue interface
-const mockVenueData: Venue[] = [
-  {
-    id: 'mock-1', name: 'El Noviciado (Mock)', location: 'Social Club, Madrid', description: 'Mock description...',
-    image: '/novi1.png', address: 'Mock Address 1', image_url: null, glownet_event_id: null
-  },
-  {
-    id: 'mock-2', name: 'Bloom Festival (Mock)', location: 'Festival, Malta', description: 'Mock description...',
-    image: '/bloom-festival.png', address: 'Mock Address 2', image_url: null, glownet_event_id: null
-  },
-  {
-    id: 'mock-3', name: 'Barrage Club (Mock)', location: 'Nightclub, Greece', description: 'Mock description...',
-    image: '/barrage-club.png', address: null, image_url: '/barrage-club.png', glownet_event_id: null // Example using image_url
-  },
-  {
-    id: 'mock-4', name: 'Berhta Club (Mock)', location: 'Social Club, Washington D.C.', description: 'Mock description...',
-    image: '/bertha-club.png', address: 'Mock Address 4', image_url: null, glownet_event_id: null
-  },
-];
 
 export function DiscoverVenues() {
   const [view, setView] = useState<'list' | 'map'>('list');
   const [searchQuery, setSearchQuery] = useState('');
-  const [venues, setVenues] = useState<Venue[]>([]); // Start empty, fill with fetched or mock
+  const [venues, setVenues] = useState<Venue[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [usingMockData, setUsingMockData] = useState(false);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
@@ -58,7 +34,6 @@ export function DiscoverVenues() {
     const fetchVenues = async () => {
       setIsLoading(true);
       setError(null);
-      setUsingMockData(false); // Reset mock data flag
       try {
         const response = await fetch('/api/venues');
         if (!response.ok) {
@@ -66,21 +41,12 @@ export function DiscoverVenues() {
           throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
         }
         const data: Venue[] = await response.json();
-
-        if (data && data.length > 0) {
-            console.log("Using fetched venue data.");
-            setVenues(data);
-        } else {
-            console.log("No real venue data found, falling back to mock data.");
-            setVenues(mockVenueData);
-            setUsingMockData(true);
-        }
-
+        console.log(`DiscoverVenues: Fetched ${data.length} venues from Supabase.`);
+        setVenues(data || []);
       } catch (err: any) {
-        console.error("Error fetching venues, falling back to mock data:", err);
+        console.error("Error fetching venues:", err);
         setError(err.message || 'An unexpected error occurred.');
-        setVenues(mockVenueData); // Fallback to mock data on error
-        setUsingMockData(true);
+        setVenues([]);
       } finally {
         setIsLoading(false);
       }
@@ -89,11 +55,10 @@ export function DiscoverVenues() {
     fetchVenues();
   }, []);
 
-  // Filter venues (either real or mock) based on search query
+  // Filter venues based on search query
   const filteredVenues = venues.filter(venue =>
     (venue.name && venue.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (venue.address && venue.address.toLowerCase().includes(searchQuery.toLowerCase())) || // Search real address
-    (venue.location && venue.location.toLowerCase().includes(searchQuery.toLowerCase())) // Search mock location
+    (venue.address && venue.address.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   if (isLoading) {
@@ -115,10 +80,8 @@ export function DiscoverVenues() {
       {error && (
           <Alert variant="destructive" className="mb-4">
              <Terminal className="h-4 w-4" />
-             <AlertTitle>Error Fetching Real Data</AlertTitle>
-             <AlertDescription>
-                 {error} {usingMockData ? "Displaying placeholder data instead." : ""}
-             </AlertDescription>
+             <AlertTitle>Error Fetching Venues</AlertTitle>
+             <AlertDescription>{error}</AlertDescription>
          </Alert>
       )}
 
@@ -156,7 +119,7 @@ export function DiscoverVenues() {
                 <Terminal className="h-4 w-4" />
                 <AlertTitle>No Venues Found</AlertTitle>
                 <AlertDescription>
-                    {searchQuery ? `No venues match your search "${searchQuery}".` : (usingMockData ? "No placeholder venues found." : "No venues available.")}
+                    {searchQuery ? `No venues match your search "${searchQuery}".` : "No venues available."}
                 </AlertDescription>
             </Alert>
         ) : (

@@ -40,9 +40,9 @@ export const StakingModal: React.FC<StakingModalProps> = ({ onClose }) => {
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center p-4 animate-fade-in">
       <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={onClose} />
       
-      <div className="bottom-sheet max-w-md w-full z-10">
+      <div className="bottom-sheet max-w-md w-full z-10 bg-white text-gray-900">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold">
+          <h2 className="text-xl font-semibold text-gray-900">
             {step === 1 ? 'Stake Crypto' : 'Confirming Stake'}
           </h2>
           <button 
@@ -55,23 +55,23 @@ export const StakingModal: React.FC<StakingModalProps> = ({ onClose }) => {
         
         {step === 1 ? (
           <>
-            <p className="text-muted-foreground mb-6">
+            <p className="text-gray-600 mb-6">
               Stake assets to increase your available credit line
             </p>
 
             <div className="mb-6">
-              <label className="text-sm font-medium mb-2 block">
+              <label className="text-sm font-medium mb-2 block text-gray-800">
                 Select Asset
               </label>
               <button
                 onClick={() => setShowCryptoSelector(!showCryptoSelector)}
-                className="w-full p-3 rounded-xl bg-white flex items-center justify-between border border-gray-200"
+                className="w-full p-3 rounded-xl bg-white flex items-center justify-between border border-gray-200 text-gray-900"
               >
                 <div className="flex items-center">
                   <span className="text-2xl mr-2">{selectedCrypto.icon}</span>
                   <div>
-                    <div className="font-medium">{selectedCrypto.name}</div>
-                    <div className="text-xs text-muted-foreground">{selectedCrypto.symbol}</div>
+                    <div className="font-medium text-gray-900">{selectedCrypto.name}</div>
+                    <div className="text-xs text-gray-600">{selectedCrypto.symbol}</div>
                   </div>
                 </div>
                 <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform ${showCryptoSelector ? 'rotate-180' : ''}`} />
@@ -86,7 +86,7 @@ export const StakingModal: React.FC<StakingModalProps> = ({ onClose }) => {
                         setSelectedCrypto(crypto);
                         setShowCryptoSelector(false);
                       }}
-                      className="w-full p-3 flex items-center justify-between hover:bg-gray-50"
+                      className="w-full p-3 flex items-center justify-between hover:bg-gray-50 text-gray-900"
                     >
                       <div className="flex items-center">
                         <span className="text-xl mr-2">{crypto.icon}</span>
@@ -102,24 +102,23 @@ export const StakingModal: React.FC<StakingModalProps> = ({ onClose }) => {
             </div>
 
             <div className="mb-8">
-              <label className="text-sm font-medium mb-2 block">
+              <label className="text-sm font-medium mb-2 block text-gray-800">
                 Amount
               </label>
               <div className="relative">
                 <input 
                   type="number"
                   value={amount}
-                  // onChange={(e) => setAmount(e.target.value)} // Replace
-                  onChange={handleAmountChange} // Use typed handler
+                  onChange={handleAmountChange}
                   placeholder="0.00"
-                  className="w-full p-3 pr-16 rounded-xl bg-white border border-gray-200 text-xl font-medium"
+                  className="w-full p-3 pr-16 rounded-xl bg-white border border-gray-200 text-xl font-medium text-gray-900"
                 />
-                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground">
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-600">
                   {selectedCrypto.symbol}
                 </div>
               </div>
               <div className="mt-2 flex justify-between">
-                <div className="text-xs text-muted-foreground">
+                <div className="text-xs text-gray-600">
                   {/* TODO: Replace with actual available balance */}
                   Available: 2.5 {selectedCrypto.symbol} 
                 </div>
@@ -143,11 +142,11 @@ export const StakingModal: React.FC<StakingModalProps> = ({ onClose }) => {
             <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
               <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
-            <h3 className="text-lg font-medium mb-2">Processing Your Stake</h3>
-            <p className="text-muted-foreground mb-4">
+            <h3 className="text-lg font-medium mb-2 text-gray-900">Processing Your Stake</h3>
+            <p className="text-gray-600 mb-4">
               Please wait while we process your {amount} {selectedCrypto.symbol} stake
             </p>
-            <div className="text-sm text-muted-foreground">
+            <div className="text-sm text-gray-500">
               This may take a few moments to complete
             </div>
           </div>
