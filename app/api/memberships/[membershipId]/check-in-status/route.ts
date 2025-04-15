@@ -1,25 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { createClient } from '@/lib/supabase/server';
-import { getGlownetCustomerDetails, type GlownetCustomer } from '@/lib/glownet';
+// import { cookies } from 'next/headers'; // Commented out
+// import { createClient } from '@/lib/supabase/server'; // Commented out
+// import { getGlownetCustomerDetails, type GlownetCustomer } from '@/lib/glownet'; // Commented out
 
-// Define the expected structure for the Supabase query result
-type MembershipWithVenue = {
-  id: string; 
-  user_id: string; 
-  venue_id: string; 
-  glownet_customer_id: number | null;
-  status: string; 
-  venues: { 
-    glownet_event_id: number | null;
-  } | null;
-};
+// // Define the expected structure for the Supabase query result - Commented out
+// type MembershipWithVenue = {
+//   id: string; 
+//   user_id: string; 
+//   venue_id: string; 
+//   glownet_customer_id: number | null;
+//   status: string; 
+//   venues: { 
+//     glownet_event_id: number | null;
+//   } | null;
+// };
 
 export async function GET(
   request: NextRequest,
   context: { params: { membershipId: string } }
 ) {
   const membershipId = context.params.membershipId;
+  console.log("Minimal GET handler called for membershipId:", membershipId);
+  return NextResponse.json({ success: true, membershipId });
+
+/* // Comment out the entire previous logic block
   // console.log(`Simplified GET handler for /api/memberships/${membershipId}/check-in`); // Comment out the simplified log
   // return NextResponse.json({ message: "Handler simplified for testing", membershipId }); // Comment out the simplified return
 
@@ -99,4 +103,5 @@ export async function GET(
     return NextResponse.json({ error: error.message || 'Internal server error during check-in process.' }, { status: 500 });
   }
   // End of commented out logic
+*/
 } 
