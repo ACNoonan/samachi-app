@@ -4,7 +4,7 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/app/components/ui/button";
-import useAuth from "@/hooks/useAuth";
+// import useAuth from "@/hooks/useAuth"; // Removed as per user request
 
 export const OnboardingVideo = () => {
   // const navigate = useNavigate();
