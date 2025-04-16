@@ -137,10 +137,19 @@ export async function POST(request: Request) {
 }
 
 // 2. Scheduled Sync via Vercel Cron
+
+// Use separate exports for Route Segment Config
+export const runtime = 'edge';
+export const preferredRegion = 'iad1'; 
+// Note: 'regions' is deprecated, use 'preferredRegion' or 'dynamic = "force-dynamic"' if applicable
+// See: https://nextjs.org/docs/app/api-reference/file-conventions/route-segment-config
+
+/* // Remove the old config object
 export const config = {
   runtime: 'edge',
   regions: ['iad1'],  // Specify regions if needed
 };
+*/
 
 // This function is triggered by Vercel Cron
 // Configure in vercel.json:
