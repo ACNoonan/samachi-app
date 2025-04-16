@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase'; // Import your initialized client
+// import { supabase } from '@/lib/supabase'; // Remove old client import
+import { cookies } from 'next/headers'; // Add cookies import
+import { createClient } from '@/lib/supabase/server'; // Import server client creator
 
 // Opt out of caching and force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -13,6 +15,10 @@ export async function GET(request: NextRequest) {
   }
 
   console.log(`API: Checking status for card identifier: ${cardIdentifier}`);
+
+  // Create server client instance
+  const cookieStore = cookies();
+  const supabase = createClient(cookieStore);
 
   try {
     // Query the membership_cards table

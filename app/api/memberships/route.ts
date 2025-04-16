@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
         id,
         status,
         created_at,
-        user_id, // Keep user_id selected for filtering
+        user_id,
         venues (
           id,
           name,
