@@ -36,9 +36,19 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Failed to retrieve membership details.' }, { status: 500 });
     }
 
-    if (!membership || !membership.glownet_customer_id || !membership.venues?.[0]?.glownet_event_id) {
-        console.warn(`No active membership with Glownet IDs found for user ${userId}.`);
-        // Decide how to handle this: error or empty data? Let's return empty data for now.
+    // Check for missing data more robustly
+    let glownetEventId: number | undefined | null = null;
+    if (membership?.venues) {
+      if (Array.isArray(membership.venues) && membership.venues.length > 0) {
+          glownetEventId = membership.venues[0].glownet_event_id;
+      } else if (typeof membership.venues === 'object' && !Array.isArray(membership.venues)) {
+          // Handle case where venues is an object (e.g., many-to-one)
+          glownetEventId = (membership.venues as any).glownet_event_id; 
+      }
+    }
+
+    if (!membership || !membership.glownet_customer_id || typeof glownetEventId !== 'number') {
+        console.warn(`No active membership with required Glownet IDs found for user ${userId}. CustomerID: ${membership?.glownet_customer_id}, EventID: ${glownetEventId}`);
         return NextResponse.json({
             message: 'No active Glownet-linked membership found.',
             glownetData: null
@@ -46,13 +56,7 @@ export async function GET(request: Request) {
     }
 
     const glownetCustomerId = membership.glownet_customer_id;
-    // Type assertion needed as Supabase relationships can be null/arrays
-    const glownetEventId = membership.venues[0].glownet_event_id;
-
-    if (typeof glownetEventId !== 'number') {
-        console.error(`Invalid glownet_event_id found for user ${userId} membership.`);
-        return NextResponse.json({ error: 'Invalid venue configuration.' }, { status: 500 });
-    }
+    // glownetEventId is now guaranteed to be a number here
 
     // 3. Fetch Glownet Customer Details
     console.log(`Fetching Glownet details for customer ${glownetCustomerId} in event ${glownetEventId}...`);
