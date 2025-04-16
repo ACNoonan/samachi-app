@@ -276,7 +276,7 @@ export function WalletDashboard() {
             )}
           </button>
         </div>
-        <p className="text-muted-foreground">Manage your Solana & Glownet assets</p>
+        <p className="text-muted-foreground">Manage your Solana & network assets</p>
       </div>
 
       {refreshing && (
@@ -332,7 +332,7 @@ export function WalletDashboard() {
         <div className="glass-card p-6 mb-8 animate-fade-in">
           <div className="flex justify-between items-start mb-6">
             <div>
-              <h2 className="text-lg font-medium mb-1">Glownet Credit</h2>
+              <h2 className="text-lg font-medium mb-1">Network Credit</h2>
               <p className="text-sm text-muted-foreground">Available spending power (Money)</p>
             </div>
             <CreditCard className="h-6 w-6 text-primary" />
