@@ -49,10 +49,12 @@ export function Dashboard() {
   const [isLoadingVenues, setIsLoadingVenues] = useState(true);
   const [venuesError, setVenuesError] = useState<string | null>(null);
 
-  const stakedAmount = 1.25;
-  const stakedSymbol = 'SOL';
-  const availableCredit = 2500;
-  const creditProgress = 80;
+  // TODO: Replace these hardcoded values with actual data from state/props
+  // Initialize with 0 or null until data is loaded
+  const stakedAmount = 0; // Placeholder - fetch actual staked amount
+  const stakedSymbol = 'SOL'; // Placeholder - this might come with staked amount
+  const availableCredit = 0; // Placeholder - fetch actual credit
+  const creditProgress = 0; // Placeholder - calculate based on staked amount/limits
 
   // Fetch memberships on component mount
   useEffect(() => {
@@ -116,8 +118,7 @@ export function Dashboard() {
   return (
     <div className="flex flex-col pt-10 pb-20 px-6">
       <div className="mb-8 animate-fade-in">
-        <h1 className="text-2xl font-bold mb-1">Samachi Membership</h1>
-        <p className="text-muted-foreground">Your VIP access is ready</p>
+        <h1 className="text-2xl font-bold mb-1">Samachi</h1>
       </div>
 
       <div className="glass-card p-6 mb-8 animate-fade-in">
@@ -132,11 +133,13 @@ export function Dashboard() {
         <div className="mb-6">
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm text-muted-foreground">Staked Amount</span>
-            <span className="font-semibold">{stakedAmount} {stakedSymbol}</span>
+            {/* Display loading state or actual value */}
+            <span className="font-semibold">{stakedAmount > 0 ? `${stakedAmount} ${stakedSymbol}` : '0.00'}</span>
           </div>
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm text-muted-foreground">Available Credit</span>
-            <span className="font-semibold text-lg">€{availableCredit.toLocaleString()}</span>
+             {/* Display loading state or actual value */}
+            <span className="font-semibold text-lg">€{availableCredit > 0 ? availableCredit.toLocaleString() : '0.00'}</span>
           </div>
           <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
             <div 
@@ -214,7 +217,7 @@ export function Dashboard() {
                                 </div>
                             </div>
                             <Button variant="ghost" size="sm">
-                               View / Check In 
+                               View
                             </Button>
                         </div>
                     )

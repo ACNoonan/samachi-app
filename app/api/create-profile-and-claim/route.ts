@@ -4,15 +4,15 @@ import bcrypt from 'bcryptjs';
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server'; // Use server client
 import {
     createGlownetCustomer,
-    getGlownetEventDetailsByGtagUid, // Import the new lookup function
-    assignGlownetGtagToCustomer, // <-- Import the new function
+    getGlownetEventDetailsByGtagUid, 
+    assignGlownetGtagToCustomer, 
     type GlownetLookupResponse,
-    type GlownetCustomer      // <-- Import Customer type if needed for response
+    type GlownetCustomer
 } from '@/lib/glownet';
-import { cookies } from 'next/headers'; // Needed for server client
+import { cookies } from 'next/headers';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAdminKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // Use Admin Key
+const supabaseAdminKey = process.env.SUPABASE_SERVICE_ROLE_KEY; 
 
 if (!supabaseUrl || !supabaseAdminKey) {
   console.error('Missing Supabase URL or Admin Key environment variables.');
@@ -29,6 +29,8 @@ export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
   // Ensure you initialize the Supabase client correctly for Route Handlers
   const supabase = createServerSupabaseClient(cookieStore);
+
+  let userId: string | null = null; // Keep track of user ID for potential cleanup
 
   try {
     const {
@@ -158,39 +160,69 @@ export async function POST(request: NextRequest) {
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email: email,
       password: password,
-      options: {
-        // Data passed to the handle_new_user trigger
-        data: {
-          username: username,
-          twitter_handle: twitterHandle,
-          telegram_handle: telegramHandle,
-          wallet_address: walletAddress,
-        },
-      },
+      // options: { data: { ... } } // Removed - we will create the profile manually
     });
 
     if (signUpError) {
       console.error('Supabase signUp error:', signUpError);
-      if (signUpError.message.includes('User already registered') || signUpError.status === 400 || signUpError.status === 422) {
-           return NextResponse.json({ error: 'Email address already registered.' }, { status: 409 });
-      }
-      return NextResponse.json({ error: signUpError.message || 'Failed to create user account.' }, { status: signUpError.status || 500 });
+      // Use specific status codes if available from the error
+      const status = (signUpError as any).status || 500;
+       if (signUpError.message.includes('User already registered') || status === 400 || status === 422) {
+           return NextResponse.json({ error: 'Email address already registered.' }, { status: 409 }); // 409 Conflict
+       }
+      return NextResponse.json({ error: signUpError.message || 'Failed to create user account.' }, { status });
     }
 
     if (!signUpData.user) {
       console.error('Supabase signUp success but did not return a user object.');
-      // This case might indicate email confirmation is required, but we need the user ID to proceed.
-      // If email confirmation is enabled and you need to proceed immediately, handle this state.
-      // For now, assume immediate user creation or handle later.
-      return NextResponse.json({ error: 'User account creation pending confirmation or failed unexpectedly.' }, { status: 500 });
+      // This could mean email confirmation is needed, or something else went wrong.
+      // If email confirmation is ON, you cannot proceed here as the user isn't fully active.
+      return NextResponse.json({ error: 'User account creation might require email confirmation or failed unexpectedly.' }, { status: 500 });
     }
 
-    const userId = signUpData.user.id;
+    userId = signUpData.user.id; // Assign userId for potential cleanup
     console.log(`Supabase user created successfully: ${userId} for email ${email}`);
 
-    // NOTE: The trigger 'handle_new_user' has automatically created the profile in public.profiles.
+    // 7. Create Profile Record
+    console.log(`Creating profile record for user ${userId}`);
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .insert({
+        id: userId, // Link to the auth.users table
+        username: username,
+        email: email, // Store email in profile too? Optional.
+        twitter_handle: twitterHandle,
+        telegram_handle: telegramHandle,
+        wallet_address: walletAddress,
+        // Add any other default profile fields here
+      })
+      .select('id') // Select something to confirm insertion
+      .single(); // Expect a single row
 
-    // 7. Create Glownet Customer & Assign Tag - PAUSED
+    if (profileError || !profileData) {
+        console.error(`CRITICAL ERROR creating profile record for user ${userId}. Manual cleanup needed.`, profileError);
+
+        // <<< NEW: Check for specific duplicate username error >>>
+        const pgError = profileError as any; // Type assertion for checking code
+        if (pgError?.code === '23505' && pgError?.message?.includes('profiles_username_key')) {
+             console.warn(`Attempted registration with duplicate username: ${username}`);
+             // Attempt cleanup BEFORE returning the specific error
+             console.log(`Attempting to delete Supabase Auth user ${userId} due to duplicate username.`);
+             await supabaseAdmin.auth.admin.deleteUser(userId);
+             console.log(`Deleted Supabase Auth user ${userId}.`);
+             // Return a user-friendly 409 Conflict error
+             return NextResponse.json({ error: 'Username already taken. Please choose a different one.' }, { status: 409 });
+        }
+
+        // Keep the generic error handling for other profile creation issues
+        console.log(`Attempting to delete Supabase Auth user ${userId} due to profile creation error.`);
+        await supabaseAdmin.auth.admin.deleteUser(userId); // Use Admin client
+        console.log(`Deleted Supabase Auth user ${userId}.`);
+        return NextResponse.json({ error: 'Failed to create user profile after signup. User creation rolled back.' }, { status: 500 });
+    }
+    console.log(`Profile record created successfully for user ${userId}.`);
+
+    // 8. Create Glownet Customer & Assign Tag - PAUSED
     /*
     let glownetCustomerId: number | null = null;
     try {
@@ -231,92 +263,90 @@ export async function POST(request: NextRequest) {
     }
     */
 
-    // 8. Create Membership Record in Supabase
+    // 9. Create Membership Record in Supabase
     let membershipId: string | null = null;
     try {
       console.log(`Creating membership record for user ${userId}, venue ${samachiVenueId}, card ${supabaseCardId}`);
        if (!samachiVenueId) {
           console.error("CRITICAL ERROR: Cannot create membership record without a valid venue ID.");
-          throw new Error("Missing venue ID for membership creation."); // Throw to trigger cleanup below
+          throw new Error("Missing venue ID for membership creation.");
        }
 
       const { data: newMembership, error: membershipError } = await supabase
           .from('memberships')
           .insert({
               user_id: userId,
-              venue_id: samachiVenueId, // Use the (potentially default) venue ID
+              venue_id: samachiVenueId,
               card_id: supabaseCardId,
-              // glownet_customer_id: glownetCustomerId, // Omit Glownet ID for now
-              status: 'active'
-              // Omit glownet_event_id, card_identifier, glownet_sync_status for now
-           })
-          .select('id')
-          .single();
+              // glownet_customer_id: glownetCustomerId, // Add back when Glownet is active
+              status: 'active' // Or 'pending_glownet_sync' if needed
+          })
+          .select('id') // Select the ID of the newly created membership
+          .single(); // Expect a single row
 
       if (membershipError || !newMembership) {
-        console.error(`CRITICAL ERROR creating membership record for user ${userId}. Manual cleanup needed.`, membershipError);
-        throw new Error('Failed to link profile to venue membership.'); // Throw to trigger cleanup
+          console.error(`CRITICAL ERROR creating membership record for user ${userId}. Manual cleanup needed.`, membershipError);
+          // Determine the specific error. The foreign key error should be gone, but others might occur.
+          const pgError = membershipError as any; // PostgrestError
+          if (pgError?.code === '23505') { // Unique constraint violation (e.g., user already has membership for this venue/card?)
+               throw new Error('Membership record conflict.'); // Re-throw specific error
+          }
+          throw new Error(membershipError?.message || 'Failed to link profile to venue membership.'); // Throw generic error
       }
       membershipId = newMembership.id;
-      console.log(`Membership record created successfully: ID ${membershipId}`);
+      console.log(`Membership record created successfully: ${membershipId}`);
 
     } catch (membershipCatchError: any) {
-      console.error(`CRITICAL ERROR during membership record creation for user ${userId}. Attempting cleanup.`, membershipCatchError);
-      // Attempt to delete Supabase user and potentially Glownet customer
-      try {
-        const { error: deleteError } = await supabase.auth.admin.deleteUser(userId);
-        if (deleteError) console.error(`Failed to delete Supabase user ${userId} after membership error:`, deleteError);
-        else console.log(`Successfully deleted Supabase user ${userId} due to membership error.`);
-        // Add Glownet customer deletion here if possible/needed
-      } catch (cleanupError) {
-         console.error(`Exception during cleanup for user ${userId} after membership error:`, cleanupError);
-      }
-      return NextResponse.json({ error: 'An unexpected error occurred while creating membership link.' }, { status: 500 });
+        // This catch block handles errors specifically from membership creation
+        console.error(`CRITICAL ERROR during membership record creation for user ${userId}. Attempting cleanup. Error: ${membershipCatchError.message}`);
+        // Attempt to delete the Supabase user AND profile since membership creation failed
+        try {
+            // Delete profile first (due to FK constraints if any) - use non-admin client if RLS allows, otherwise admin
+             const { error: deleteProfileError } = await supabase.from('profiles').delete().eq('id', userId);
+             if (deleteProfileError) console.error(`Failed to delete Supabase profile ${userId} after membership error:`, deleteProfileError);
+             else console.log(`Successfully deleted Supabase profile ${userId} after membership error.`);
+
+            // Now delete the auth user
+            const { error: deleteUserError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+            if (deleteUserError) console.error(`Failed to delete Supabase user ${userId} after membership error:`, deleteUserError);
+            else console.log(`Successfully deleted Supabase user ${userId} after membership error.`);
+        } catch (adminCleanupError) {
+            console.error(`Exception during Supabase user/profile cleanup for ${userId}:`, adminCleanupError);
+        }
+        // Return a specific error related to membership failure
+        return NextResponse.json({ error: membershipCatchError.message || 'Failed to create membership link.' }, { status: 500 });
     }
 
-    // 9. Link Card to Profile (Update membership_cards)
-    try {
-      console.log(`Linking card ${supabaseCardId} to user ${userId}`);
-      const { data: updateData, error: updateError } = await supabase
-        .from('membership_cards')
-        .update({ user_id: userId, status: 'registered' })
-        .eq('id', supabaseCardId)
-        .is('user_id', null)
-        .select('id')
-        .single();
+    // 10. Update Membership Card Record
+    console.log(`Updating membership card ${supabaseCardId} to link user ${userId}`);
+    const { error: updateCardError } = await supabase
+      .from('membership_cards')
+      .update({
+          user_id: userId,
+          status: 'claimed', // Update status to 'claimed'
+          // last_assigned_at: new Date().toISOString() // Removed: Column does not exist
+      })
+      .eq('id', supabaseCardId);
 
-      if (updateError || !updateData) {
-        console.error(`CRITICAL ERROR updating membership_cards record ${supabaseCardId} for user ${userId}. Manual cleanup needed.`, updateError);
-        // This is less critical than the steps above, maybe don't roll back user?
-        // Log prominently and perhaps flag the user/card for manual review.
-        throw new Error('Failed to link card record to user profile.'); // Throw to trigger cleanup
-      }
-      console.log(`Card record ${supabaseCardId} successfully linked to user ${userId}`);
-
-    } catch (cardLinkError: any) {
-      console.error(`CRITICAL ERROR during card linking for user ${userId}. Attempting cleanup.`, cardLinkError);
-      // Attempt cleanup (delete Supabase user, Glownet customer, membership)
-      try {
-        const { error: deleteError } = await supabase.auth.admin.deleteUser(userId);
-        if (deleteError) console.error(`Failed to delete Supabase user ${userId} after card link error:`, deleteError);
-        else console.log(`Successfully deleted Supabase user ${userId} due to card link error.`);
-        // Add Glownet/Membership cleanup if necessary
-      } catch (cleanupError) {
-        console.error(`Exception during cleanup for user ${userId} after card link error:`, cleanupError);
-      }
-      return NextResponse.json({ error: 'Failed to finalize card link.' }, { status: 500 });
+    if (updateCardError) {
+      console.error(`Error updating membership card ${supabaseCardId} for user ${userId}:`, updateCardError);
+      // This is less critical, maybe log and continue, or flag for later update?
+      // For now, let's treat it as potentially problematic but not requiring full rollback.
+      // Depending on requirements, you might want to rollback here too.
+      return NextResponse.json({ error: 'Failed to finalize card assignment.' }, { status: 500 }); // Consider different status/handling
     }
+    console.log(`Membership card ${supabaseCardId} successfully updated.`);
 
     // --- End Process ---
 
-    // 10. Success Response
+    // 11. Return Success Response
     console.log(`Successfully completed create-profile-and-claim for user ${userId}`);
     // Supabase client library + middleware handle session cookies automatically.
     return NextResponse.json({
       message: 'Account created, card claimed, and venue membership established successfully!',
       userId: userId,
       membershipId: membershipId // Return new membership ID
-    });
+    }, { status: 201 }); // 201 Created
 
   } catch (error: any) {
     console.error('----------------------------------------');
@@ -326,6 +356,20 @@ export async function POST(request: NextRequest) {
         console.error('Stack Trace:', error.stack);
     }
     console.error('----------------------------------------');
-    return NextResponse.json({ error: error.message || 'Internal server error during profile creation.' }, { status: 500 });
+
+    // Attempt cleanup if userId was set before the error occurred
+    if (userId) {
+        console.error(`Unhandled error occurred for user ${userId}. Attempting cleanup.`);
+         try {
+             // Best effort cleanup - delete profile then auth user
+             await supabase.from('profiles').delete().eq('id', userId); // Use non-admin if possible/RLS allows
+             await supabaseAdmin.auth.admin.deleteUser(userId);
+             console.log(`Cleaned up user ${userId} due to unhandled error.`);
+         } catch (cleanupError) {
+             console.error(`Failed during cleanup for user ${userId} after unhandled error:`, cleanupError);
+         }
+    }
+
+    return NextResponse.json({ error: error.message || 'An unexpected error occurred.' }, { status: 500 });
   }
 } 
