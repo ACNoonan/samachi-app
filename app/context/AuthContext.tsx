@@ -40,7 +40,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Fetch profile data based on user ID
   const fetchProfile = async (userId: string) => {
     console.log("AuthContext: Fetching profile for user:", userId);
-    setIsLoading(true); // Indicate loading profile data
     try {
       const { data, error, status } = await supabase
         .from('profiles')
@@ -51,7 +50,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (error && status !== 406) { // 406 No Content is expected if profile doesn't exist yet
         console.error("AuthContext: Error fetching profile:", error);
         setProfile(null); // Clear profile on error
-        // Optionally throw error or handle it based on your app's needs
       } else if (data) {
         console.log("AuthContext: Profile data received:", data);
         setProfile(data as Profile); // Set profile data
@@ -63,88 +61,98 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error("AuthContext: Exception fetching profile:", error);
       setProfile(null);
     } finally {
-      // Consider setting isLoading false only after BOTH session AND profile check are done
-      // This might need adjustment based on how initial loading feels
-      setIsLoading(false); // Ensure loading stops after profile fetch attempt
+      setIsLoading(false); // Ensure loading is set to false after profile fetch
     }
   };
 
+  // Initialize auth state
   useEffect(() => {
-    setIsLoading(true); // Start loading on mount
+    let mounted = true;
 
-    // 1. Get initial session
-    supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
-      console.log("AuthContext: Initial session:", initialSession);
-      setSession(initialSession);
-      setUser(initialSession?.user ?? null);
+    const initializeAuth = async () => {
+      try {
+        // Get initial session
+        const { data: { session: initialSession }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error("AuthContext: Error getting initial session:", error);
+          if (mounted) setIsLoading(false);
+          return;
+        }
 
-      // 2. Fetch profile if session exists
-      if (initialSession?.user?.id) {
-        await fetchProfile(initialSession.user.id);
+        console.log("AuthContext: Initial session:", initialSession);
+        
+        if (initialSession && mounted) {
+          setSession(initialSession);
+          setUser(initialSession.user);
+          await fetchProfile(initialSession.user.id);
+        } else if (mounted) {
+          setIsLoading(false); // Set loading to false if no session
+        }
+      } catch (error) {
+        console.error("AuthContext: Error in initializeAuth:", error);
+        if (mounted) setIsLoading(false);
       }
-      
-      // Initial load complete ONLY after session check AND profile fetch (if applicable)
-      setIsLoading(false); 
-    }).catch(error => {
-        console.error("AuthContext: Error in getSession promise:", error);
-        setIsLoading(false); // Stop loading on error
-    });
+    };
 
+    initializeAuth();
 
-    // 3. Listen for auth state changes
+    // Listen for auth state changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, newSession) => {
-        console.log("AuthContext: onAuthStateChange event:", event, "session:", newSession);
-        setSession(newSession);
-        const newAuthUser = newSession?.user ?? null;
-        setUser(newAuthUser);
+        console.log("AuthContext: Auth state changed:", event, newSession);
+        
+        if (!mounted) return;
 
-        // If user logs in/session restored, fetch profile
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-          if (newAuthUser?.id) {
-            await fetchProfile(newAuthUser.id);
-          } else {
-            // Should not happen if event is SIGNED_IN, but handle defensively
-             console.warn("AuthContext: SIGNED_IN event but no user ID found in session.");
-             setProfile(null);
-          }
-        } else if (event === 'SIGNED_OUT') {
-          // Clear profile on logout
+        if (newSession) {
+          setSession(newSession);
+          setUser(newSession.user);
+          await fetchProfile(newSession.user.id);
+        } else {
+          setSession(null);
+          setUser(null);
           setProfile(null);
-          // Optionally redirect here or let components handle it
-          // router.push('/login'); // Example redirect on logout
+          setIsLoading(false); // Ensure loading is set to false on logout
         }
-         // Ensure loading is false after state change and profile fetch - REMOVED as fetchProfile handles it now
-         // setIsLoading(false);
       }
     );
 
-    // Cleanup listener on unmount
     return () => {
+      mounted = false;
       authListener?.subscription.unsubscribe();
     };
-  }, [supabase]); // Add supabase as dependency
+  }, []); // Empty dependency array is fine here as we're using mounted flag
 
   const logout = async () => {
     console.log("AuthContext: Signing out...");
-    setIsLoading(true); // Indicate loading during sign out
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      console.error("AuthContext: Error signing out:", error);
-      // Handle error appropriately, e.g., show toast
+    try {
+      // Clear local state first
+      setSession(null);
+      setUser(null);
+      setProfile(null);
+      setIsLoading(false);
+
+      // Then sign out from Supabase
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error("AuthContext: Error signing out:", error);
+        throw error;
+      }
+
+      // Finally, redirect to login page
+      router.push('/login');
+    } catch (error) {
+      console.error("AuthContext: Error in logout:", error);
+      throw error;
     }
-    // State updates (session, user, profile to null) are handled by onAuthStateChange listener
-    // Redirect can happen here or be handled by listener/components
-    router.push('/login'); 
-    setIsLoading(false); // Stop loading after sign out attempt
   };
 
   // Memoize context value
   const value = useMemo(() => ({
-    supabase, // Provide client instance
+    supabase,
     session,
     user,
-    profile, // Provide profile data
+    profile,
     isLoading,
     logout
   }), [supabase, session, user, profile, isLoading]);

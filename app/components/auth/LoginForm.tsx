@@ -75,7 +75,7 @@ export const LoginForm: React.FC = () => {
         aria-label="Go back"
         disabled={form.formState.isSubmitting}
       >
-        <ArrowLeft className="h-6 w-6" />
+        <ArrowLeft className="h-6 w-6" strokeWidth={1.5} />
       </button>
 
       <div className="mb-10">

@@ -22,6 +22,7 @@ import { AuthProvider } from './context/AuthContext';
 import { Toaster } from "@/app/components/ui/sonner"
 // Theme Provider
 import { ThemeProvider } from "next-themes"
+import { SolanaProvider } from './context/SolanaContext';
 
 // Default styles that can be overridden by your app
 require('@solana/wallet-adapter-react-ui/styles.css');
@@ -66,9 +67,11 @@ export default function RootLayout({
             <ConnectionProvider endpoint={endpoint}>
               <WalletProvider wallets={wallets} autoConnect>
                 <WalletModalProvider>
-                  {/* Your existing layout structure, e.g., Navbar, PageWrapper */} 
-                  {children} 
-                  <Toaster richColors position="top-center" /> { /* Add Toaster */ }
+                  <SolanaProvider>
+                    {/* Your existing layout structure, e.g., Navbar, PageWrapper */} 
+                    {children} 
+                    <Toaster richColors position="top-center" /> { /* Add Toaster */ }
+                  </SolanaProvider>
                 </WalletModalProvider>
               </WalletProvider>
             </ConnectionProvider>

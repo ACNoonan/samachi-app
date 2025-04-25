@@ -2,38 +2,61 @@
 
 import React, { useState } from 'react';
 import { Button } from '@/app/components/ui/button';
-import { XCircle, ChevronDown, Check, ChevronRight } from 'lucide-react';
+import { XCircle, ChevronDown, Check, ChevronRight, Coins } from 'lucide-react';
+import { useSolana } from '@/app/context/SolanaContext';
+import { useToast } from '@/app/components/ui/use-toast';
+import { Input } from '@/app/components/ui/input';
 
 interface StakingModalProps {
   onClose: () => void;
 }
 
-const cryptoOptions = [
-  { id: 'sol', name: 'Solana', symbol: 'SOL', icon: '☀️' },
-  { id: 'usdt', name: 'Tether', symbol: 'USDT', icon: '💵' },
-  { id: 'usdc', name: 'USD Coin', symbol: 'USDC', icon: '💰' },
-  // Add other relevant cryptos if needed
-];
-
 export const StakingModal: React.FC<StakingModalProps> = ({ onClose }) => {
-  const [selectedCrypto, setSelectedCrypto] = useState(cryptoOptions[0]);
-  const [showCryptoSelector, setShowCryptoSelector] = useState(false);
   const [amount, setAmount] = useState('');
-  const [step, setStep] = useState(1);
+  const [action, setAction] = useState<'stake' | 'unstake'>('stake');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const { userState, stake, unstake } = useSolana();
+  const { toast } = useToast();
 
-  const handleStake = () => {
-    setStep(2);
-    // TODO: Add actual staking logic here (e.g., call backend/contract)
-    console.log(`Simulating stake of ${amount} ${selectedCrypto.symbol}`);
-    setTimeout(() => {
-      // TODO: Update user balance/state after successful stake
+  const handleSubmit = async () => {
+    if (!amount) return;
+
+    try {
+      setIsProcessing(true);
+      const amountNum = parseFloat(amount);
+      if (isNaN(amountNum) || amountNum <= 0) {
+        toast({
+          title: "Invalid amount",
+          description: "Please enter a valid amount greater than 0",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (action === 'stake') {
+        await stake(amountNum);
+        toast({
+          title: "Success",
+          description: "Successfully staked USDC",
+        });
+      } else {
+        await unstake(amountNum);
+        toast({
+          title: "Success",
+          description: "Successfully unstaked USDC",
+        });
+      }
       onClose();
-    }, 2000);
-  };
-
-  // Type the event
-  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setAmount(e.target.value);
+    } catch (error) {
+      console.error('Error:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "An error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -43,7 +66,7 @@ export const StakingModal: React.FC<StakingModalProps> = ({ onClose }) => {
       <div className="bottom-sheet max-w-md w-full z-10 bg-black text-white">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-semibold text-white">
-            {step === 1 ? 'Stake Crypto' : 'Confirming Stake'}
+            {action === 'stake' ? 'Stake USDC' : 'Unstake USDC'}
           </h2>
           <button 
             onClick={onClose}
@@ -53,101 +76,96 @@ export const StakingModal: React.FC<StakingModalProps> = ({ onClose }) => {
           </button>
         </div>
         
-        {step === 1 ? (
-          <>
-            <p className="text-gray-400 mb-6">
-              Stake assets to increase your available credit line
-            </p>
+        <div className="mb-6">
+          <p className="text-gray-400 mb-6">
+            {action === 'stake' 
+              ? 'Stake USDC to increase your available credit line'
+              : 'Unstake USDC to withdraw from your credit line'}
+          </p>
 
-            <div className="mb-6">
-              <label className="text-sm font-medium mb-2 block text-gray-300">
-                Select Asset
-              </label>
-              <button
-                onClick={() => setShowCryptoSelector(!showCryptoSelector)}
-                className="w-full p-3 rounded-xl bg-gray-900 flex items-center justify-between border border-gray-700 text-white"
+          <div className="mb-6">
+            <label className="text-sm font-medium mb-2 block text-gray-300">
+              Amount (USDC)
+            </label>
+            <div className="relative">
+              <Input 
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+                className="w-full p-3 pr-16 rounded-xl bg-gray-900 border border-gray-700 text-xl font-medium text-white"
+              />
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                USDC
+              </div>
+            </div>
+            <div className="mt-2 flex justify-between">
+              <div className="text-xs text-gray-400">
+                Available: {userState ? userState.stakedAmount.toString() : '0'} USDC
+              </div>
+              <button 
+                className="text-xs text-primary font-medium"
+                onClick={() => setAmount(userState ? userState.stakedAmount.toString() : '0')}
               >
-                <div className="flex items-center">
-                  <span className="text-2xl mr-2">{selectedCrypto.icon}</span>
-                  <div>
-                    <div className="font-medium text-white">{selectedCrypto.name}</div>
-                    <div className="text-xs text-gray-400">{selectedCrypto.symbol}</div>
-                  </div>
-                </div>
-                <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform ${showCryptoSelector ? 'rotate-180' : ''}`} />
+                MAX
               </button>
-              
-              {showCryptoSelector && (
-                <div className="mt-1 bg-gray-900 rounded-xl border border-gray-700 overflow-hidden shadow-lg">
-                  {cryptoOptions.map((crypto) => (
-                    <button
-                      key={crypto.id}
-                      onClick={() => {
-                        setSelectedCrypto(crypto);
-                        setShowCryptoSelector(false);
-                      }}
-                      className="w-full p-3 flex items-center justify-between hover:bg-gray-800 text-white"
-                    >
-                      <div className="flex items-center">
-                        <span className="text-xl mr-2">{crypto.icon}</span>
-                        <div className="font-medium">{crypto.name}</div>
-                      </div>
-                      {selectedCrypto.id === crypto.id && (
-                        <Check className="h-5 w-5 text-primary" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
+          </div>
 
-            <div className="mb-8">
-              <label className="text-sm font-medium mb-2 block text-gray-300">
-                Amount
-              </label>
-              <div className="relative">
-                <input 
-                  type="number"
-                  value={amount}
-                  onChange={handleAmountChange}
-                  placeholder="0.00"
-                  className="w-full p-3 pr-16 rounded-xl bg-gray-900 border border-gray-700 text-xl font-medium text-white"
-                />
-                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-                  {selectedCrypto.symbol}
-                </div>
-              </div>
-              <div className="mt-2 flex justify-between">
-                <div className="text-xs text-gray-400">
-                  {/* TODO: Replace with actual available balance */}
-                  Available: 0.00 {selectedCrypto.symbol}
-                </div>
-                <button className="text-xs text-primary font-medium">
-                  MAX
-                </button>
-              </div>
-            </div>
-
-            <Button 
-              onClick={handleStake}
-              disabled={!amount || parseFloat(amount) <= 0} // Add amount validation
-              className="w-full glass-button"
+          <div className="flex space-x-4 mb-6">
+            <Button
+              type="button"
+              variant={action === 'stake' ? 'default' : 'outline'}
+              onClick={() => setAction('stake')}
+              className="flex-1"
             >
-              Stake {selectedCrypto.symbol}
-              <ChevronRight className="ml-2 h-4 w-4" />
+              Stake
             </Button>
-          </>
-        ) : (
-          <div className="py-4 text-center">
-            <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
-              <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-            </div>
-            <h3 className="text-lg font-medium mb-2 text-white">Processing Your Stake</h3>
-            <p className="text-gray-400 mb-4">
-              Please wait while we process your {amount} {selectedCrypto.symbol} stake
-            </p>
-            <div className="text-sm text-gray-500">
-              This may take a few moments to complete
+            <Button
+              type="button"
+              variant={action === 'unstake' ? 'default' : 'outline'}
+              onClick={() => setAction('unstake')}
+              className="flex-1"
+            >
+              Unstake
+            </Button>
+          </div>
+
+          <Button 
+            onClick={handleSubmit}
+            disabled={!amount || parseFloat(amount) <= 0 || isProcessing}
+            className="w-full glass-button"
+          >
+            {isProcessing ? (
+              <div className="flex items-center justify-center">
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                Processing...
+              </div>
+            ) : (
+              <>
+                {action === 'stake' ? 'Stake' : 'Unstake'} USDC
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </>
+            )}
+          </Button>
+        </div>
+
+        {userState && (
+          <div className="mt-4 p-4 bg-gray-900 rounded-lg">
+            <h3 className="font-semibold mb-2 text-white">Current Status</h3>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-400">Staked Amount</span>
+                <span className="font-medium text-white">
+                  {userState.stakedAmount.toString()} USDC
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-400">Credit Line</span>
+                <span className="font-medium text-white">
+                  {userState.creditLine.toString()} USDC
+                </span>
+              </div>
             </div>
           </div>
         )}

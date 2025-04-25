@@ -4,10 +4,12 @@ import React, { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { 
   ArrowLeft, CreditCard, Clock, DollarSign, TrendingDown,
-  CheckCircle
+  CheckCircle, Coins
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { PurchaseModal } from './PurchaseModal';
+import { useSolana } from '@/app/context/SolanaContext';
+import { useToast } from '@/app/components/ui/use-toast';
 
 // TODO: Replace with actual venues from the database
 const venueData = {
@@ -45,9 +47,12 @@ export const CreditLine: React.FC = () => {
   const router = useRouter();
   const venueId = params.venueId as string;
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [showStakingModal, setShowStakingModal] = useState(false);
   const [transactions, setTransactions] = useState(transactionData);
   const [creditUsed, setCreditUsed] = useState(494);
   const [dailyLimit] = useState(1000);
+  const { userState, stake, unstake } = useSolana();
+  const { toast } = useToast();
   
   // Safety check
   const venue = venueId ? venueData[venueId as keyof typeof venueData] : null;
@@ -74,6 +79,40 @@ export const CreditLine: React.FC = () => {
     setTransactions([newTransaction, ...transactions]);
     setCreditUsed(creditUsed + amount);
     console.log(`Recorded purchase: ${description} for $${amount}`);
+  };
+
+  const handleStake = async (amount: number) => {
+    try {
+      await stake(amount);
+      toast({
+        title: "Success",
+        description: "Successfully staked USDC",
+      });
+    } catch (error) {
+      console.error('Error staking:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to stake USDC",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleUnstake = async (amount: number) => {
+    try {
+      await unstake(amount);
+      toast({
+        title: "Success",
+        description: "Successfully unstaked USDC",
+      });
+    } catch (error) {
+      console.error('Error unstaking:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to unstake USDC",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -140,6 +179,39 @@ export const CreditLine: React.FC = () => {
         </Button>
       </div>
 
+      <div className="glass-card p-6 mb-8 animate-fade-in">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h2 className="text-lg font-medium mb-1">Staked USDC</h2>
+            <p className="text-sm text-muted-foreground">Manage your staked balance</p>
+          </div>
+          <Coins className="h-6 w-6 text-primary" />
+        </div>
+        
+        <div className="mb-3">
+          <div className="flex justify-between items-end mb-1">
+            <span className="text-xs text-muted-foreground">Staked Amount</span>
+            <span className="font-medium">
+              {userState ? `${userState.stakedAmount.toString()} USDC` : '0 USDC'}
+            </span>
+          </div>
+          <div className="flex justify-between items-end mb-1">
+            <span className="text-xs text-muted-foreground">Credit Line</span>
+            <span className="font-medium text-lg">
+              {userState ? `${userState.creditLine.toString()} USDC` : '0 USDC'}
+            </span>
+          </div>
+        </div>
+        
+        <Button 
+          onClick={() => setShowStakingModal(true)}
+          className="w-full glass-button"
+        >
+          Manage Staking
+          <Coins className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+
       <div className="mb-6 animate-fade-in">
         <h2 className="text-lg font-semibold mb-3">Recent Transactions</h2>
         
@@ -168,6 +240,37 @@ export const CreditLine: React.FC = () => {
           onPurchase={addTransaction}
           remainingCredit={dailyLimit - creditUsed}
         />
+      )}
+
+      {showStakingModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
+            <h2 className="text-2xl font-bold mb-4">Manage Staking</h2>
+            
+            <div className="space-y-4">
+              <Button
+                onClick={() => handleStake(100)}
+                className="w-full"
+              >
+                Stake 100 USDC
+              </Button>
+              <Button
+                onClick={() => handleUnstake(100)}
+                className="w-full"
+                variant="outline"
+              >
+                Unstake 100 USDC
+              </Button>
+              <Button
+                onClick={() => setShowStakingModal(false)}
+                className="w-full"
+                variant="ghost"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

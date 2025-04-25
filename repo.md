@@ -5,14 +5,28 @@
     ├── api
     │   ├── card-status
     │   │   └── route.ts
+    │   ├── cards
+    │   │   └── sync-glownet
+    │   │   │   └── route.ts
     │   ├── create-profile-and-claim
     │   │   └── route.ts
-    │   ├── login-profile
+    │   ├── memberships
+    │   │   ├── [membershipId]
+    │   │   │   └── check-in-status
+    │   │   │   │   └── route.ts
     │   │   └── route.ts
-    │   ├── logout
-    │   │   └── route.ts
-    │   └── venues
-    │   │   └── route.ts
+    │   ├── sync
+    │   │   └── cards
+    │   │   │   └── route.ts
+    │   ├── venues
+    │   │   ├── [venueId]
+    │   │   │   └── route.ts
+    │   │   ├── route.ts
+    │   │   └── sync-glownet
+    │   │   │   └── route.ts
+    │   └── wallet
+    │   │   └── glownet-details
+    │   │       └── route.ts
     ├── card
     │   └── [card_id]
     │   │   └── page.tsx
@@ -91,6 +105,8 @@
     │   │   ├── CreditLine.tsx
     │   │   ├── PurchaseModal.tsx
     │   │   └── VenueDetail.tsx
+    │   ├── venues
+    │   │   └── VenueImageUpload.tsx
     │   └── wallet
     │   │   └── WalletDashboard.tsx
     ├── context
@@ -112,27 +128,30 @@
     ├── profile
     │   ├── loading.tsx
     │   └── page.tsx
+    ├── venue
+    │   └── [venueId]
+    │   │   └── page.tsx
     └── wallet
     │   ├── loading.tsx
     │   └── page.tsx
-├── hooks
-    └── useAuth.ts
 ├── lib
     ├── auth.ts
     ├── glownet.ts
     ├── supabase.ts
     ├── supabase
+    │   ├── client.ts
+    │   ├── middleware.ts
     │   └── server.ts
     └── utils.ts
 ├── middleware.ts
-├── next.config.ts
+├── next.config.mjs
 ├── package-lock.json
 ├── package.json
 ├── pnpm-lock.yaml
 ├── postcss.config.mjs
 ├── public
     ├── barrage-club.png
-    ├── bertha-club.png
+    ├── berhta-club.png
     ├── bloom-festival.png
     ├── file.svg
     ├── globe.svg
@@ -140,8 +159,21 @@
     ├── novi1.png
     ├── vercel.svg
     └── window.svg
+├── python
+    ├── create_glownet_assets.py
+    ├── create_glownet_events.py
+    ├── delete_glownet_data.py
+    ├── fetch_glownet_summary.py
+    ├── glownet_test_data_summary.json
+    ├── sync_cards.py
+    ├── sync_venues.py
+    └── venue_images.json
 ├── repo.md
-└── tsconfig.json
+├── scripts
+    ├── sync-cards.ts
+    └── sync-venues.ts
+├── tsconfig.json
+└── vercel.json
 
 
 /.gitignore:
@@ -190,6 +222,10 @@
 42 | 
 43 | # AI instructions
 44 | repo.md
+45 | 
+46 | #supabase
+47 | supabase/
+48 | 
 
 
 --------------------------------------------------------------------------------
@@ -261,255 +297,552 @@
 --------------------------------------------------------------------------------
 /README.md:
 --------------------------------------------------------------------------------
- 1 | This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+ 1 | # Samachi
  2 | 
- 3 | ## Getting Started
+ 3 | [![Samachi Logo](placeholder.png)](https://samachi.com) 
  4 | 
- 5 | First, run the development server:
+ 5 | **Samachi is the global VIP network; a "Gympass for clubs, resorts & festivals worldwide.**
  6 | 
- 7 | ```bash
- 8 | npm run dev
- 9 | # or
-10 | yarn dev
-11 | # or
-12 | pnpm dev
-13 | # or
-14 | bun dev
-15 | ```
-16 | 
-17 | Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-18 | 
-19 | You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-20 | 
-21 | This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-22 | 
-23 | ## Learn More
-24 | 
-25 | To learn more about Next.js, take a look at the following resources:
-26 | 
-27 | - [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-28 | - [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-29 | 
-30 | You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-31 | 
-32 | ## Deploy on Vercel
-33 | 
-34 | The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-35 | 
-36 | Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-37 | 
+ 7 | Imagine tapping into exclusive venue experiences, managing your memberships effortlessly, and connecting with like-minded individuals – all starting with a simple scan of your membership card. Samachi makes this a reality.
+ 8 | 
+ 9 | We leverage RFID/NFC enabled membership cards with QR code technology for instant onboarding, Supabase for robust user & venue data management, and direct integration with venue systems (via the Glownet API) to provide real-time membership status and benefits. Utilizing Solana blockchain's fast, cheap and secure infrastructure for crypto-asset staking that enables a novel VIP, "restuarant-style" payment experience - Samachi aims to create a global network of festivals, clubs and resorts; the "Solana Social Layer".
+10 | 
+11 | ## Core Features & Vision
+12 | 
+13 | *   **Instant Onboarding:** Scan your venue membership card\'s QR code (`/card/[cardId]`) to instantly sign up or sign in. No more cumbersome registration processes.
+14 | *   **Unified Profile:** Manage your profile, linked memberships across different venues, and on-chain + closed-loop assets all in one place.
+15 | *   **Real-time Venue Integration:** Connect directly with venue systems to:
+16 |     *   Verify membership status upon entry.
+17 |     *   Check cashless balances associated with your membership.
+18 |     *   Participate in venue-specific promotions or top-up accounts.
+19 | *   **Web3 Enabled:**
+20 |     *   Connect your Solana wallet (Phantom, Solflare, etc.) securely using the Solana Mobile Wallet Adapter.
+21 |     *   Enable staking mechanisms, token-gated experiences, or other blockchain-based loyalty features.
+22 | *   **Community Hub:** (Vision) Become the central point for venue announcements, member interactions, and exclusive content.
+23 | 
+24 | ## Technology Powering Samachi
+25 | 
+26 | We\'ve built Samachi on a modern, scalable, and robust tech stack:
+27 | 
+28 | *   **Framework:** Next.js (App Router) for a fast, server-rendered React experience.
+29 | *   **Language:** TypeScript for type safety and developer efficiency.
+30 | *   **UI:** React, Tailwind CSS, and shadcn/ui for beautiful, accessible, and responsive interfaces.
+31 | *   **Backend:** Serverless functions via Next.js API Routes.
+32 | *   **Database & Auth:** Supabase handles user authentication, profile data, venue information, and membership linking with its integrated Postgres database.
+33 | *   **Wallet Integration:** Solana Mobile Wallet Adapter provides seamless and secure connection to the Solana ecosystem.
+34 | *   **Venue System Integration:** Direct communication with the Glownet API v2 for real-time membership and balance data.
+35 | *   **Package Manager:** pnpm for efficient dependency management.
+36 | 
+37 | ## Getting Started (For Development / Judging)
+38 | 
+39 | ### Prerequisites
+40 | 
+41 | *   Node.js (LTS)
+42 | *   pnpm (`npm install -g pnpm`)
+43 | *   Supabase Account & Project
+44 | *   (Optional) Smart PoS Account & API Key for testing live integration.
+45 | 
+46 | ### Installation & Setup
+47 | 
+48 | 1.  **Clone:** `git clone <your-repo-url> && cd samachi-app`
+49 | 2.  **Install:** `pnpm install`
+50 | 3.  **Environment:** Copy `.env.local.example` to `.env.local` and fill in your Supabase keys (public and service role). Add Smart PoS keys if testing that integration.
+51 |     ```ini
+52 |     # .env.local
+53 |     NEXT_PUBLIC_SUPABASE_URL=...
+54 |     NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+55 |     SUPABASE_SERVICE_ROLE_KEY=... # Keep Secret!
+56 |     GLOWNET_API_BASE_URL=https://opera.glownet.com/organization
+57 |     GLOWNET_API_KEY=... # Optional for judges
+58 |     ```
+59 | 4.  **Database:** Ensure Supabase tables are set up (use `supabase/migrations` and `supabase db push` if available, or set up manually).
+60 | 
+61 | ### Running Locally
+62 | 
+63 | ```bash
+64 | pnpm dev
+65 | ```
+66 | 
+67 | Access the app at `http://localhost:3000`.
+68 | 
+69 | ## Future Enhancements
+70 | 
+71 | Beyond the core hackathon deliverable, Samachi has the potential to grow:
+72 | 
+73 | *   **Deeper Glownet Integration:** Implement transaction history, top-ups, and potentially direct purchases via the Samachi interface.
+74 | *   **Advanced Staking Models:** Introduce varied staking options and yields tied to membership levels or venue participation.
+75 | *   **Cross-Venue Promotions:** Continue facilitating partnerships and offers between participating venues.
+76 | *   **Social Features:** Build out community forums, event calendars, and member-to-member interactions.
+77 | *   **Venue Dashboard:** Provide tools for venues to manage their presence and promotions on Samachi.
+78 | *   **NFT Ticketing:** Control access with a tokenized entry, availble for resale on secondary markets.
+79 | 
+80 | ---
+81 | 
+82 | *Samachi - Low Key, High Vibes, Everywhere.*
+83 | 
 
 
 --------------------------------------------------------------------------------
 /app/api/card-status/route.ts:
 --------------------------------------------------------------------------------
  1 | import { NextRequest, NextResponse } from 'next/server';
- 2 | import { supabase } from '@/lib/supabase'; // Import your initialized client
- 3 | 
- 4 | // Opt out of caching and force dynamic rendering for this route
- 5 | export const dynamic = 'force-dynamic';
- 6 | 
- 7 | export async function GET(request: NextRequest) {
- 8 |   const { searchParams } = new URL(request.url);
- 9 |   const cardIdentifier = searchParams.get('card_id'); // Get the readable ID
-10 | 
-11 |   if (!cardIdentifier) {
-12 |     return NextResponse.json({ error: 'Card ID is required' }, { status: 400 });
-13 |   }
-14 | 
-15 |   console.log(`API: Checking status for card identifier: ${cardIdentifier}`);
+ 2 | // import { supabase } from '@/lib/supabase'; // Remove old client import
+ 3 | import { cookies } from 'next/headers'; // Add cookies import
+ 4 | import { createClient } from '@/lib/supabase/server'; // Import server client creator
+ 5 | 
+ 6 | // Opt out of caching and force dynamic rendering for this route
+ 7 | export const dynamic = 'force-dynamic';
+ 8 | 
+ 9 | export async function GET(request: NextRequest) {
+10 |   const { searchParams } = new URL(request.url);
+11 |   const cardIdentifier = searchParams.get('card_id'); // Get the readable ID
+12 | 
+13 |   if (!cardIdentifier) {
+14 |     return NextResponse.json({ error: 'Card ID is required' }, { status: 400 });
+15 |   }
 16 | 
-17 |   try {
-18 |     // Query the membership_cards table
-19 |     const { data, error } = await supabase
-20 |       .from('membership_cards')
-21 |       .select('status, user_id') // Select the status and if a user is linked
-22 |       .eq('card_identifier', cardIdentifier) // Match the readable identifier
-23 |       .single(); // Expect only one card with this identifier
-24 | 
-25 |     if (error && error.code !== 'PGRST116') { // PGRST116 means no rows found, which is okay
-26 |       console.error('Supabase query error:', error);
-27 |       return NextResponse.json({ error: 'Error checking card status', details: error.message }, { status: 500 });
-28 |     }
-29 | 
-30 |     if (!data) {
-31 |       // Card identifier doesn't exist in the table
-32 |       console.log(`Card identifier ${cardIdentifier} not found.`);
-33 |       return NextResponse.json({ error: 'Card not found' }, { status: 404 });
+17 |   console.log(`API: Checking status for card identifier: ${cardIdentifier}`);
+18 | 
+19 |   // Create server client instance
+20 |   const cookieStore = cookies();
+21 |   const supabase = createClient(cookieStore);
+22 | 
+23 |   try {
+24 |     // Query the membership_cards table
+25 |     const { data, error } = await supabase
+26 |       .from('membership_cards')
+27 |       .select('status, user_id') // Select the status and if a user is linked
+28 |       .eq('card_identifier', cardIdentifier) // Match the readable identifier
+29 |       .single(); // Expect only one card with this identifier
+30 | 
+31 |     if (error && error.code !== 'PGRST116') { // PGRST116 means no rows found, which is okay
+32 |       console.error('Supabase query error:', error);
+33 |       return NextResponse.json({ error: 'Error checking card status', details: error.message }, { status: 500 });
 34 |     }
 35 | 
-36 |     // Determine registration status based on whether user_id is set
-37 |     const isRegistered = !!data.user_id; // True if user_id is not null
-38 |     const status = isRegistered ? 'registered' : 'unregistered';
-39 | 
-40 |     console.log(`Card ${cardIdentifier} status: ${status} (User ID: ${data.user_id})`);
+36 |     if (!data) {
+37 |       // Card identifier doesn't exist in the table
+38 |       console.log(`Card identifier ${cardIdentifier} not found.`);
+39 |       return NextResponse.json({ error: 'Card not found' }, { status: 404 });
+40 |     }
 41 | 
-42 |     return NextResponse.json({ 
-43 |       cardId: cardIdentifier, // Return the identifier that was checked
-44 |       status: status, 
-45 |       isRegistered: isRegistered // Explicit boolean might be useful on client
-46 |     });
+42 |     // Determine registration status based on whether user_id is set
+43 |     const isRegistered = !!data.user_id; // True if user_id is not null
+44 |     const status = isRegistered ? 'registered' : 'unregistered';
+45 | 
+46 |     console.log(`Card ${cardIdentifier} status: ${status} (User ID: ${data.user_id})`);
 47 | 
-48 |   } catch (err) {
-49 |     console.error('API route error:', err);
-50 |     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-51 |   }
-52 | } 
+48 |     return NextResponse.json({ 
+49 |       cardId: cardIdentifier, // Return the identifier that was checked
+50 |       status: status, 
+51 |       isRegistered: isRegistered // Explicit boolean might be useful on client
+52 |     });
+53 | 
+54 |   } catch (err) {
+55 |     console.error('API route error:', err);
+56 |     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+57 |   }
+58 | } 
 
 
 --------------------------------------------------------------------------------
-/app/api/login-profile/route.ts:
+/app/api/memberships/[membershipId]/check-in-status/route.ts:
 --------------------------------------------------------------------------------
- 1 | import { NextResponse } from 'next/server';
- 2 | import { createClient } from '@supabase/supabase-js';
- 3 | import bcrypt from 'bcryptjs';
+  1 | import { NextRequest, NextResponse } from 'next/server';
+  2 | // import { cookies } from 'next/headers'; // Commented out
+  3 | // import { createClient } from '@/lib/supabase/server'; // Commented out
+  4 | // import { getGlownetCustomerDetails, type GlownetCustomer } from '@/lib/glownet'; // Commented out
+  5 | 
+  6 | // // Define the expected structure for the Supabase query result - Commented out
+  7 | // type MembershipWithVenue = {
+  8 | //   id: string; 
+  9 | //   user_id: string; 
+ 10 | //   venue_id: string; 
+ 11 | //   glownet_customer_id: number | null;
+ 12 | //   status: string; 
+ 13 | //   venues: { 
+ 14 | //     glownet_event_id: number | null;
+ 15 | //   } | null;
+ 16 | // };
+ 17 | 
+ 18 | export async function GET(
+ 19 |   request: NextRequest,
+ 20 |   context: { params: { membershipId: string } }
+ 21 | ) {
+ 22 |   const membershipId = context.params.membershipId;
+ 23 |   console.log("Minimal GET handler called for membershipId:", membershipId);
+ 24 |   return NextResponse.json({ success: true, membershipId });
+ 25 | 
+ 26 | /* // Comment out the entire previous logic block
+ 27 |   // console.log(`Simplified GET handler for /api/memberships/${membershipId}/check-in`); // Comment out the simplified log
+ 28 |   // return NextResponse.json({ message: "Handler simplified for testing", membershipId }); // Comment out the simplified return
+ 29 | 
+ 30 |   // Original logic commented out for testing
+ 31 |   const cookieStore = await cookies();
+ 32 |   const supabase = createClient(cookieStore);
+ 33 | 
+ 34 |   try {
+ 35 |     // 1. Authenticate User using Supabase Auth
+ 36 |     const { data: { user }, error: authError } = await supabase.auth.getUser();
+ 37 | 
+ 38 |     if (authError || !user) {
+ 39 |       console.error('Auth Error in check-in route:', authError);
+ 40 |       return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+ 41 |     }
+ 42 |     const userId = user.id; // Get user ID from Supabase session
+ 43 | 
+ 44 |     // 2. Fetch Membership and Venue Details from Supabase, ensuring it belongs to the authenticated user
+ 45 |     console.log(`Fetching membership ${membershipId} for user ${userId}...`);
+ 46 |     const { data: membership, error: membershipError } = await supabase
+ 47 |       .from('memberships')
+ 48 |       .select(`
+ 49 |         id,
+ 50 |         user_id,
+ 51 |         venue_id,
+ 52 |         glownet_customer_id,
+ 53 |         status,
+ 54 |         venues ( glownet_event_id )
+ 55 |       `)
+ 56 |       .eq('id', membershipId)
+ 57 |       .eq('user_id', userId)
+ 58 |       .single<MembershipWithVenue>();
+ 59 | 
+ 60 |     if (membershipError) {
+ 61 |       console.error(`Error fetching membership ${membershipId} for user ${userId}:`, membershipError);
+ 62 |       // Check if error is due to no rows found (PGRST116)
+ 63 |        if (membershipError.code === 'PGRST116') {
+ 64 |           return NextResponse.json({ error: 'Membership not found or access denied.' }, { status: 404 });
+ 65 |       }
+ 66 |       return NextResponse.json({ error: 'Failed to retrieve membership details.' }, { status: 500 });
+ 67 |     }
+ 68 | 
+ 69 |     // Note: No need for explicit !membership check if .single() throws on no rows
+ 70 | 
+ 71 |     // 3. Validate required Glownet IDs
+ 72 |     const glownetCustomerId = membership.glownet_customer_id;
+ 73 |     // Type guard for nested venue data
+ 74 |     const glownetEventId = membership.venues?.glownet_event_id;
+ 75 | 
+ 76 |     if (!glownetCustomerId) {
+ 77 |       console.error(`Membership ${membershipId} is missing Glownet Customer ID.`);
+ 78 |       return NextResponse.json({ error: 'Membership is not correctly linked to Glownet.' }, { status: 409 });
+ 79 |     }
+ 80 | 
+ 81 |     if (typeof glownetEventId !== 'number') {
+ 82 |         console.error(`Venue data or Glownet Event ID missing for membership ${membershipId}.`);
+ 83 |         return NextResponse.json({ error: 'Associated venue information is missing or incomplete.' }, { status: 409 });
+ 84 |     }
+ 85 | 
+ 86 |     // 4. Fetch Glownet Customer Details (Check-in status)
+ 87 |     console.log(`Fetching Glownet details for customer ${glownetCustomerId}, event ${glownetEventId}...`);
+ 88 |     const glownetData: GlownetCustomer = await getGlownetCustomerDetails(glownetEventId, glownetCustomerId);
+ 89 | 
+ 90 |     // 5. Return Relevant Glownet Data (e.g., check-in status, balance, etc.)
+ 91 |     // Adapt the response based on what getGlownetCustomerDetails returns
+ 92 |     return NextResponse.json({
+ 93 |       membershipId: membership.id,
+ 94 |       userId: membership.user_id,
+ 95 |       status: membership.status,
+ 96 |       glownetBalances: glownetData.balances,
+ 97 |       // Include other relevant fields from glownetData
+ 98 |     });
+ 99 | 
+100 |   } catch (error: any) {
+101 |     console.error(`Error in GET /api/memberships/[membershipId]/check-in:`, error);
+102 |     // Distinguish between Glownet API errors and other errors if possible
+103 |     return NextResponse.json({ error: error.message || 'Internal server error during check-in process.' }, { status: 500 });
+104 |   }
+105 |   // End of commented out logic
+106 | */
+107 | } 
+
+
+--------------------------------------------------------------------------------
+/app/api/memberships/route.ts:
+--------------------------------------------------------------------------------
+ 1 | import { NextRequest, NextResponse } from 'next/server';
+ 2 | import { cookies } from 'next/headers';
+ 3 | import { createClient } from '@/lib/supabase/server';
  4 | 
- 5 | const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
- 6 | const supabaseAdminKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // Use Admin Key
- 7 | 
- 8 | if (!supabaseUrl || !supabaseAdminKey) {
- 9 |   console.error('Missing Supabase URL or Admin Key environment variables.');
-10 | }
-11 | 
-12 | const supabaseAdmin = createClient(supabaseUrl!, supabaseAdminKey!);
+ 5 | // Define types for cleaner code (adjust based on actual schema)
+ 6 | interface Venue {
+ 7 |   id: string;
+ 8 |   name: string;
+ 9 |   address?: string | null;
+10 |   image_url?: string | null;
+11 |   glownet_event_id: number;
+12 | }
 13 | 
-14 | // Define a secure cookie name
-15 | const SESSION_COOKIE_NAME = 'auth_session';
-16 | 
-17 | export async function POST(request: Request) {
-18 |   try {
-19 |     const { username, password } = await request.json();
-20 | 
-21 |     // 1. Validate Input
-22 |     if (!username || !password) {
-23 |       return NextResponse.json({ error: 'Username and password are required' }, { status: 400 });
-24 |     }
+14 | interface MembershipWithVenue {
+15 |   id: string;
+16 |   status: string;
+17 |   glownet_customer_id: number;
+18 |   created_at: string;
+19 |   venues: Venue | null; // Relationship can be null if venue deleted
+20 | }
+21 | 
+22 | export async function GET(request: NextRequest) {
+23 |   const cookieStore = await cookies();
+24 |   const supabase = createClient(cookieStore);
 25 | 
-26 |     // 2. Find Profile by Username
-27 |     const { data: profile, error: findError } = await supabaseAdmin
-28 |       .from('profiles')
-29 |       .select('id, username, password_hash') // Select the hash
-30 |       .eq('username', username)
-31 |       .single(); // Expect exactly one user with this username
-32 | 
-33 |     if (findError) {
-34 |         // Add specific log for find error
-35 |         console.error(`[API Login] Supabase find error for username ${username}:`, findError);
-36 |         // Still return generic message to client
-37 |         return NextResponse.json({ error: 'Invalid username or password.' }, { status: 401 });
-38 |     }
-39 |     if (!profile) {
-40 |       console.warn(`[API Login] Login attempt failed for username: ${username}. User not found.`);
-41 |       return NextResponse.json({ error: 'Invalid username or password.' }, { status: 401 }); // Unauthorized
-42 |     }
-43 | 
-44 |     // Ensure password_hash is valid before comparing
-45 |     if (!profile.password_hash || typeof profile.password_hash !== 'string') {
-46 |         console.error(`[API Login] Invalid or missing password hash for username: ${username}. Profile ID: ${profile.id}`);
-47 |         // This indicates a problem during profile creation/update
-48 |         return NextResponse.json({ error: 'Account configuration error. Please contact support.' }, { status: 500 });
-49 |     }
-50 | 
-51 |     // 3. Compare Password Hashes
-52 |     console.log(`[API Login] Comparing password for username: ${username}`); // Log before compare
-53 |     const passwordMatch = await bcrypt.compare(password, profile.password_hash);
-54 |     console.log(`[API Login] Password match result for ${username}:`, passwordMatch); // Log after compare
+26 |   try {
+27 |     // 1. Authenticate User using Supabase Auth
+28 |     const { data: { user }, error: authError } = await supabase.auth.getUser();
+29 | 
+30 |     if (authError || !user) {
+31 |       console.error('Auth Error fetching memberships:', authError);
+32 |       return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+33 |     }
+34 |     const userId = user.id; // Get user ID from Supabase session
+35 | 
+36 |     // 2. Fetch Memberships with Venue Details for the authenticated user
+37 |     console.log(`Fetching memberships for user ID: ${userId}`);
+38 |     const { data: memberships, error } = await supabase
+39 |       .from('memberships')
+40 |       .select(`
+41 |         id,
+42 |         status,
+43 |         created_at,
+44 |         user_id,
+45 |         venues (
+46 |           id,
+47 |           name,
+48 |           address,
+49 |           image_url
+50 |         )
+51 |       `)
+52 |       .eq('user_id', userId) // Filter by the authenticated user ID
+53 |       .order('created_at', { ascending: false })
+54 |       .returns<MembershipWithVenue[]>(); // Use the defined type
 55 | 
-56 |     if (!passwordMatch) {
-57 |       console.warn(`Login attempt failed for username: ${username}. Incorrect password.`);
-58 |       return NextResponse.json({ error: 'Invalid username or password.' }, { status: 401 }); // Unauthorized
+56 |     if (error) {
+57 |       console.error(`Error fetching memberships for user ${userId}:`, error);
+58 |       return NextResponse.json({ error: 'Database error fetching memberships.' }, { status: 500 });
 59 |     }
 60 | 
-61 |     // 4. Login Successful
-62 |     console.log(`Login successful for username: ${username}, Profile ID: ${profile.id}`);
-63 | 
-64 |     // 5. Prepare Success Response
-65 |     const response = NextResponse.json({
-66 |         message: 'Signed in successfully!',
-67 |         profile: { id: profile.id, username: profile.username } // Can return profile info
-68 |     });
-69 | 
-70 |     // 6. Set Session Cookie on the Response
-71 |     response.cookies.set(SESSION_COOKIE_NAME, profile.id, {
-72 |       httpOnly: true, // Prevent client-side JS access
-73 |       secure: process.env.NODE_ENV === 'production', // Use Secure in production (HTTPS)
-74 |       maxAge: 60 * 60 * 24 * 7, // Example: 1 week expiry
-75 |       path: '/', // Available on all paths
-76 |       sameSite: 'lax', // Recommended for most cases
-77 |     });
-78 | 
-79 |     // 7. Return the Response with the Cookie
-80 |     return response;
-81 | 
-82 |   } catch (error: any) {
-83 |     // --- Enhanced Error Logging --- 
-84 |     console.error('-----------------------------------------');
-85 |     console.error('LOGIN API ROUTE CRITICAL ERROR:');
-86 |     console.error('Timestamp:', new Date().toISOString());
-87 |     // Log the specific error object
-88 |     console.error('Error Name:', error.name);
-89 |     console.error('Error Message:', error.message);
-90 |     console.error('Error Stack:', error.stack);
-91 |     // Log request details if possible (be careful with sensitive data)
-92 |     // const requestBody = await request.clone().json().catch(() => ({})); // Avoid logging raw password
-93 |     // console.error('Request Body (Username only):', { username: requestBody.username });
-94 |     console.error('-----------------------------------------');
-95 |     // Return generic error to client
-96 |     return NextResponse.json({ error: 'An internal server error occurred during login.' }, { status: 500 });
-97 |   }
-98 | } 
+61 |     if (!memberships) {
+62 |       console.log(`No memberships found for user ${userId}. Returning empty array.`);
+63 |       return NextResponse.json([]);
+64 |     }
+65 | 
+66 |     console.log(`Successfully fetched ${memberships.length} memberships for user ${userId}.`);
+67 |     // Filter out memberships where the related venue might have been deleted
+68 |     const validMemberships = memberships.filter((m: MembershipWithVenue) => m.venues !== null);
+69 |     return NextResponse.json(validMemberships);
+70 | 
+71 |   } catch (err: any) {
+72 |      console.error('Unexpected error in GET /api/memberships:', err);
+73 |      return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+74 |   }
+75 | } 
 
 
 --------------------------------------------------------------------------------
-/app/api/logout/route.ts:
+/app/api/sync/cards/route.ts:
+--------------------------------------------------------------------------------
+  1 | import { NextResponse } from 'next/server';
+  2 | import { cookies } from 'next/headers';
+  3 | import { createClient } from '@/lib/supabase/server';
+  4 | import { getGlownetEventDetailsByGtagUid } from '@/lib/glownet';
+  5 | 
+  6 | export async function POST(request: Request) {
+  7 |   const cookieStore = await cookies();
+  8 |   const supabase = createClient(cookieStore);
+  9 | 
+ 10 |   try {
+ 11 |     // 1. Get the list of card identifiers to sync
+ 12 |     const { cardIds } = await request.json();
+ 13 | 
+ 14 |     if (!Array.isArray(cardIds)) {
+ 15 |       return NextResponse.json({ error: 'cardIds must be an array' }, { status: 400 });
+ 16 |     }
+ 17 | 
+ 18 |     console.log(`Syncing ${cardIds.length} cards with Glownet...`);
+ 19 | 
+ 20 |     const results = {
+ 21 |       total: cardIds.length,
+ 22 |       synced: 0,
+ 23 |       failed: 0,
+ 24 |       skipped: 0,
+ 25 |       details: [] as Array<{
+ 26 |         cardId: string;
+ 27 |         status: 'synced' | 'failed' | 'skipped';
+ 28 |         error?: string;
+ 29 |         glownetEventId?: number;
+ 30 |       }>
+ 31 |     };
+ 32 | 
+ 33 |     // 2. Process each card
+ 34 |     for (const cardId of cardIds) {
+ 35 |       console.log(`Processing card: ${cardId}`);
+ 36 |       try {
+ 37 |         // 2.1 Check if card exists in our system
+ 38 |         const { data: existingCard, error: cardError } = await supabase
+ 39 |           .from('membership_cards')
+ 40 |           .select('id, card_identifier, status')
+ 41 |           .eq('card_identifier', cardId)
+ 42 |           .single();
+ 43 | 
+ 44 |         if (cardError) {
+ 45 |           console.error(`Error checking card ${cardId}:`, cardError);
+ 46 |           results.failed++;
+ 47 |           results.details.push({
+ 48 |             cardId,
+ 49 |             status: 'failed',
+ 50 |             error: 'Database error checking card existence'
+ 51 |           });
+ 52 |           continue;
+ 53 |         }
+ 54 | 
+ 55 |         // 2.2 If card doesn't exist, verify with Glownet first
+ 56 |         if (!existingCard) {
+ 57 |           try {
+ 58 |             // Verify card exists in Glownet
+ 59 |             const glownetDetails = await getGlownetEventDetailsByGtagUid(cardId);
+ 60 |             
+ 61 |             // Create card record in our system
+ 62 |             const { data: newCard, error: createError } = await supabase
+ 63 |               .from('membership_cards')
+ 64 |               .insert({
+ 65 |                 card_identifier: cardId,
+ 66 |                 status: 'unregistered'
+ 67 |               })
+ 68 |               .select()
+ 69 |               .single();
+ 70 | 
+ 71 |             if (createError) {
+ 72 |               throw new Error(`Failed to create card record: ${createError.message}`);
+ 73 |             }
+ 74 | 
+ 75 |             results.synced++;
+ 76 |             results.details.push({
+ 77 |               cardId,
+ 78 |               status: 'synced',
+ 79 |               glownetEventId: glownetDetails.event_id
+ 80 |             });
+ 81 | 
+ 82 |           } catch (glownetError: any) {
+ 83 |             console.error(`Glownet verification failed for card ${cardId}:`, glownetError);
+ 84 |             results.failed++;
+ 85 |             results.details.push({
+ 86 |               cardId,
+ 87 |               status: 'failed',
+ 88 |               error: glownetError.message || 'Failed to verify card with Glownet'
+ 89 |             });
+ 90 |           }
+ 91 |         } else {
+ 92 |           // Card already exists in our system
+ 93 |           results.skipped++;
+ 94 |           results.details.push({
+ 95 |             cardId,
+ 96 |             status: 'skipped'
+ 97 |           });
+ 98 |         }
+ 99 | 
+100 |       } catch (cardProcessError: any) {
+101 |         console.error(`Error processing card ${cardId}:`, cardProcessError);
+102 |         results.failed++;
+103 |         results.details.push({
+104 |           cardId,
+105 |           status: 'failed',
+106 |           error: cardProcessError.message || 'Unknown error during processing'
+107 |         });
+108 |       }
+109 |     }
+110 | 
+111 |     // 3. Return summary
+112 |     return NextResponse.json({
+113 |       message: 'Card sync completed',
+114 |       results
+115 |     });
+116 | 
+117 |   } catch (error: any) {
+118 |     console.error('Card sync error:', error);
+119 |     return NextResponse.json({
+120 |       error: error.message || 'Internal server error during card sync'
+121 |     }, { status: 500 });
+122 |   }
+123 | } 
+
+
+--------------------------------------------------------------------------------
+/app/api/venues/[venueId]/route.ts:
 --------------------------------------------------------------------------------
  1 | import { NextResponse } from 'next/server';
- 2 | import { cookies } from 'next/headers';
- 3 | 
- 4 | // Define the same secure cookie name
- 5 | const SESSION_COOKIE_NAME = 'auth_session';
- 6 | 
- 7 | export async function POST(request: Request) {
- 8 |   try {
- 9 |     console.log('[API Logout] Clearing session cookie.');
-10 | 
-11 |     // Prepare response first
-12 |     const response = NextResponse.json({ message: 'Logged out successfully' });
-13 | 
-14 |     // Clear the cookie by setting its maxAge to 0 or expiring it
-15 |     response.cookies.set(SESSION_COOKIE_NAME, '', { // Set value to empty
-16 |       httpOnly: true,
-17 |       secure: process.env.NODE_ENV === 'production',
-18 |       expires: new Date(0), // Expire immediately
-19 |       path: '/',
-20 |       sameSite: 'lax',
-21 |     });
-22 | 
-23 |     return response;
-24 | 
-25 |   } catch (error: any) {
-26 |     console.error('[API Logout] Error during logout:', error);
-27 |     return NextResponse.json({ error: 'Logout failed.' }, { status: 500 });
-28 |   }
-29 | }
-30 | 
-31 | // Allow GET as well for simpler client-side calls if needed (e.g., link click)
-32 | // Although POST is generally preferred for actions that change state.
-33 | export async function GET(request: Request) {
-34 |     return POST(request); // Just call the POST handler
-35 | } 
+ 2 | import { createClient } from '@/lib/supabase/server';
+ 3 | import { cookies } from 'next/headers';
+ 4 | 
+ 5 | export async function GET(
+ 6 |   request: Request,
+ 7 |   { params }: { params: { venueId: string } }
+ 8 | ) {
+ 9 |   const venueId = params.venueId;
+10 |   const cookieStore = await cookies();
+11 |   const supabase = createClient(cookieStore);
+12 | 
+13 |   // Validate if venueId looks like a UUID (basic check)
+14 |   if (!venueId || !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(venueId)) {
+15 |       return NextResponse.json({ error: 'Invalid Venue ID format.' }, { status: 400 });
+16 |   }
+17 | 
+18 |   try {
+19 |     console.log(`Fetching venue details for ID: ${venueId}`);
+20 |     const { data: venue, error } = await supabase
+21 |       .from('venues')
+22 |       .select(`
+23 |         id,
+24 |         name,
+25 |         glownet_event_id,
+26 |         address,
+27 |         image_url,
+28 |         created_at,
+29 |         updated_at
+30 |       `)
+31 |       .eq('id', venueId)
+32 |       .single();
+33 | 
+34 |     if (error) {
+35 |       console.error(`Error fetching venue ${venueId}:`, error);
+36 |       // Check if the error is because the venue was not found
+37 |       if (error.code === 'PGRST116') { // PostgREST code for "relation does not contain row"
+38 |          return NextResponse.json({ error: 'Venue not found.' }, { status: 404 });
+39 |       }
+40 |       return NextResponse.json({ error: 'Database error fetching venue.' }, { status: 500 });
+41 |     }
+42 | 
+43 |     if (!venue) {
+44 |       // This case might be redundant due to .single() throwing error, but good safety check
+45 |       return NextResponse.json({ error: 'Venue not found.' }, { status: 404 });
+46 |     }
+47 | 
+48 |     console.log(`Successfully fetched venue: ${venue.name}`);
+49 |     return NextResponse.json(venue);
+50 | 
+51 |   } catch (error: any) {
+52 |     console.error('----------------------------------------');
+53 |     console.error('FETCH VENUE DETAIL API ERROR:');
+54 |     console.error('Venue ID:', venueId);
+55 |     console.error('Timestamp:', new Date().toISOString());
+56 |     console.error('Error Name:', error.name);
+57 |     console.error('Error Message:', error.message);
+58 |     console.error('Error Stack:', error.stack);
+59 |     console.error('----------------------------------------');
+60 | 
+61 |     return NextResponse.json({ error: 'Internal server error fetching venue details.' }, { status: 500 });
+62 |   }
+63 | } 
 
 
 --------------------------------------------------------------------------------
 /app/api/venues/route.ts:
 --------------------------------------------------------------------------------
  1 | import { cookies } from "next/headers";
- 2 | import { NextResponse } from "next/server";
+ 2 | import { NextRequest, NextResponse } from "next/server";
  3 | import { createClient } from "@/lib/supabase/server"; // Use the server-side client
  4 | 
  5 | export const dynamic = 'force-dynamic'; // Force dynamic execution, disable caching
  6 | 
- 7 | export async function GET(request: Request) {
+ 7 | export async function GET(request: NextRequest) {
  8 |   // Await the cookies() call to get the actual store
  9 |   const cookieStore = await cookies();
 10 |   const supabase = createClient(cookieStore); // Now pass the resolved store
@@ -539,6 +872,282 @@
 34 |     );
 35 |   }
 36 | } 
+
+
+--------------------------------------------------------------------------------
+/app/api/venues/sync-glownet/route.ts:
+--------------------------------------------------------------------------------
+  1 | import { NextResponse } from 'next/server';
+  2 | import { cookies } from 'next/headers';
+  3 | import { createClient } from '@/lib/supabase/server';
+  4 | import { getAllGlownetEvents, type GlownetEvent } from '@/lib/glownet';
+  5 | 
+  6 | // Rate limiting setup
+  7 | const RATE_LIMIT = 10; // requests per minute
+  8 | const rateLimitStore = new Map<string, number[]>();
+  9 | 
+ 10 | // Environment variable for security
+ 11 | const API_KEY = process.env.GLOWNET_API_KEY;
+ 12 | 
+ 13 | // Sync types
+ 14 | type SyncType = 'full' | 'incremental';
+ 15 | type SyncStatus = 'pending' | 'success' | 'failed';
+ 16 | 
+ 17 | // Track sync status in Supabase
+ 18 | async function trackSyncStatus(supabase: any, venueId: string, status: SyncStatus, error?: string) {
+ 19 |   await supabase
+ 20 |     .from('venues')
+ 21 |     .update({ 
+ 22 |       sync_status: status,
+ 23 |       last_sync_attempt: new Date().toISOString(),
+ 24 |       sync_error: error
+ 25 |     })
+ 26 |     .eq('id', venueId);
+ 27 | }
+ 28 | 
+ 29 | // Main sync logic
+ 30 | async function syncVenues(type: SyncType = 'full', venueImages: Record<string, { image_url: string, image_alt: string }> = {}) {
+ 31 |   const cookieStore = await cookies();
+ 32 |   const supabase = createClient(cookieStore);
+ 33 |   
+ 34 |   try {
+ 35 |     console.log(`Starting ${type} Glownet venue sync...`);
+ 36 |     const glownetEvents: GlownetEvent[] = await getAllGlownetEvents();
+ 37 |     
+ 38 |     if (!glownetEvents?.length) {
+ 39 |       console.log('No Glownet events found to sync.');
+ 40 |       return { message: 'No events to sync', status: 200 };
+ 41 |     }
+ 42 | 
+ 43 |     // Prepare venue data with enhanced fields
+ 44 |     const venuesToUpsert = glownetEvents.map((event) => {
+ 45 |       // Get image data if available
+ 46 |       const imageData = venueImages[event.id.toString()] || {};
+ 47 |       
+ 48 |       return {
+ 49 |         glownet_event_id: event.id,
+ 50 |         name: event.name,
+ 51 |         status: event.state,
+ 52 |         start_date: event.start_date,
+ 53 |         end_date: event.end_date,
+ 54 |         timezone: event.timezone,
+ 55 |         currency: event.currency,
+ 56 |         image_url: imageData.image_url || null,
+ 57 |         max_balance: event.maximum_gtag_standard_balance,
+ 58 |         max_virtual_balance: event.maximum_gtag_virtual_balance,
+ 59 |         last_synced: new Date().toISOString(),
+ 60 |         sync_status: 'success' as SyncStatus
+ 61 |       };
+ 62 |     });
+ 63 | 
+ 64 |     // Perform upsert
+ 65 |     const { data, error } = await supabase
+ 66 |       .from('venues')
+ 67 |       .upsert(venuesToUpsert, {
+ 68 |         onConflict: 'glownet_event_id',
+ 69 |         ignoreDuplicates: false,
+ 70 |       })
+ 71 |       .select('id, name, glownet_event_id');
+ 72 | 
+ 73 |     if (error) throw error;
+ 74 | 
+ 75 |     // Track sync status for each venue
+ 76 |     for (const venue of data || []) {
+ 77 |       await trackSyncStatus(supabase, venue.id, 'success');
+ 78 |     }
+ 79 | 
+ 80 |     return {
+ 81 |       message: `Successfully synced ${data?.length ?? 0} venues`,
+ 82 |       data,
+ 83 |       status: 200
+ 84 |     };
+ 85 | 
+ 86 |   } catch (error: any) {
+ 87 |     console.error('----------------------------------------');
+ 88 |     console.error('VENUE SYNC ERROR:');
+ 89 |     console.error('Timestamp:', new Date().toISOString());
+ 90 |     console.error('Error:', error);
+ 91 |     console.error('----------------------------------------');
+ 92 | 
+ 93 |     // Track failed status if possible
+ 94 |     if (error.venue_id) {
+ 95 |       await trackSyncStatus(supabase, error.venue_id, 'failed', error.message);
+ 96 |     }
+ 97 | 
+ 98 |     return {
+ 99 |       error: error.message || 'Sync failed',
+100 |       status: error.status || 500
+101 |     };
+102 |   }
+103 | }
+104 | 
+105 | // Activation Points:
+106 | 
+107 | // 1. Manual Sync via API endpoint
+108 | export async function POST(request: Request) {
+109 |   // Security check using GLOWNET_API_KEY
+110 |   const API_KEY = process.env.GLOWNET_API_KEY;
+111 | 
+112 |   if (!API_KEY) {
+113 |     console.error('GLOWNET_API_KEY is not set in environment variables.');
+114 |     return NextResponse.json({ error: 'Internal server configuration error.' }, { status: 500 });
+115 |   }
+116 | 
+117 |   // Rate limiting
+118 |   const clientIP = request.headers.get('x-forwarded-for') || 'unknown';
+119 |   const now = Date.now();
+120 |   const recentRequests = rateLimitStore.get(clientIP) || [];
+121 |   const validRequests = recentRequests.filter(time => now - time < 60000);
+122 |   
+123 |   if (validRequests.length >= RATE_LIMIT) {
+124 |     return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
+125 |   }
+126 |   
+127 |   rateLimitStore.set(clientIP, [...validRequests, now]);
+128 | 
+129 |   // Get sync type and venue images from request
+130 |   const { type = 'full', venue_images = {} } = await request.json();
+131 |   const result = await syncVenues(type as SyncType, venue_images);
+132 |   
+133 |   return NextResponse.json(
+134 |     result.error ? { error: result.error } : { message: result.message, data: result.data },
+135 |     { status: result.status }
+136 |   );
+137 | }
+138 | 
+139 | // 2. Scheduled Sync via Vercel Cron
+140 | 
+141 | // Use separate exports for Route Segment Config
+142 | export const runtime = 'edge';
+143 | export const preferredRegion = 'iad1'; 
+144 | // Note: 'regions' is deprecated, use 'preferredRegion' or 'dynamic = "force-dynamic"' if applicable
+145 | // See: https://nextjs.org/docs/app/api-reference/file-conventions/route-segment-config
+146 | 
+147 | /* // Remove the old config object
+148 | export const config = {
+149 |   runtime: 'edge',
+150 |   regions: ['iad1'],  // Specify regions if needed
+151 | };
+152 | */
+153 | 
+154 | // This function is triggered by Vercel Cron
+155 | // Configure in vercel.json:
+156 | // {
+157 | //   "crons": [{
+158 | //     "path": "/api/venues/sync-glownet",
+159 | //     "schedule": "0 */6 * * *"
+160 | //   }]
+161 | // }
+162 | export async function GET(request: Request) {
+163 |   // Only allow requests from Vercel Cron
+164 |   const isCron = request.headers.get('x-vercel-cron') === 'true';
+165 |   
+166 |   if (!isCron) {
+167 |     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+168 |   }
+169 | 
+170 |   const result = await syncVenues('incremental');
+171 |   return NextResponse.json(
+172 |     result.error ? { error: result.error } : { message: result.message },
+173 |     { status: result.status }
+174 |   );
+175 | } 
+
+
+--------------------------------------------------------------------------------
+/app/api/wallet/glownet-details/route.ts:
+--------------------------------------------------------------------------------
+ 1 | import { NextResponse } from 'next/server';
+ 2 | import { cookies } from 'next/headers';
+ 3 | import { createClient } from '@/lib/supabase/server';
+ 4 | import { getGlownetCustomerDetails, type GlownetCustomer } from '@/lib/glownet';
+ 5 | 
+ 6 | export async function GET(request: Request) {
+ 7 |   try {
+ 8 |     // 1. Authenticate User
+ 9 |     const cookieStore = await cookies();
+10 |     const supabase = createClient(cookieStore);
+11 | 
+12 |     const { data: { user }, error: authError } = await supabase.auth.getUser();
+13 | 
+14 |     if (authError || !user) {
+15 |       console.error('Auth Error in glownet-details route:', authError);
+16 |       return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+17 |     }
+18 |     const userId = user.id;
+19 | 
+20 |     // 2. Fetch the first active membership for the user to get Glownet IDs
+21 |     //    We join with venues to get the glownet_event_id
+22 |     console.log(`Fetching first active membership for user ${userId} to get Glownet IDs...`);
+23 |     const { data: membership, error: membershipError } = await supabase
+24 |       .from('memberships')
+25 |       .select(`
+26 |         glownet_customer_id,
+27 |         venues ( glownet_event_id )
+28 |       `)
+29 |       .eq('user_id', userId)
+30 |       .eq('status', 'active') // Assuming 'active' is the status for current memberships
+31 |       .limit(1)
+32 |       .maybeSingle();
+33 | 
+34 |     if (membershipError) {
+35 |       console.error(`Error fetching membership for user ${userId}:`, membershipError);
+36 |       return NextResponse.json({ error: 'Failed to retrieve membership details.' }, { status: 500 });
+37 |     }
+38 | 
+39 |     // Check for missing data more robustly
+40 |     let glownetEventId: number | undefined | null = null;
+41 |     if (membership?.venues) {
+42 |       if (Array.isArray(membership.venues) && membership.venues.length > 0) {
+43 |           glownetEventId = membership.venues[0].glownet_event_id;
+44 |       } else if (typeof membership.venues === 'object' && !Array.isArray(membership.venues)) {
+45 |           // Handle case where venues is an object (e.g., many-to-one)
+46 |           glownetEventId = (membership.venues as any).glownet_event_id; 
+47 |       }
+48 |     }
+49 | 
+50 |     if (!membership || !membership.glownet_customer_id || typeof glownetEventId !== 'number') {
+51 |         console.warn(`No active membership with required Glownet IDs found for user ${userId}. CustomerID: ${membership?.glownet_customer_id}, EventID: ${glownetEventId}`);
+52 |         return NextResponse.json({
+53 |             message: 'No active Glownet-linked membership found.',
+54 |             glownetData: null
+55 |          });
+56 |     }
+57 | 
+58 |     const glownetCustomerId = membership.glownet_customer_id;
+59 |     // glownetEventId is now guaranteed to be a number here
+60 | 
+61 |     // 3. Fetch Glownet Customer Details
+62 |     console.log(`Fetching Glownet details for customer ${glownetCustomerId} in event ${glownetEventId}...`);
+63 |     const glownetData: GlownetCustomer = await getGlownetCustomerDetails(
+64 |       glownetEventId,
+65 |       glownetCustomerId
+66 |     );
+67 | 
+68 |     // 4. Return relevant data
+69 |     //    Select only the fields needed by the frontend to minimize data transfer
+70 |     const relevantData = {
+71 |         money: glownetData.money,
+72 |         virtual_money: glownetData.virtual_money,
+73 |         balances: glownetData.balances,
+74 |         // Add other fields from GlownetCustomer if needed later
+75 |     };
+76 | 
+77 |     console.log(`Successfully fetched Glownet details for user ${userId}.`);
+78 |     return NextResponse.json({ glownetData: relevantData });
+79 | 
+80 |   } catch (error: any) {
+81 |     console.error('Error fetching Glownet wallet details:', error);
+82 |     // Distinguish Glownet API errors from others if possible
+83 |     let errorMessage = 'An unexpected error occurred.';
+84 |     if (error instanceof Error && error.message.includes('Glownet API request failed')) {
+85 |         errorMessage = 'Failed to retrieve data from Glownet.';
+86 |         // Consider specific status codes based on Glownet error if available
+87 |          return NextResponse.json({ error: errorMessage }, { status: 502 }); // Bad Gateway
+88 |     }
+89 |     return NextResponse.json({ error: errorMessage }, { status: 500 });
+90 |   }
+91 | } 
 
 
 --------------------------------------------------------------------------------
@@ -625,7 +1234,7 @@
   6 | import { Input } from '@/app/components/ui/input';
   7 | import { Label } from '@/app/components/ui/label';
   8 | import { toast } from 'sonner';
-  9 | import { useSimpleAuth } from '@/app/context/AuthContext';
+  9 | import { useAuth } from '@/app/context/AuthContext';
  10 | import { ArrowLeft } from 'lucide-react';
  11 | import { useForm } from 'react-hook-form';
  12 | import { zodResolver } from '@hookform/resolvers/zod';
@@ -638,215 +1247,280 @@
  19 |   FormLabel,
  20 |   FormMessage,
  21 | } from '@/app/components/ui/form';
- 22 | 
- 23 | // 1. Define Zod Schema
- 24 | const formSchema = z.object({
- 25 |   username: z.string().min(1, { message: 'Username is required.' }),
- 26 |   password: z.string().min(1, { message: 'Password is required.' }),
- 27 | });
- 28 | 
- 29 | export const LoginForm: React.FC = () => {
- 30 |   const router = useRouter();
- 31 |   const { login } = useSimpleAuth();
- 32 | 
- 33 |   // 2. Initialize react-hook-form
- 34 |   const form = useForm<z.infer<typeof formSchema>>({
- 35 |     resolver: zodResolver(formSchema),
- 36 |     defaultValues: {
- 37 |       username: '',
- 38 |       password: '',
- 39 |     },
- 40 |   });
- 41 | 
- 42 |   // 3. Define onSubmit handler using form data
- 43 |   async function onSubmit(values: z.infer<typeof formSchema>) {
- 44 |     // isLoading state is now form.formState.isSubmitting
- 45 |     console.log('Login form submitted:', values);
+ 22 | import Link from 'next/link';
+ 23 | 
+ 24 | // 1. Define Zod Schema
+ 25 | const formSchema = z.object({
+ 26 |   email: z.string().email({ message: 'Invalid email address.' }),
+ 27 |   password: z.string().min(1, { message: 'Password is required.' }),
+ 28 | });
+ 29 | 
+ 30 | export const LoginForm: React.FC = () => {
+ 31 |   const router = useRouter();
+ 32 |   const { supabase } = useAuth();
+ 33 | 
+ 34 |   // 2. Initialize react-hook-form
+ 35 |   const form = useForm<z.infer<typeof formSchema>>({
+ 36 |     resolver: zodResolver(formSchema),
+ 37 |     defaultValues: {
+ 38 |       email: '',
+ 39 |       password: '',
+ 40 |     },
+ 41 |   });
+ 42 | 
+ 43 |   // 3. Define onSubmit handler using Supabase auth
+ 44 |   async function onSubmit(values: z.infer<typeof formSchema>) {
+ 45 |     console.log('Login attempt with:', values.email);
  46 | 
  47 |     try {
- 48 |       const response = await fetch('/api/login-profile', {
- 49 |         method: 'POST',
- 50 |         headers: {
- 51 |           'Content-Type': 'application/json',
- 52 |         },
- 53 |         // Use validated values from react-hook-form
- 54 |         body: JSON.stringify({ username: values.username, password: values.password }),
- 55 |       });
- 56 | 
- 57 |       const data = await response.json();
- 58 | 
- 59 |       if (!response.ok) {
- 60 |         throw new Error(data.error || 'Login failed.');
- 61 |       }
+ 48 |       // Use Supabase client to sign in
+ 49 |       const { error } = await supabase.auth.signInWithPassword({
+ 50 |         email: values.email,
+ 51 |         password: values.password,
+ 52 |       });
+ 53 | 
+ 54 |       if (error) {
+ 55 |         throw error; // Throw Supabase error
+ 56 |       }
+ 57 | 
+ 58 |       toast.success('Signed in successfully!');
+ 59 |       // No need to call login() from context anymore
+ 60 |       // Redirect is handled by middleware or can be done explicitly
+ 61 |       router.push('/dashboard'); // Or router.refresh() if middleware handles redirect
  62 | 
- 63 |       toast.success(data.message || 'Signed in successfully!');
- 64 |       login(); // Update auth state
- 65 |       router.push('/dashboard'); // Redirect
- 66 | 
- 67 |     } catch (error: any) {
- 68 |       console.error('Login API error:', error);
- 69 |       toast.error(error.message || 'An error occurred during login.');
- 70 |       // Optionally reset form fields on error if desired
- 71 |       // form.reset();
- 72 |     }
- 73 |     // No need for setIsLoading(false) here, handled by react-hook-form
- 74 |   }
- 75 | 
- 76 |   return (
- 77 |     <div className="flex flex-col min-h-screen p-6">
- 78 |        <button
- 79 |         onClick={() => router.back()}
- 80 |         className="self-start mb-8 p-2 rounded-full hover:bg-black/5 transition-colors"
- 81 |         aria-label="Go back"
- 82 |         // Disable button during submission
- 83 |         disabled={form.formState.isSubmitting}
- 84 |       >
- 85 |         <ArrowLeft className="h-6 w-6" />
- 86 |       </button>
- 87 | 
- 88 |       <div className="mb-10">
- 89 |         <h1 className="text-3xl font-bold mb-2">Sign In</h1>
- 90 |         <p className="text-muted-foreground">Access your Samachi membership</p>
- 91 |       </div>
- 92 | 
- 93 |       {/* 4. Use Form component */}
- 94 |       <Form {...form}>
- 95 |         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
- 96 |           {/* Username Field */}
- 97 |           <FormField
- 98 |             control={form.control}
- 99 |             name="username"
-100 |             render={({ field }) => (
-101 |               <FormItem>
-102 |                 <FormLabel>Username</FormLabel>
-103 |                 <FormControl>
-104 |                   <Input
-105 |                     placeholder="your_username"
-106 |                     autoComplete="username"
-107 |                     className="bg-white/50 backdrop-blur-sm border-gray-200"
-108 |                     disabled={form.formState.isSubmitting}
-109 |                     {...field} // Spread field props (onChange, onBlur, value, ref)
-110 |                   />
-111 |                 </FormControl>
-112 |                 <FormMessage /> {/* Displays validation errors */}
-113 |               </FormItem>
-114 |             )}
-115 |           />
-116 | 
-117 |           {/* Password Field */}
-118 |           <FormField
-119 |             control={form.control}
-120 |             name="password"
-121 |             render={({ field }) => (
-122 |               <FormItem>
-123 |                 <FormLabel>Password</FormLabel>
-124 |                 <FormControl>
-125 |                   <Input
-126 |                     type="password"
-127 |                     placeholder="••••••••"
-128 |                     autoComplete="current-password"
-129 |                     className="bg-white/50 backdrop-blur-sm border-gray-200"
-130 |                     disabled={form.formState.isSubmitting}
-131 |                     {...field}
-132 |                   />
-133 |                 </FormControl>
-134 |                 <FormMessage />
-135 |               </FormItem>
-136 |             )}
-137 |           />
-138 | 
-139 |           <Button
-140 |             type="submit"
-141 |             className="w-full glass-button"
-142 |             disabled={form.formState.isSubmitting} // Disable based on form state
-143 |           >
-144 |             {form.formState.isSubmitting ? 'Signing In...' : 'Sign In'}
-145 |           </Button>
-146 | 
-147 |           {/* Comments remain the same */}
-148 |           {/* Link to create profile if they landed here by mistake? Or is CardLanding the only entry? */}
-149 |           {/* For MVP, maybe omit this link if flow is strictly Card -> Create or Card -> Login */}
-150 |           {/* <p className="text-center text-sm">
-151 |             Don't have an account? You need a membership card to sign up.
-152 |             <Link href="/" className="text-primary font-medium hover:underline"> Learn More</Link> 
-153 |           </p> */}
-154 |         </form>
-155 |       </Form>
-156 |     </div>
-157 |   );
-158 | }; 
+ 63 |     } catch (error: any) {
+ 64 |       console.error('Supabase login error:', error);
+ 65 |       toast.error(error.message || 'Login failed. Please check your credentials.');
+ 66 |     }
+ 67 |     // isSubmitting is handled by react-hook-form
+ 68 |   }
+ 69 | 
+ 70 |   return (
+ 71 |     <div className="flex flex-col min-h-screen p-6">
+ 72 |        <button
+ 73 |         onClick={() => router.back()}
+ 74 |         className="self-start mb-8 p-2 rounded-full hover:bg-black/5 transition-colors"
+ 75 |         aria-label="Go back"
+ 76 |         disabled={form.formState.isSubmitting}
+ 77 |       >
+ 78 |         <ArrowLeft className="h-6 w-6" />
+ 79 |       </button>
+ 80 | 
+ 81 |       <div className="mb-10">
+ 82 |         <h1 className="text-3xl font-bold mb-2">Sign In</h1>
+ 83 |         <p className="text-muted-foreground">Access your Samachi membership</p>
+ 84 |       </div>
+ 85 | 
+ 86 |       <Form {...form}>
+ 87 |         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+ 88 |           {/* Email Field */}
+ 89 |           <FormField
+ 90 |             control={form.control}
+ 91 |             name="email"
+ 92 |             render={({ field }) => (
+ 93 |               <FormItem>
+ 94 |                 <FormLabel>Email</FormLabel>
+ 95 |                 <FormControl>
+ 96 |                   <Input
+ 97 |                     type="email"
+ 98 |                     placeholder="your@email.com"
+ 99 |                     autoComplete="email"
+100 |                     className="bg-white/50 backdrop-blur-sm border-gray-200"
+101 |                     disabled={form.formState.isSubmitting}
+102 |                     {...field}
+103 |                   />
+104 |                 </FormControl>
+105 |                 <FormMessage />
+106 |               </FormItem>
+107 |             )}
+108 |           />
+109 | 
+110 |           {/* Password Field */}
+111 |           <FormField
+112 |             control={form.control}
+113 |             name="password"
+114 |             render={({ field }) => (
+115 |               <FormItem>
+116 |                 <FormLabel>Password</FormLabel>
+117 |                 <FormControl>
+118 |                   <Input
+119 |                     type="password"
+120 |                     placeholder="••••••••"
+121 |                     autoComplete="current-password"
+122 |                     className="bg-white/50 backdrop-blur-sm border-gray-200"
+123 |                     disabled={form.formState.isSubmitting}
+124 |                     {...field}
+125 |                   />
+126 |                 </FormControl>
+127 |                 <FormMessage />
+128 |                 <div className="text-right">
+129 |                   <Link href="/forgot-password"
+130 |                     className="text-sm text-primary hover:underline">
+131 |                     Forgot Password?
+132 |                   </Link>
+133 |                 </div>
+134 |               </FormItem>
+135 |             )}
+136 |           />
+137 | 
+138 |           <Button
+139 |             type="submit"
+140 |             className="w-full glass-button"
+141 |             disabled={form.formState.isSubmitting}
+142 |           >
+143 |             {form.formState.isSubmitting ? 'Signing In...' : 'Sign In'}
+144 |           </Button>
+145 | 
+146 |           {/* Comments remain the same */}
+147 |           {/* Link to create profile if they landed here by mistake? Or is CardLanding the only entry? */}
+148 |           {/* For MVP, maybe omit this link if flow is strictly Card -> Create or Card -> Login */}
+149 |           {/* <p className="text-center text-sm">
+150 |             Don't have an account? You need a membership card to sign up.
+151 |             <Link href="/" className="text-primary font-medium hover:underline"> Learn More</Link> 
+152 |           </p> */}
+153 |         </form>
+154 |       </Form>
+155 |     </div>
+156 |   );
+157 | }; 
 
 
 --------------------------------------------------------------------------------
 /app/components/discover/DiscoverVenues.tsx:
 --------------------------------------------------------------------------------
- 1 | 'use client';
- 2 | 
- 3 | import React, { useState } from 'react';
- 4 | import { List, Map, Search } from 'lucide-react';
- 5 | import { Input } from '@/app/components/ui/input';
- 6 | import { VenueList } from './VenueList';
- 7 | import { VenueMap } from './VenueMap';
- 8 | 
- 9 | export const DiscoverVenues: React.FC = () => {
-10 |   const [view, setView] = useState<'list' | 'map'>('list');
-11 |   const [searchQuery, setSearchQuery] = useState('');
-12 | 
-13 |   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-14 |     setSearchQuery(e.target.value);
-15 |   };
-16 | 
-17 |   return (
-18 |     <div className="flex flex-col pt-10 pb-20 px-6">
-19 |       <div className="mb-6 animate-fade-in">
-20 |         <h1 className="text-2xl font-bold mb-1">Search Venues & Festivals</h1>
-21 |         <p className="text-muted-foreground">Access exclusive benefits worldwide</p>
-22 |       </div>
-23 | 
-24 |       <div className="mb-6 animate-fade-in">
-25 |         <div className="relative">
-26 |           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-27 |           <Input
-28 |             value={searchQuery}
-29 |             onChange={handleSearchChange}
-30 |             placeholder="Search venues..."
-31 |             className="pl-10 bg-white/50 backdrop-blur-sm border-gray-200"
-32 |           />
-33 |         </div>
-34 |       </div>
-35 | 
-36 |       <div className="mb-6 flex justify-center space-x-2 animate-fade-in">
-37 |         <button
-38 |           onClick={() => setView('list')}
-39 |           className={`px-4 py-2 rounded-lg flex items-center ${
-40 |             view === 'list' 
-41 |               ? 'bg-primary text-white' 
-42 |               : 'bg-white/50 text-muted-foreground'
-43 |           }`}
-44 |         >
-45 |           <List className="h-4 w-4 mr-2" />
-46 |           List
-47 |         </button>
-48 |         <button
-49 |           onClick={() => setView('map')}
-50 |           className={`px-4 py-2 rounded-lg flex items-center ${
-51 |             view === 'map' 
-52 |               ? 'bg-primary text-white' 
-53 |               : 'bg-white/50 text-muted-foreground'
-54 |           }`}
-55 |         >
-56 |           <Map className="h-4 w-4 mr-2" />
-57 |           Map
-58 |         </button>
-59 |       </div>
-60 | 
-61 |       <div className="animate-fade-in">
-62 |         {view === 'list' ? <VenueList searchQuery={searchQuery} /> : <VenueMap searchQuery={searchQuery} />}
-63 |       </div>
-64 |     </div>
-65 |   );
-66 | };
-67 | 
+  1 | 'use client';
+  2 | 
+  3 | import React, { useState, useEffect } from 'react';
+  4 | import { List, Map, Search } from 'lucide-react';
+  5 | import { Input } from '@/app/components/ui/input';
+  6 | import { VenueList } from './VenueList';
+  7 | import { VenueMap } from './VenueMap';
+  8 | import { Skeleton } from '@/app/components/ui/skeleton';
+  9 | import { Alert, AlertDescription, AlertTitle } from "@/app/components/ui/alert";
+ 10 | import { Terminal } from "lucide-react";
+ 11 | 
+ 12 | // Define the expected structure of a Venue from Supabase
+ 13 | interface Venue {
+ 14 |   id: string;
+ 15 |   name: string;
+ 16 |   description: string | null;
+ 17 |   address: string | null;
+ 18 |   image_url: string | null;
+ 19 |   glownet_event_id: number | null;
+ 20 | }
+ 21 | 
+ 22 | export function DiscoverVenues() {
+ 23 |   const [view, setView] = useState<'list' | 'map'>('list');
+ 24 |   const [searchQuery, setSearchQuery] = useState('');
+ 25 |   const [venues, setVenues] = useState<Venue[]>([]);
+ 26 |   const [isLoading, setIsLoading] = useState(true);
+ 27 |   const [error, setError] = useState<string | null>(null);
+ 28 | 
+ 29 |   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+ 30 |     setSearchQuery(e.target.value);
+ 31 |   };
+ 32 | 
+ 33 |   useEffect(() => {
+ 34 |     const fetchVenues = async () => {
+ 35 |       setIsLoading(true);
+ 36 |       setError(null);
+ 37 |       try {
+ 38 |         const response = await fetch('/api/venues');
+ 39 |         if (!response.ok) {
+ 40 |           const errorData = await response.json().catch(() => ({ error: 'Failed to fetch venues' }));
+ 41 |           throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+ 42 |         }
+ 43 |         const data: Venue[] = await response.json();
+ 44 |         console.log(`DiscoverVenues: Fetched ${data.length} venues from Supabase.`);
+ 45 |         setVenues(data || []);
+ 46 |       } catch (err: any) {
+ 47 |         console.error("Error fetching venues:", err);
+ 48 |         setError(err.message || 'An unexpected error occurred.');
+ 49 |         setVenues([]);
+ 50 |       } finally {
+ 51 |         setIsLoading(false);
+ 52 |       }
+ 53 |     };
+ 54 | 
+ 55 |     fetchVenues();
+ 56 |   }, []);
+ 57 | 
+ 58 |   // Filter venues based on search query
+ 59 |   const filteredVenues = venues.filter(venue =>
+ 60 |     (venue.name && venue.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+ 61 |     (venue.address && venue.address.toLowerCase().includes(searchQuery.toLowerCase()))
+ 62 |   );
+ 63 | 
+ 64 |   if (isLoading) {
+ 65 |     return (
+ 66 |       <div className="space-y-4 p-4 md:p-6">
+ 67 |         <Skeleton className="h-10 w-1/4 mb-4" />
+ 68 |         <Skeleton className="h-8 w-full mb-2" />
+ 69 |         <Skeleton className="h-8 w-5/6" />
+ 70 |       </div>
+ 71 |     );
+ 72 |   }
+ 73 | 
+ 74 |   const noVenuesToShow = filteredVenues.length === 0;
+ 75 | 
+ 76 |   return (
+ 77 |     <div className="p-4 md:p-6">
+ 78 |       <h1 className="text-2xl md:text-3xl font-bold mb-4 text-center md:text-left">Discover</h1>
+ 79 | 
+ 80 |       {error && (
+ 81 |           <Alert variant="destructive" className="mb-4">
+ 82 |              <Terminal className="h-4 w-4" />
+ 83 |              <AlertTitle>Error Fetching Venues</AlertTitle>
+ 84 |              <AlertDescription>{error}</AlertDescription>
+ 85 |          </Alert>
+ 86 |       )}
+ 87 | 
+ 88 |       <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
+ 89 |         <div className="relative w-full md:w-auto md:flex-grow max-w-md">
+ 90 |             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+ 91 |             <Input
+ 92 |                 type="search"
+ 93 |                 placeholder="Search venues by name or location..."
+ 94 |                 value={searchQuery}
+ 95 |                 onChange={handleSearchChange}
+ 96 |                 className="pl-10 w-full"
+ 97 |             />
+ 98 |         </div>
+ 99 |         <div className="flex items-center space-x-2 shrink-0">
+100 |            <button
+101 |              onClick={() => setView('list')}
+102 |              className={`px-3 py-1.5 rounded-md flex items-center text-sm transition-colors ${ view === 'list' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground' }`}
+103 |            >
+104 |              <List className="h-4 w-4 mr-1.5" />
+105 |              List
+106 |            </button>
+107 |            <button
+108 |              onClick={() => setView('map')}
+109 |               className={`px-3 py-1.5 rounded-md flex items-center text-sm transition-colors ${ view === 'map' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground' }`}
+110 |            >
+111 |              <Map className="h-4 w-4 mr-1.5" />
+112 |              Map
+113 |            </button>
+114 |         </div>
+115 |       </div>
+116 | 
+117 |       {noVenuesToShow ? (
+118 |              <Alert className="mt-4">
+119 |                 <Terminal className="h-4 w-4" />
+120 |                 <AlertTitle>No Venues Found</AlertTitle>
+121 |                 <AlertDescription>
+122 |                     {searchQuery ? `No venues match your search "${searchQuery}".` : "No venues available."}
+123 |                 </AlertDescription>
+124 |             </Alert>
+125 |         ) : (
+126 |             <div className="animate-fade-in">
+127 |                 {view === 'list' ? <VenueList venues={filteredVenues} /> : <VenueMap venues={filteredVenues} />}
+128 |             </div>
+129 |         )}
+130 |     </div>
+131 |   );
+132 | }
+133 | 
 
 
 --------------------------------------------------------------------------------
@@ -854,103 +1528,76 @@
 --------------------------------------------------------------------------------
  1 | 'use client';
  2 | 
- 3 | import React, { useMemo } from 'react';
+ 3 | import React from 'react';
  4 | import { useRouter } from 'next/navigation';
- 5 | import { MapPin, ExternalLink } from 'lucide-react';
+ 5 | import { MapPin, ExternalLink, Building } from 'lucide-react';
  6 | 
- 7 | // TODO: Replace with actual venues from the database
- 8 | const venues = [
- 9 |   {
-10 |     id: '1',
-11 |     name: 'El Noviciado',
-12 |     location: 'Social Club, Madrid',
-13 |     description: 'Exclusive social club with live music and intimate ambiance',
-14 |     image: '/novi1.png',
-15 |   },
-16 |   {
-17 |     id: '2',
-18 |     name: 'Bloom Festival',
-19 |     location: 'Festival, Malta',
-20 |     description: 'High-energy festival featuring world-class DJs and performers',
-21 |     image: '/bloom-festival.png',
-22 |   },
-23 |   {
-24 |     id: '3',
-25 |     name: 'Barrage Club',
-26 |     location: 'Nightclub, Greece',
-27 |     description: 'Beachfront club with stunning ocean views and premium service',
-28 |     image: '/barrage-club.png',
-29 |   },
-30 |   {
-31 |     id: '4',
-32 |     name: 'Berhta Club',
-33 |     location: 'Social Club, Washington D.C.',
-34 |     description: 'Sophisticated venue with elegant design and premium atmosphere',
-35 |     image: '/bertha-club.png',
-36 |   },
-37 | ];
-38 | 
-39 | // Define props including searchQuery
-40 | interface VenueListProps {
-41 |   searchQuery: string;
-42 | }
-43 | 
-44 | export const VenueList: React.FC<VenueListProps> = ({ searchQuery }) => {
-45 |   const router = useRouter();
-46 | 
-47 |   // Filter venues based on search query
-48 |   const filteredVenues = useMemo(() => {
-49 |     if (!searchQuery) {
-50 |       return venues;
-51 |     }
-52 |     return venues.filter(venue => 
-53 |       venue.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-54 |       venue.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-55 |       venue.description.toLowerCase().includes(searchQuery.toLowerCase())
-56 |     );
-57 |   }, [searchQuery]);
-58 | 
-59 |   const handleVenueClick = (venueId: string) => {
-60 |     router.push(`/venue/${venueId}`);
-61 |   };
-62 | 
-63 |   return (
-64 |     <div className="space-y-4">
-65 |       {filteredVenues.map((venue) => (
-66 |         <div 
-67 |           key={venue.id} 
-68 |           className="glass-card overflow-hidden cursor-pointer"
-69 |           onClick={() => handleVenueClick(venue.id)}
-70 |         >
-71 |           <div className="h-48 relative overflow-hidden">
-72 |             <img 
-73 |               src={venue.image} 
-74 |               alt={venue.name} 
-75 |               className="w-full h-full object-cover"
-76 |             />
-77 |           </div>
-78 |           
-79 |           <div className="p-4">
-80 |             <h3 className="text-lg font-semibold mb-1">{venue.name}</h3>
-81 |             <p className="text-xs text-muted-foreground flex items-center mb-2">
-82 |               <MapPin className="h-3 w-3 mr-1" />
-83 |               {venue.location}
-84 |             </p>
-85 |             <p className="text-sm mb-3">{venue.description}</p>
-86 |             <button className="text-primary text-sm font-medium flex items-center">
-87 |               View Details 
-88 |               <ExternalLink className="h-3 w-3 ml-1" />
-89 |             </button>
-90 |           </div>
-91 |         </div>
-92 |       ))}
-93 |       {filteredVenues.length === 0 && (
-94 |         <p className="text-center text-muted-foreground">No venues found matching your search.</p>
-95 |       )}
-96 |     </div>
-97 |   );
-98 | };
-99 | 
+ 7 | // Define venue interface consistently with DiscoverVenues
+ 8 | interface Venue {
+ 9 |   id: string;
+10 |   name: string;
+11 |   description: string | null;
+12 |   address: string | null;
+13 |   image_url: string | null;
+14 |   glownet_event_id: number | null;
+15 | }
+16 | 
+17 | interface VenueListProps {
+18 |   venues: Venue[];
+19 | }
+20 | 
+21 | export function VenueList({ venues }: VenueListProps) {
+22 |   const router = useRouter();
+23 | 
+24 |   const handleVenueClick = (venueId: string) => {
+25 |     router.push(`/venue/${venueId}`);
+26 |   };
+27 | 
+28 |   if (venues.length === 0) {
+29 |     return <p className="text-center text-muted-foreground">No venues to display.</p>;
+30 |   }
+31 | 
+32 |   return (
+33 |     <div className="space-y-4">
+34 |       {venues.map((venue) => (
+35 |         <div
+36 |           key={venue.id}
+37 |           className="glass-card overflow-hidden cursor-pointer transition-transform duration-200 hover:scale-[1.02]"
+38 |           onClick={() => handleVenueClick(venue.id)}
+39 |         >
+40 |           <div className="h-48 relative overflow-hidden bg-gray-200">
+41 |             {venue.image_url ? (
+42 |                 <img
+43 |                 src={venue.image_url}
+44 |                 alt={venue.name || 'Venue image'}
+45 |                 className="w-full h-full object-cover"
+46 |                 />
+47 |             ) : (
+48 |                 <div className="w-full h-full flex flex-col items-center justify-center text-gray-500">
+49 |                     <Building className="h-12 w-12 mb-2 text-gray-400"/>
+50 |                     <span>No Image</span>
+51 |                 </div>
+52 |             )}
+53 |           </div>
+54 | 
+55 |           <div className="p-4">
+56 |             <h3 className="text-lg font-semibold mb-1">{venue.name || 'Unnamed Venue'}</h3>
+57 |             <p className="text-xs text-muted-foreground flex items-center mb-2">
+58 |               <MapPin className="h-3 w-3 mr-1" />
+59 |               {venue.address || 'Location not specified'}
+60 |             </p>
+61 |             <p className="text-sm mb-3">{venue.description || 'No description available.'}</p>
+62 |             <button className="text-primary text-sm font-medium flex items-center hover:underline">
+63 |               View Details
+64 |               <ExternalLink className="h-3 w-3 ml-1" />
+65 |             </button>
+66 |           </div>
+67 |         </div>
+68 |       ))}
+69 |     </div>
+70 |   );
+71 | }
+72 | 
 
 
 --------------------------------------------------------------------------------
@@ -958,367 +1605,93 @@
 --------------------------------------------------------------------------------
  1 | 'use client';
  2 | 
- 3 | import React, { useMemo } from 'react';
- 4 | 
- 5 | // TODO: Replace with actual venues from the database, implement Map
- 6 | const venues = [
- 7 |   { id: '1', name: 'El Noviciado', location: 'Madrid', coords: { lat: 40.4168, lng: -3.7038 }, image: '/images/novi1.png' },
- 8 |   { id: '2', name: 'Bloom Festival', location: 'Malta', coords: { lat: 35.9375, lng: 14.3754 }, image: '/images/bloom-festival.png' },
- 9 |   { id: '3', name: 'Barrage Club', location: 'Greece', coords: { lat: 39.0742, lng: 21.8243 }, image: '/images/barrage-club.png' },
-10 |   { id: '4', name: 'Berhta Club', location: 'Washington D.C.', coords: { lat: 38.9072, lng: -77.0369 }, image: '/images/berhta-club.png' },
-11 | ];
-12 | 
-13 | // Define props including searchQuery
-14 | interface VenueMapProps {
-15 |   searchQuery: string;
-16 | }
-17 | 
-18 | export const VenueMap: React.FC<VenueMapProps> = ({ searchQuery }) => {
-19 | 
-20 |   // Filter venues based on search query for map markers
-21 |   const filteredVenues = useMemo(() => {
-22 |     if (!searchQuery) {
-23 |       return venues;
-24 |     }
-25 |     // Simple filter for map, adjust as needed
-26 |     return venues.filter(venue => 
-27 |       venue.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-28 |       venue.location.toLowerCase().includes(searchQuery.toLowerCase())
-29 |     );
-30 |   }, [searchQuery]);
-31 | 
-32 |   return (
-33 |     <div className="glass-card h-96 relative overflow-hidden">
-34 |       <div className="absolute inset-0 flex items-center justify-center">
-35 |         <div className="w-full h-full bg-gray-100 relative">
-36 |           {/* Simple map placeholder */}
-37 |           <svg 
-38 |             viewBox="0 0 1000 500" 
-39 |             className="w-full h-full opacity-70"
-40 |             xmlns="http://www.w3.org/2000/svg"
-41 |           >
-42 |             {/* Placeholder shapes */}
-43 |             <path d="M100,100 h800 v300 h-800 Z" fill="#E5E7EB" stroke="#9CA3AF" /> 
-44 |             {/* Basic World Representation (adjust as needed) */}
-45 |             <text x="500" y="250" fontSize="20" textAnchor="middle" fill="#6B7280">
-46 |               Map Area (Interactive Map Coming Soon)
-47 |             </text>
-48 |           </svg>
-49 | 
-50 |           {/* TODO: Integrate a real map library (Leaflet, Mapbox GL JS, Google Maps) */}
-51 |           {/* For now, just indicate filtered results */}
-52 |           <div className="absolute top-4 left-4 bg-white/80 backdrop-blur-md p-2 rounded shadow">
-53 |             <p className="text-xs text-muted-foreground">
-54 |               {filteredVenues.length} venue(s) found {searchQuery ? `matching "${searchQuery}"` : ''}
-55 |             </p>
-56 |           </div>
-57 | 
-58 |           {/* Placeholder for markers - replace with actual map markers */}
-59 |           {/* These positions are arbitrary for the placeholder */}
-60 |           {filteredVenues.map((venue, index) => (
-61 |             <div 
-62 |               key={venue.id}
-63 |               className="absolute w-4 h-4 bg-primary rounded-full transform -translate-x-1/2 -translate-y-1/2 shadow-md"
-64 |               style={{ 
-65 |                 left: `${20 + index * 10}%`, // Example positioning
-66 |                 top: `${40 + (index % 2) * 20}%`, // Example positioning
-67 |                }}
-68 |               title={`${venue.name} - ${venue.location}`}
-69 |             ></div>
-70 |           ))}
-71 | 
-72 |         </div>
-73 |       </div>
-74 |     </div>
-75 |   );
-76 | };
-77 | 
-
-
---------------------------------------------------------------------------------
-/app/components/home/Dashboard.tsx:
---------------------------------------------------------------------------------
-  1 | 'use client';
-  2 | 
-  3 | import React, { useState } from 'react';
-  4 | import { useRouter } from 'next/navigation';
-  5 | import Link from 'next/link';
-  6 | import { Card } from '@/app/components/ui/card';
-  7 | import { Button } from '@/app/components/ui/button';
-  8 | import { CreditCard, MapPin, Plus, Wallet } from 'lucide-react';
-  9 | import { StakingModal } from './StakingModal';
- 10 | 
- 11 | export const Dashboard: React.FC = () => {
- 12 |   const router = useRouter();
- 13 |   const [showStakingModal, setShowStakingModal] = useState(false);
- 14 |   
- 15 |   const featuredVenues = [
- 16 |     { id: '1', name: 'El Noviciado', location: 'Social Club, Madrid', image: '/novi1.png' },
- 17 |     { id: '2', name: 'Bloom Festival', location: 'Festival, Malta', image: '/bloom-festival.png' },
- 18 |     { id: '3', name: 'Barrage Club', location: 'Nightclub, Greece', image: '/barrage-club.png' },
- 19 |     { id: '4', name: 'Berhta Club', location: 'Social Club, Washington D.C.', image: '/bertha-club.png' },
- 20 |   ];
- 21 | 
- 22 |   const stakedAmount = 1.25;
- 23 |   const stakedSymbol = 'SOL';
- 24 |   const availableCredit = 2500;
- 25 |   const creditProgress = 80;
- 26 | 
- 27 |   return (
- 28 |     <div className="flex flex-col pt-10 pb-20 px-6">
- 29 |       <div className="mb-8 animate-fade-in">
- 30 |         <h1 className="text-2xl font-bold mb-1">Samachi Membership</h1>
- 31 |         <p className="text-muted-foreground">Your VIP access is ready</p>
- 32 |       </div>
- 33 | 
- 34 |       <div className="glass-card p-6 mb-8 animate-fade-in">
- 35 |         <div className="flex justify-between items-start mb-6">
- 36 |           <div>
- 37 |             <h2 className="text-lg font-medium mb-1">Your Credit Line</h2>
- 38 |             <p className="text-sm text-muted-foreground">Available for all venues</p>
- 39 |           </div>
- 40 |           <CreditCard className="h-6 w-6 text-primary" />
- 41 |         </div>
- 42 |         
- 43 |         <div className="mb-6">
- 44 |           <div className="flex justify-between items-center mb-2">
- 45 |             <span className="text-sm text-muted-foreground">Staked Amount</span>
- 46 |             <span className="font-semibold">{stakedAmount} {stakedSymbol}</span>
- 47 |           </div>
- 48 |           <div className="flex justify-between items-center mb-2">
- 49 |             <span className="text-sm text-muted-foreground">Available Credit</span>
- 50 |             <span className="font-semibold text-lg">€{availableCredit.toLocaleString()}</span>
- 51 |           </div>
- 52 |           <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
- 53 |             <div 
- 54 |               className="h-full bg-primary rounded-full" 
- 55 |               style={{ width: `${creditProgress}%` }}
- 56 |             />
- 57 |           </div>
- 58 |         </div>
- 59 |         
- 60 |         <div className="flex gap-2">
- 61 |           <Button 
- 62 |             onClick={() => setShowStakingModal(true)}
- 63 |             className="flex-1 glass-button"
- 64 |           >
- 65 |             <Plus className="mr-2 h-4 w-4" /> Stake More
- 66 |           </Button>
- 67 |           <Button 
- 68 |             onClick={() => router.push('/wallet')}
- 69 |             variant="outline"
- 70 |             className="flex-1 bg-white/50 backdrop-blur-sm hover:bg-white/60"
- 71 |           >
- 72 |             <Wallet className="mr-2 h-4 w-4" /> Wallet
- 73 |           </Button>
- 74 |         </div>
- 75 |       </div>
- 76 | 
- 77 |       <div className="mb-6 animate-fade-in">
- 78 |         <div className="flex justify-between items-center mb-3">
- 79 |           <h2 className="text-lg font-semibold">Featured Venues</h2>
- 80 |           <Link href="/discover" className="text-primary text-sm font-medium">
- 81 |             See All
- 82 |           </Link>
- 83 |         </div>
- 84 |         
- 85 |         <div className="flex overflow-x-auto pb-2 -mx-2 scrollbar-none">
- 86 |           {featuredVenues.map((venue) => (
- 87 |             <div key={venue.id} className="px-2 min-w-[250px]">
- 88 |               <Link href={`/venue/${venue.id}`}>
- 89 |                 <div 
- 90 |                   className="glass-card h-48 overflow-hidden relative block cursor-pointer"
- 91 |                 >
- 92 |                   <img 
- 93 |                     src={venue.image} 
- 94 |                     alt={venue.name} 
- 95 |                     className="h-full w-full object-cover"
- 96 |                   />
- 97 |                   <div className="absolute bottom-0 left-0 right-0 p-4 bg-black/40 backdrop-blur-sm">
- 98 |                     <h3 className="text-base font-semibold mb-1 text-white">{venue.name}</h3>
- 99 |                     <p className="text-xs text-white/80 flex items-center">
-100 |                       <MapPin className="h-3 w-3 mr-1" />
-101 |                       {venue.location}
-102 |                     </p>
-103 |                   </div>
-104 |                 </div>
-105 |               </Link>
-106 |             </div>
-107 |           ))}
-108 |         </div>
-109 |       </div>
-110 | 
-111 |       {showStakingModal && (
-112 |         <StakingModal onClose={() => setShowStakingModal(false)} />
-113 |       )}
-114 |     </div>
-115 |   );
-116 | };
-117 | 
-
-
---------------------------------------------------------------------------------
-/app/components/home/StakingModal.tsx:
---------------------------------------------------------------------------------
-  1 | 'use client';
-  2 | 
-  3 | import React, { useState } from 'react';
-  4 | import { Button } from '@/app/components/ui/button';
-  5 | import { XCircle, ChevronDown, Check, ChevronRight } from 'lucide-react';
-  6 | 
-  7 | interface StakingModalProps {
-  8 |   onClose: () => void;
-  9 | }
- 10 | 
- 11 | const cryptoOptions = [
- 12 |   { id: 'sol', name: 'Solana', symbol: 'SOL', icon: '☀️' },
- 13 |   { id: 'usdt', name: 'Tether', symbol: 'USDT', icon: '💵' },
- 14 |   { id: 'usdc', name: 'USD Coin', symbol: 'USDC', icon: '💰' },
- 15 |   // Add other relevant cryptos if needed
- 16 | ];
- 17 | 
- 18 | export const StakingModal: React.FC<StakingModalProps> = ({ onClose }) => {
- 19 |   const [selectedCrypto, setSelectedCrypto] = useState(cryptoOptions[0]);
- 20 |   const [showCryptoSelector, setShowCryptoSelector] = useState(false);
- 21 |   const [amount, setAmount] = useState('');
- 22 |   const [step, setStep] = useState(1);
- 23 | 
- 24 |   const handleStake = () => {
- 25 |     setStep(2);
- 26 |     // TODO: Add actual staking logic here (e.g., call backend/contract)
- 27 |     console.log(`Simulating stake of ${amount} ${selectedCrypto.symbol}`);
- 28 |     setTimeout(() => {
- 29 |       // TODO: Update user balance/state after successful stake
- 30 |       onClose();
- 31 |     }, 2000);
- 32 |   };
- 33 | 
- 34 |   // Type the event
- 35 |   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
- 36 |     setAmount(e.target.value);
- 37 |   };
- 38 | 
- 39 |   return (
- 40 |     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center p-4 animate-fade-in">
- 41 |       <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={onClose} />
- 42 |       
- 43 |       <div className="bottom-sheet max-w-md w-full z-10">
- 44 |         <div className="flex justify-between items-center mb-4">
- 45 |           <h2 className="text-xl font-semibold">
- 46 |             {step === 1 ? 'Stake Crypto' : 'Confirming Stake'}
- 47 |           </h2>
- 48 |           <button 
- 49 |             onClick={onClose}
- 50 |             className="p-1 rounded-full hover:bg-black/5"
- 51 |           >
- 52 |             <XCircle className="h-6 w-6 text-gray-500" />
- 53 |           </button>
- 54 |         </div>
- 55 |         
- 56 |         {step === 1 ? (
- 57 |           <>
- 58 |             <p className="text-muted-foreground mb-6">
- 59 |               Stake assets to increase your available credit line
- 60 |             </p>
- 61 | 
- 62 |             <div className="mb-6">
- 63 |               <label className="text-sm font-medium mb-2 block">
- 64 |                 Select Asset
- 65 |               </label>
- 66 |               <button
- 67 |                 onClick={() => setShowCryptoSelector(!showCryptoSelector)}
- 68 |                 className="w-full p-3 rounded-xl bg-white flex items-center justify-between border border-gray-200"
- 69 |               >
- 70 |                 <div className="flex items-center">
- 71 |                   <span className="text-2xl mr-2">{selectedCrypto.icon}</span>
- 72 |                   <div>
- 73 |                     <div className="font-medium">{selectedCrypto.name}</div>
- 74 |                     <div className="text-xs text-muted-foreground">{selectedCrypto.symbol}</div>
- 75 |                   </div>
- 76 |                 </div>
- 77 |                 <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform ${showCryptoSelector ? 'rotate-180' : ''}`} />
- 78 |               </button>
- 79 |               
- 80 |               {showCryptoSelector && (
- 81 |                 <div className="mt-1 bg-white rounded-xl border border-gray-200 overflow-hidden shadow-lg">
- 82 |                   {cryptoOptions.map((crypto) => (
- 83 |                     <button
- 84 |                       key={crypto.id}
- 85 |                       onClick={() => {
- 86 |                         setSelectedCrypto(crypto);
- 87 |                         setShowCryptoSelector(false);
- 88 |                       }}
- 89 |                       className="w-full p-3 flex items-center justify-between hover:bg-gray-50"
- 90 |                     >
- 91 |                       <div className="flex items-center">
- 92 |                         <span className="text-xl mr-2">{crypto.icon}</span>
- 93 |                         <div className="font-medium">{crypto.name}</div>
- 94 |                       </div>
- 95 |                       {selectedCrypto.id === crypto.id && (
- 96 |                         <Check className="h-5 w-5 text-primary" />
- 97 |                       )}
- 98 |                     </button>
- 99 |                   ))}
-100 |                 </div>
-101 |               )}
-102 |             </div>
-103 | 
-104 |             <div className="mb-8">
-105 |               <label className="text-sm font-medium mb-2 block">
-106 |                 Amount
-107 |               </label>
-108 |               <div className="relative">
-109 |                 <input 
-110 |                   type="number"
-111 |                   value={amount}
-112 |                   // onChange={(e) => setAmount(e.target.value)} // Replace
-113 |                   onChange={handleAmountChange} // Use typed handler
-114 |                   placeholder="0.00"
-115 |                   className="w-full p-3 pr-16 rounded-xl bg-white border border-gray-200 text-xl font-medium"
-116 |                 />
-117 |                 <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground">
-118 |                   {selectedCrypto.symbol}
-119 |                 </div>
-120 |               </div>
-121 |               <div className="mt-2 flex justify-between">
-122 |                 <div className="text-xs text-muted-foreground">
-123 |                   {/* TODO: Replace with actual available balance */}
-124 |                   Available: 2.5 {selectedCrypto.symbol} 
-125 |                 </div>
-126 |                 <button className="text-xs text-primary font-medium">
-127 |                   MAX
-128 |                 </button>
-129 |               </div>
-130 |             </div>
-131 | 
-132 |             <Button 
-133 |               onClick={handleStake}
-134 |               disabled={!amount || parseFloat(amount) <= 0} // Add amount validation
-135 |               className="w-full glass-button"
-136 |             >
-137 |               Stake {selectedCrypto.symbol}
-138 |               <ChevronRight className="ml-2 h-4 w-4" />
-139 |             </Button>
-140 |           </>
-141 |         ) : (
-142 |           <div className="py-4 text-center">
-143 |             <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
-144 |               <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-145 |             </div>
-146 |             <h3 className="text-lg font-medium mb-2">Processing Your Stake</h3>
-147 |             <p className="text-muted-foreground mb-4">
-148 |               Please wait while we process your {amount} {selectedCrypto.symbol} stake
-149 |             </p>
-150 |             <div className="text-sm text-muted-foreground">
-151 |               This may take a few moments to complete
-152 |             </div>
-153 |           </div>
-154 |         )}
-155 |       </div>
-156 |     </div>
-157 |   );
-158 | };
-159 | 
+ 3 | import React from 'react';
+ 4 | import { Building } from 'lucide-react';
+ 5 | 
+ 6 | // Align Venue type with DiscoverVenues.tsx
+ 7 | interface Venue {
+ 8 |   id: string;
+ 9 |   name: string;
+10 |   description: string | null;
+11 |   address: string | null;
+12 |   location?: string | null; // Optional field from mock data
+13 |   image_url: string | null;
+14 |   image?: string | null; // Optional field from mock data
+15 |   glownet_event_id?: number | null; // Make optional/nullable
+16 |   coords?: { lat: number; lng: number }; // Keep coords if needed for map
+17 | }
+18 | 
+19 | // Update props to accept the filtered venues array
+20 | interface VenueMapProps {
+21 |   venues: Venue[];
+22 | }
+23 | 
+24 | // Remove React.FC typing for consistency, destructure venues prop
+25 | export function VenueMap({ venues }: VenueMapProps) {
+26 | 
+27 |   // Filtering is now done in the parent component
+28 |   // Removed useMemo and filteredVenues logic
+29 | 
+30 |   // Handle case where the filtered list passed from parent is empty
+31 |   if (venues.length === 0) {
+32 |      // Potentially show a simplified map or a message
+33 |      return (
+34 |          <div className="glass-card h-96 relative overflow-hidden flex items-center justify-center">
+35 |              <p className="text-muted-foreground">No venues to display on the map.</p>
+36 |          </div>
+37 |      );
+38 |   }
+39 | 
+40 |   // TODO: Implement actual map rendering using the 'venues' prop
+41 |   // - Use a library like Leaflet, Mapbox GL JS, or Google Maps React component.
+42 |   // - Iterate over 'venues' to place markers (using venue.coords if available).
+43 |   // - Add popups or interactions on marker click.
+44 | 
+45 |   return (
+46 |     <div className="glass-card h-96 relative overflow-hidden">
+47 |       <div className="absolute inset-0 flex items-center justify-center">
+48 |         <div className="w-full h-full bg-gray-100 relative">
+49 |           {/* Simple map placeholder - REMAINS PLACEHOLDER */}
+50 |           <svg
+51 |             viewBox="0 0 1000 500"
+52 |             className="w-full h-full opacity-70"
+53 |             xmlns="http://www.w3.org/2000/svg"
+54 |           >
+55 |             <path d="M100,100 h800 v300 h-800 Z" fill="#E5E7EB" stroke="#9CA3AF" />
+56 |             <text x="500" y="250" fontSize="20" textAnchor="middle" fill="#6B7280">
+57 |               Map Area (Interactive Map Coming Soon)
+58 |             </text>
+59 |           </svg>
+60 | 
+61 |           {/* Display count based on passed venues */}
+62 |           <div className="absolute top-4 left-4 bg-white/80 backdrop-blur-md p-2 rounded shadow">
+63 |             <p className="text-xs text-muted-foreground">
+64 |               Displaying {venues.length} venue(s)
+65 |             </p>
+66 |           </div>
+67 | 
+68 |           {/* Placeholder for markers - using passed venues */}
+69 |           {venues.map((venue, index) => (
+70 |             <div
+71 |               key={venue.id}
+72 |               className="absolute w-4 h-4 bg-primary rounded-full transform -translate-x-1/2 -translate-y-1/2 shadow-md cursor-pointer hover:scale-125 transition-transform"
+73 |               style={{
+74 |                 // Use actual coords if available, otherwise fallback to random-ish positions
+75 |                 left: venue.coords ? `${(venue.coords.lng + 180) / 3.6}%` : `${20 + index * 10}%`, // Basic scaling for demo
+76 |                 top: venue.coords ? `${90 - (venue.coords.lat + 90) / 1.8}%` : `${40 + (index % 2) * 20}%`, // Basic scaling for demo
+77 |                }}
+78 |                // Use address or location for title
+79 |               title={`${venue.name || 'Venue'} - ${venue.address || venue.location || 'Location N/A'}`}
+80 |               // TODO: Add onClick to show popup or navigate
+81 |             ></div>
+82 |           ))}
+83 | 
+84 |         </div>
+85 |       </div>
+86 |     </div>
+87 |   );
+88 | }
+89 | 
 
 
 --------------------------------------------------------------------------------
@@ -1392,161 +1765,6 @@
 
 
 --------------------------------------------------------------------------------
-/app/components/onboarding/CardLanding.tsx:
---------------------------------------------------------------------------------
-  1 | // src/components/onboarding/CardLanding.tsx
-  2 | 'use client';
-  3 | 
-  4 | import React, { useEffect, useState } from 'react';
-  5 | import { useParams, useRouter } from 'next/navigation';
-  6 | import { Button } from '@/app/components/ui/button';
-  7 | // import useAuth from '@/hooks/useAuth'; // Remove old auth hook
-  8 | import { useSimpleAuth } from '@/app/context/AuthContext'; // Import the new simple auth hook
-  9 | 
- 10 | export const CardLanding = () => {
- 11 |   const params = useParams();
- 12 |   const router = useRouter();
- 13 |   const card_id = params?.card_id as string | undefined;
- 14 |   // const { user, loading: authLoading, logout } = useAuth(); // Remove old auth state
- 15 |   const { isLoggedIn } = useSimpleAuth(); // Use simple auth state
- 16 | 
- 17 |   // State for card status check
- 18 |   const [cardStatus, setCardStatus] = useState<'loading' | 'unregistered' | 'registered' | 'not_found' | 'error'>('loading');
- 19 |   const [cardError, setCardError] = useState<string | null>(null);
- 20 | 
- 21 |   useEffect(() => {
- 22 |     // Redirect logged-in users immediately
- 23 |     if (isLoggedIn) {
- 24 |       console.log('CardLanding: User is logged in, redirecting to /dashboard');
- 25 |       router.replace('/dashboard');
- 26 |       return; // Don't proceed if already logged in
- 27 |     }
- 28 | 
- 29 |     // Fetch card status only if not logged in and card_id is present
- 30 |     if (!isLoggedIn && card_id) {
- 31 |       const checkCardStatus = async () => {
- 32 |         setCardStatus('loading');
- 33 |         setCardError(null);
- 34 |         try {
- 35 |           // Fetch card status using the API (expects user_id to be null for unregistered)
- 36 |           const response = await fetch(`/api/card-status?card_id=${card_id}`);
- 37 |           const data = await response.json();
- 38 | 
- 39 |           if (!response.ok) {
- 40 |             console.error("Card status API error:", data);
- 41 |             setCardError(data.error || 'Failed to check card status.');
- 42 |             setCardStatus(response.status === 404 ? 'not_found' : 'error');
- 43 |           } else {
- 44 |             console.log("Card status API success:", data); // Log the raw API response
- 45 |             // Determine registration based on the API response
- 46 |             const isRegistered = data.isRegistered; // Assuming API returns { isRegistered: boolean }
- 47 |             console.log(`[CardLanding] API says isRegistered: ${isRegistered}`); // Log the determination
- 48 |             setCardStatus(isRegistered ? 'registered' : 'unregistered');
- 49 |           }
- 50 |         } catch (error) {
- 51 |           console.error("Fetch card status error:", error);
- 52 |           setCardError('An unexpected error occurred.');
- 53 |           setCardStatus('error');
- 54 |         }
- 55 |       };
- 56 |       checkCardStatus();
- 57 |     }
- 58 |     // Dependencies updated: removed user, authLoading, added isLoggedIn
- 59 |   }, [isLoggedIn, router, card_id]);
- 60 | 
- 61 |   const handleCreateProfile = () => {
- 62 |     if (!card_id) return;
- 63 |     const targetUrl = `/create-profile?cardId=${card_id}`;
- 64 |     console.log(`[CardLanding] Navigating to Create Profile: ${targetUrl}`); // Log before navigating
- 65 |     router.push(targetUrl);
- 66 |   };
- 67 | 
- 68 |   const handleSignIn = () => {
- 69 |     const targetUrl = `/login`;
- 70 |     console.log(`[CardLanding] Navigating to Sign In: ${targetUrl}`); // Log before navigating
- 71 |     router.push(targetUrl);
- 72 |   };
- 73 | 
- 74 |   // Combined Loading State (only check cardStatus loading if not logged in)
- 75 |   if (!isLoggedIn && cardStatus === 'loading') {
- 76 |     return <div>Loading...</div>;
- 77 |   }
- 78 | 
- 79 |   // Should be redirected if user is logged in
- 80 |   if (isLoggedIn) {
- 81 |     return null;
- 82 |   }
- 83 | 
- 84 |   // Handle card check results before showing buttons
- 85 |   if (cardStatus === 'not_found') {
- 86 |     return (
- 87 |       <div className="flex flex-col items-center justify-center min-h-screen p-4">
- 88 |         <h1 className="text-2xl font-bold mb-4 text-red-600">Invalid Card</h1>
- 89 |         {/* Fixed visibility: Added text-black */}
- 90 |         <p className="mb-6 text-center">Membership card ID (<span className="font-mono bg-gray-100 p-1 rounded text-black">{card_id}</span>) was not found.</p>
- 91 |         <p className="text-xs text-gray-500">Please check the ID or contact support.</p>
- 92 |       </div>
- 93 |     );
- 94 |   }
- 95 | 
- 96 |   if (cardStatus === 'error') {
- 97 |      return (
- 98 |       <div className="flex flex-col items-center justify-center min-h-screen p-4">
- 99 |         <h1 className="text-2xl font-bold mb-4 text-red-600">Error</h1>
-100 |         <p className="mb-6 text-center">{cardError || 'Could not verify card status.'}</p>
-101 |         <p className="text-xs text-gray-500">Please try again later or contact support.</p>
-102 |       </div>
-103 |     );
-104 |   }
-105 | 
-106 |   // --- Render based on card status ---
-107 |   return (
-108 |     <div className="flex flex-col items-center justify-center min-h-screen p-4">
-109 |       <h1 className="text-2xl font-bold mb-4">Welcome!</h1>
-110 |       <p className="mb-6 text-center">
-111 |         {/* Fixed visibility: Added text-black */}
-112 |         Membership Card ID: <span className="font-mono bg-gray-100 p-1 rounded text-black">{card_id}</span>
-113 |       </p>
-114 | 
-115 |       {cardStatus === 'unregistered' && (
-116 |         <>
-117 |           <p className="text-muted-foreground mb-6 text-center">
-118 |             This card is ready to be claimed. Create a profile to activate your membership.
-119 |           </p>
-120 |           <div className="space-y-4 w-full max-w-xs">
-121 |             {/* Changed button text and action */}
-122 |             <Button onClick={handleCreateProfile} className="w-full">
-123 |               Create Profile & Claim Card
-124 |             </Button>
-125 |             {/* Removed the Sign In button for unregistered cards in MVP */}
-126 |             {/* <Button onClick={handleSignIn} variant="outline" className="w-full">
-127 |               Already have an account? Sign In
-128 |             </Button> */}
-129 |           </div>
-130 |         </>
-131 |       )}
-132 | 
-133 |       {cardStatus === 'registered' && (
-134 |          <>
-135 |           <p className="text-muted-foreground mb-6 text-center">
-136 |             This card has already been claimed. Please sign in to access your membership.
-137 |           </p>
-138 |           <div className="space-y-4 w-full max-w-xs">
-139 |              {/* Sign In button navigates to /login */}
-140 |             <Button onClick={handleSignIn} className="w-full">
-141 |               Sign In
-142 |             </Button>
-143 |           </div>
-144 |         </>
-145 |       )}
-146 | 
-147 |        <p className="mt-4 text-xs text-gray-500">Need help? Contact support.</p>
-148 |     </div>
-149 |   );
-150 | };
-
-
---------------------------------------------------------------------------------
 /app/components/onboarding/OnboardingVideo.tsx:
 --------------------------------------------------------------------------------
  1 | // samachi/frontend/samachi-vip-access/src/components/onboarding/OnboardingVideo.tsx
@@ -1555,7 +1773,7 @@
  4 | import React from "react";
  5 | import { useRouter } from "next/navigation";
  6 | import { Button } from "@/app/components/ui/button";
- 7 | import useAuth from "@/hooks/useAuth";
+ 7 | // import useAuth from "@/hooks/useAuth"; // Removed as per user request
  8 | 
  9 | export const OnboardingVideo = () => {
 10 |   // const navigate = useNavigate();
@@ -1608,7 +1826,7 @@
   8 | } from 'lucide-react';
   9 | import { Button } from '@/app/components/ui/button';
  10 | import { Switch } from '@/app/components/ui/switch';
- 11 | import useAuth from '@/hooks/useAuth';
+ 11 | import { useAuth } from '@/app/context/AuthContext';
  12 | 
  13 | // Define a more specific type for settings items
  14 | type SettingItem = {
@@ -1622,7 +1840,7 @@
  22 | 
  23 | export const ProfileSettings: React.FC = () => {
  24 |   const router = useRouter();
- 25 |   const { user, logout } = useAuth();
+ 25 |   const { user, profile, logout } = useAuth();
  26 |   const [darkMode, setDarkMode] = useState(false);
  27 |   const [notifications, setNotifications] = useState(true);
  28 |   
@@ -1639,7 +1857,7 @@
  39 |         {
  40 |           icon: Wallet, 
  41 |           label: 'Connected Wallet',
- 42 |           value: user?.walletAddress ? `${user.walletAddress.substring(0, 6)}...${user.walletAddress.substring(user.walletAddress.length - 4)}` : 'Not Connected',
+ 42 |           value: profile?.walletAddress ? `${profile.walletAddress.substring(0, 6)}...${profile.walletAddress.substring(profile.walletAddress.length - 4)}` : 'Not Connected',
  43 |           onClick: () => router.push('/connect-wallet'),
  44 |         },
  45 |       ]
@@ -1711,12 +1929,12 @@
 111 |       <div className="glass-card p-6 mb-8 animate-fade-in">
 112 |         <div className="flex items-center">
 113 |           <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-white text-2xl font-bold mr-4">
-114 |             {/* TODO: Use user initials or avatar */}
-115 |             {user?.email ? user.email.charAt(0).toUpperCase() : 'S'}
+114 |             {/* Use profile username or user email initial */}
+115 |             {profile?.username ? profile.username.charAt(0).toUpperCase() : (user?.email ? user.email.charAt(0).toUpperCase() : 'S')}
 116 |           </div>
 117 |           <div>
-118 |             {/* TODO: Display user name/email */}
-119 |             <h2 className="text-xl font-semibold">{user?.name || user?.email || 'Samachi Member'}</h2>
+118 |             {/* Display profile name/username or user email */}
+119 |             <h2 className="text-xl font-semibold">{profile?.name || profile?.username || user?.email || 'Samachi Member'}</h2>
 120 |           </div>
 121 |         </div>
 122 |       </div>
@@ -1843,7 +2061,7 @@
   2 | import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog"
   3 | 
   4 | import { cn } from "@/lib/utils"
-  5 | import { buttonVariants } from "@/components/ui/button"
+  5 | import { buttonVariants } from "@/app/components/ui/button"
   6 | 
   7 | const AlertDialog = AlertDialogPrimitive.Root
   8 | 
@@ -2489,272 +2707,6 @@
 78 | 
 79 | export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
 80 | 
-
-
---------------------------------------------------------------------------------
-/app/components/ui/carousel.tsx:
---------------------------------------------------------------------------------
-  1 | import * as React from "react"
-  2 | import useEmblaCarousel, {
-  3 |   type UseEmblaCarouselType,
-  4 | } from "embla-carousel-react"
-  5 | import { ArrowLeft, ArrowRight } from "lucide-react"
-  6 | 
-  7 | import { cn } from "@/lib/utils"
-  8 | import { Button } from "@/components/ui/button"
-  9 | 
- 10 | type CarouselApi = UseEmblaCarouselType[1]
- 11 | type UseCarouselParameters = Parameters<typeof useEmblaCarousel>
- 12 | type CarouselOptions = UseCarouselParameters[0]
- 13 | type CarouselPlugin = UseCarouselParameters[1]
- 14 | 
- 15 | type CarouselProps = {
- 16 |   opts?: CarouselOptions
- 17 |   plugins?: CarouselPlugin
- 18 |   orientation?: "horizontal" | "vertical"
- 19 |   setApi?: (api: CarouselApi) => void
- 20 | }
- 21 | 
- 22 | type CarouselContextProps = {
- 23 |   carouselRef: ReturnType<typeof useEmblaCarousel>[0]
- 24 |   api: ReturnType<typeof useEmblaCarousel>[1]
- 25 |   scrollPrev: () => void
- 26 |   scrollNext: () => void
- 27 |   canScrollPrev: boolean
- 28 |   canScrollNext: boolean
- 29 | } & CarouselProps
- 30 | 
- 31 | const CarouselContext = React.createContext<CarouselContextProps | null>(null)
- 32 | 
- 33 | function useCarousel() {
- 34 |   const context = React.useContext(CarouselContext)
- 35 | 
- 36 |   if (!context) {
- 37 |     throw new Error("useCarousel must be used within a <Carousel />")
- 38 |   }
- 39 | 
- 40 |   return context
- 41 | }
- 42 | 
- 43 | const Carousel = React.forwardRef<
- 44 |   HTMLDivElement,
- 45 |   React.HTMLAttributes<HTMLDivElement> & CarouselProps
- 46 | >(
- 47 |   (
- 48 |     {
- 49 |       orientation = "horizontal",
- 50 |       opts,
- 51 |       setApi,
- 52 |       plugins,
- 53 |       className,
- 54 |       children,
- 55 |       ...props
- 56 |     },
- 57 |     ref
- 58 |   ) => {
- 59 |     const [carouselRef, api] = useEmblaCarousel(
- 60 |       {
- 61 |         ...opts,
- 62 |         axis: orientation === "horizontal" ? "x" : "y",
- 63 |       },
- 64 |       plugins
- 65 |     )
- 66 |     const [canScrollPrev, setCanScrollPrev] = React.useState(false)
- 67 |     const [canScrollNext, setCanScrollNext] = React.useState(false)
- 68 | 
- 69 |     const onSelect = React.useCallback((api: CarouselApi) => {
- 70 |       if (!api) {
- 71 |         return
- 72 |       }
- 73 | 
- 74 |       setCanScrollPrev(api.canScrollPrev())
- 75 |       setCanScrollNext(api.canScrollNext())
- 76 |     }, [])
- 77 | 
- 78 |     const scrollPrev = React.useCallback(() => {
- 79 |       api?.scrollPrev()
- 80 |     }, [api])
- 81 | 
- 82 |     const scrollNext = React.useCallback(() => {
- 83 |       api?.scrollNext()
- 84 |     }, [api])
- 85 | 
- 86 |     const handleKeyDown = React.useCallback(
- 87 |       (event: React.KeyboardEvent<HTMLDivElement>) => {
- 88 |         if (event.key === "ArrowLeft") {
- 89 |           event.preventDefault()
- 90 |           scrollPrev()
- 91 |         } else if (event.key === "ArrowRight") {
- 92 |           event.preventDefault()
- 93 |           scrollNext()
- 94 |         }
- 95 |       },
- 96 |       [scrollPrev, scrollNext]
- 97 |     )
- 98 | 
- 99 |     React.useEffect(() => {
-100 |       if (!api || !setApi) {
-101 |         return
-102 |       }
-103 | 
-104 |       setApi(api)
-105 |     }, [api, setApi])
-106 | 
-107 |     React.useEffect(() => {
-108 |       if (!api) {
-109 |         return
-110 |       }
-111 | 
-112 |       onSelect(api)
-113 |       api.on("reInit", onSelect)
-114 |       api.on("select", onSelect)
-115 | 
-116 |       return () => {
-117 |         api?.off("select", onSelect)
-118 |       }
-119 |     }, [api, onSelect])
-120 | 
-121 |     return (
-122 |       <CarouselContext.Provider
-123 |         value={{
-124 |           carouselRef,
-125 |           api: api,
-126 |           opts,
-127 |           orientation:
-128 |             orientation || (opts?.axis === "y" ? "vertical" : "horizontal"),
-129 |           scrollPrev,
-130 |           scrollNext,
-131 |           canScrollPrev,
-132 |           canScrollNext,
-133 |         }}
-134 |       >
-135 |         <div
-136 |           ref={ref}
-137 |           onKeyDownCapture={handleKeyDown}
-138 |           className={cn("relative", className)}
-139 |           role="region"
-140 |           aria-roledescription="carousel"
-141 |           {...props}
-142 |         >
-143 |           {children}
-144 |         </div>
-145 |       </CarouselContext.Provider>
-146 |     )
-147 |   }
-148 | )
-149 | Carousel.displayName = "Carousel"
-150 | 
-151 | const CarouselContent = React.forwardRef<
-152 |   HTMLDivElement,
-153 |   React.HTMLAttributes<HTMLDivElement>
-154 | >(({ className, ...props }, ref) => {
-155 |   const { carouselRef, orientation } = useCarousel()
-156 | 
-157 |   return (
-158 |     <div ref={carouselRef} className="overflow-hidden">
-159 |       <div
-160 |         ref={ref}
-161 |         className={cn(
-162 |           "flex",
-163 |           orientation === "horizontal" ? "-ml-4" : "-mt-4 flex-col",
-164 |           className
-165 |         )}
-166 |         {...props}
-167 |       />
-168 |     </div>
-169 |   )
-170 | })
-171 | CarouselContent.displayName = "CarouselContent"
-172 | 
-173 | const CarouselItem = React.forwardRef<
-174 |   HTMLDivElement,
-175 |   React.HTMLAttributes<HTMLDivElement>
-176 | >(({ className, ...props }, ref) => {
-177 |   const { orientation } = useCarousel()
-178 | 
-179 |   return (
-180 |     <div
-181 |       ref={ref}
-182 |       role="group"
-183 |       aria-roledescription="slide"
-184 |       className={cn(
-185 |         "min-w-0 shrink-0 grow-0 basis-full",
-186 |         orientation === "horizontal" ? "pl-4" : "pt-4",
-187 |         className
-188 |       )}
-189 |       {...props}
-190 |     />
-191 |   )
-192 | })
-193 | CarouselItem.displayName = "CarouselItem"
-194 | 
-195 | const CarouselPrevious = React.forwardRef<
-196 |   HTMLButtonElement,
-197 |   React.ComponentProps<typeof Button>
-198 | >(({ className, variant = "outline", size = "icon", ...props }, ref) => {
-199 |   const { orientation, scrollPrev, canScrollPrev } = useCarousel()
-200 | 
-201 |   return (
-202 |     <Button
-203 |       ref={ref}
-204 |       variant={variant}
-205 |       size={size}
-206 |       className={cn(
-207 |         "absolute  h-8 w-8 rounded-full",
-208 |         orientation === "horizontal"
-209 |           ? "-left-12 top-1/2 -translate-y-1/2"
-210 |           : "-top-12 left-1/2 -translate-x-1/2 rotate-90",
-211 |         className
-212 |       )}
-213 |       disabled={!canScrollPrev}
-214 |       onClick={scrollPrev}
-215 |       {...props}
-216 |     >
-217 |       <ArrowLeft className="h-4 w-4" />
-218 |       <span className="sr-only">Previous slide</span>
-219 |     </Button>
-220 |   )
-221 | })
-222 | CarouselPrevious.displayName = "CarouselPrevious"
-223 | 
-224 | const CarouselNext = React.forwardRef<
-225 |   HTMLButtonElement,
-226 |   React.ComponentProps<typeof Button>
-227 | >(({ className, variant = "outline", size = "icon", ...props }, ref) => {
-228 |   const { orientation, scrollNext, canScrollNext } = useCarousel()
-229 | 
-230 |   return (
-231 |     <Button
-232 |       ref={ref}
-233 |       variant={variant}
-234 |       size={size}
-235 |       className={cn(
-236 |         "absolute h-8 w-8 rounded-full",
-237 |         orientation === "horizontal"
-238 |           ? "-right-12 top-1/2 -translate-y-1/2"
-239 |           : "-bottom-12 left-1/2 -translate-x-1/2 rotate-90",
-240 |         className
-241 |       )}
-242 |       disabled={!canScrollNext}
-243 |       onClick={scrollNext}
-244 |       {...props}
-245 |     >
-246 |       <ArrowRight className="h-4 w-4" />
-247 |       <span className="sr-only">Next slide</span>
-248 |     </Button>
-249 |   )
-250 | })
-251 | CarouselNext.displayName = "CarouselNext"
-252 | 
-253 | export {
-254 |   type CarouselApi,
-255 |   Carousel,
-256 |   CarouselContent,
-257 |   CarouselItem,
-258 |   CarouselPrevious,
-259 |   CarouselNext,
-260 | }
-261 | 
 
 
 --------------------------------------------------------------------------------
@@ -5033,148 +4985,6 @@
 
 
 --------------------------------------------------------------------------------
-/app/components/venue/CheckInModal.tsx:
---------------------------------------------------------------------------------
-  1 | 'use client';
-  2 | 
-  3 | import React, { useState, useEffect } from 'react';
-  4 | import { useRouter } from 'next/navigation';
-  5 | import { Button } from '@/app/components/ui/button';
-  6 | import { XCircle, Check, CreditCard } from 'lucide-react';
-  7 | 
-  8 | interface CheckInModalProps {
-  9 |   venue: {
- 10 |     id: string;
- 11 |     name: string;
- 12 |     location: string;
- 13 |   };
- 14 |   onClose: () => void;
- 15 | }
- 16 | 
- 17 | export const CheckInModal: React.FC<CheckInModalProps> = ({ venue, onClose }) => {
- 18 |   const router = useRouter();
- 19 |   const [step, setStep] = useState<'confirm' | 'processing' | 'success'>('confirm');
- 20 |   
- 21 |   useEffect(() => {
- 22 |     if (step === 'processing') {
- 23 |       console.log(`Simulating check-in for venue: ${venue.id}`);
- 24 |       const timer = setTimeout(() => {
- 25 |         setStep('success');
- 26 |       }, 2000);
- 27 |       
- 28 |       return () => clearTimeout(timer);
- 29 |     }
- 30 |   }, [step, venue.id]);
- 31 | 
- 32 |   const handleCheckIn = () => {
- 33 |     setStep('processing');
- 34 |   };
- 35 | 
- 36 |   const handleContinue = () => {
- 37 |     onClose();
- 38 |     router.push(`/venue/${venue.id}/credit`);
- 39 |   };
- 40 | 
- 41 |   return (
- 42 |     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center p-4 animate-fade-in">
- 43 |       <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={onClose} />
- 44 |       
- 45 |       <div className="bottom-sheet max-w-md w-full z-10">
- 46 |         <div className="flex justify-between items-center mb-4">
- 47 |           <h2 className="text-xl font-semibold">
- 48 |             {step === 'confirm' && 'Check In'}
- 49 |             {step === 'processing' && 'Processing'}
- 50 |             {step === 'success' && 'Success!'}
- 51 |           </h2>
- 52 |           <button 
- 53 |             onClick={onClose}
- 54 |             className="p-1 rounded-full hover:bg-black/5"
- 55 |             aria-label="Close modal"
- 56 |           >
- 57 |             <XCircle className="h-6 w-6 text-gray-500" />
- 58 |           </button>
- 59 |         </div>
- 60 |         
- 61 |         {step === 'confirm' && (
- 62 |           <>
- 63 |             <p className="text-muted-foreground mb-6">
- 64 |               You're about to check in to {venue.name}
- 65 |             </p>
- 66 |             
- 67 |             <div className="glass-card p-4 mb-6">
- 68 |               <div className="flex justify-between items-start mb-4">
- 69 |                 <div>
- 70 |                   <h3 className="font-medium">{venue.name}</h3>
- 71 |                   <p className="text-xs text-muted-foreground">{venue.location}</p>
- 72 |                 </div>
- 73 |                 <div className="bg-primary/10 p-2 rounded-full">
- 74 |                   <CreditCard className="h-5 w-5 text-primary" />
- 75 |                 </div>
- 76 |               </div>
- 77 |               
- 78 |               <div className="space-y-1 mb-4">
- 79 |                 <div className="flex justify-between">
- 80 |                   <span className="text-sm text-muted-foreground">Credit Line</span>
- 81 |                   <span className="font-medium">$2,500.00</span>
- 82 |                 </div>
- 83 |                 <div className="flex justify-between">
- 84 |                   <span className="text-sm text-muted-foreground">Daily Limit</span>
- 85 |                   <span className="font-medium">$1,000.00</span>
- 86 |                 </div>
- 87 |               </div>
- 88 |               
- 89 |               <div className="text-xs text-muted-foreground bg-secondary/50 p-2 rounded-lg">
- 90 |                 Your crypto assets are staked as collateral for your credit line
- 91 |               </div>
- 92 |             </div>
- 93 |             
- 94 |             <Button 
- 95 |               onClick={handleCheckIn}
- 96 |               className="w-full glass-button"
- 97 |             >
- 98 |               Confirm Check In
- 99 |               <Check className="ml-2 h-4 w-4" />
-100 |             </Button>
-101 |           </>
-102 |         )}
-103 |         
-104 |         {step === 'processing' && (
-105 |           <div className="py-8 text-center">
-106 |             <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
-107 |               <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-108 |             </div>
-109 |             <h3 className="text-lg font-medium mb-2">Processing Check In</h3>
-110 |             <p className="text-muted-foreground">
-111 |               Please wait while we verify your membership
-112 |             </p>
-113 |           </div>
-114 |         )}
-115 |         
-116 |         {step === 'success' && (
-117 |           <div className="py-6 text-center">
-118 |             <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-119 |               <Check className="h-8 w-8 text-green-600" />
-120 |             </div>
-121 |             <h3 className="text-lg font-medium mb-2">Check In Successful!</h3>
-122 |             <p className="text-muted-foreground mb-6">
-123 |               Your credit line is now active at {venue.name}
-124 |             </p>
-125 |             <Button 
-126 |               onClick={handleContinue}
-127 |               className="w-full glass-button"
-128 |             >
-129 |               Continue
-130 |             </Button>
-131 |           </div>
-132 |         )}
-133 |       </div>
-134 |     </div>
-135 |   );
-136 | };
-137 | 
-
-
---------------------------------------------------------------------------------
 /app/components/venue/CreditLine.tsx:
 --------------------------------------------------------------------------------
   1 | 'use client';
@@ -5355,243 +5165,99 @@
 
 
 --------------------------------------------------------------------------------
-/app/components/wallet/WalletDashboard.tsx:
+/app/components/venues/VenueImageUpload.tsx:
 --------------------------------------------------------------------------------
-  1 | 'use client';
-  2 | 
-  3 | import React, { useState } from 'react';
-  4 | import { 
-  5 |   CreditCard, Wallet, RefreshCw, History, Eye, EyeOff 
-  6 | } from 'lucide-react';
-  7 | import { Button } from '@/app/components/ui/button';
-  8 | import Link from 'next/link';
-  9 | import { useRouter } from 'next/navigation';
- 10 | 
- 11 | // Mock wallet data - updated for Solana
- 12 | const walletData = {
- 13 |   connected: true,
- 14 |   address: 'ABcd...XYz1',
- 15 |   assets: [
- 16 |     { id: 'sol', name: 'Solana', symbol: 'SOL', amount: 1.25, value: 125, staked: 1.0 },
- 17 |     { id: 'usdc', name: 'USD Coin on Solana', symbol: 'USDC', amount: 750, value: 750, staked: 500 },
- 18 |   ]
- 19 | };
- 20 | 
- 21 | export const WalletDashboard: React.FC = () => {
- 22 |   const router = useRouter();
- 23 |   const [hideBalances, setHideBalances] = useState(false);
- 24 |   const [refreshing, setRefreshing] = useState(false);
- 25 | 
- 26 |   const totalValue = walletData.assets.reduce((sum, asset) => sum + asset.value, 0);
- 27 |   const totalStakedValue = walletData.assets.reduce((sum, asset) => {
- 28 |     if (asset.id === 'sol') return sum + (asset.staked * 100); // Mock SOL price
- 29 |     if (asset.id === 'usdc') return sum + asset.staked;
- 30 |     return sum;
- 31 |   }, 0);
- 32 | 
- 33 |   const handleRefresh = () => {
- 34 |     setRefreshing(true);
- 35 |     setTimeout(() => {
- 36 |       setRefreshing(false);
- 37 |     }, 1500);
- 38 |   };
- 39 | 
- 40 |   const maskValue = (value: number) => {
- 41 |     return hideBalances ? '••••••' : `€${value.toLocaleString()}`;
- 42 |   };
- 43 | 
- 44 |   const maskAmount = (amount: number) => {
- 45 |     return hideBalances ? '••••' : amount.toString();
- 46 |   };
- 47 | 
- 48 |   return (
- 49 |     <div className="flex flex-col pt-10 pb-20 px-6">
- 50 |       <div className="mb-6 animate-fade-in">
- 51 |         <div className="flex items-center justify-between">
- 52 |           <h1 className="text-2xl font-bold mb-1">Wallet</h1>
- 53 |           <button 
- 54 |             onClick={() => setHideBalances(!hideBalances)}
- 55 |             className="p-2 rounded-full hover:bg-black/5"
- 56 |             aria-label={hideBalances ? "Show balances" : "Hide balances"}
- 57 |           >
- 58 |             {hideBalances ? (
- 59 |               <EyeOff className="h-5 w-5 text-muted-foreground" />
- 60 |             ) : (
- 61 |               <Eye className="h-5 w-5 text-muted-foreground" />
- 62 |             )}
- 63 |           </button>
- 64 |         </div>
- 65 |         <p className="text-muted-foreground">Manage your Solana assets</p>
- 66 |       </div>
- 67 | 
- 68 |       <div className="glass-card p-6 mb-8 animate-fade-in">
- 69 |         <div className="flex justify-between items-start mb-6">
- 70 |           <div>
- 71 |             <h2 className="text-lg font-medium mb-1">Total Balance</h2>
- 72 |             <p className="text-sm text-muted-foreground">Across all assets</p>
- 73 |           </div>
- 74 |           <Wallet className="h-6 w-6 text-primary" />
- 75 |         </div>
- 76 |         
- 77 |         <div className="mb-4">
- 78 |           <h3 className="text-3xl font-bold mb-2">{maskValue(totalValue)}</h3>
- 79 |           <div className="flex items-center">
- 80 |             <button
- 81 |               onClick={handleRefresh}
- 82 |               className={`p-1 rounded-full ${refreshing ? 'animate-spin' : 'hover:bg-black/5'}`}
- 83 |               disabled={refreshing}
- 84 |               aria-label="Refresh balances"
- 85 |             >
- 86 |               <RefreshCw className="h-4 w-4 text-muted-foreground" />
- 87 |             </button>
- 88 |             <span className="text-xs text-muted-foreground ml-1">Last updated just now</span>
- 89 |           </div>
- 90 |         </div>
- 91 |       </div>
- 92 | 
- 93 |       <div className="glass-card p-6 mb-8 animate-fade-in">
- 94 |         <div className="flex justify-between items-start mb-6">
- 95 |           <div>
- 96 |             <h2 className="text-lg font-medium mb-1">Staked Assets</h2>
- 97 |             <p className="text-sm text-muted-foreground">Collateral for credit line</p>
- 98 |           </div>
- 99 |           <CreditCard className="h-6 w-6 text-primary" />
-100 |         </div>
-101 |         
-102 |         <div className="mb-6">
-103 |           <h3 className="text-2xl font-bold mb-1">{maskValue(totalStakedValue)}</h3>
-104 |           <p className="text-sm text-muted-foreground">
-105 |             Credit Line: {maskValue(totalStakedValue * 2)} <span className="text-xs">(2x collateral)</span>
-106 |           </p>
-107 |         </div>
-108 |         
-109 |         <Button 
-110 |           className="w-full glass-button"
-111 |           onClick={() => { console.log("Open staking modal or page"); /* router.push('/stake') or open modal */ }}
-112 |         >
-113 |           <span className="mr-2">+</span> Stake More Assets
-114 |         </Button>
-115 |       </div>
-116 | 
-117 |       <div className="mb-4 animate-fade-in">
-118 |         <div className="flex justify-between items-center mb-3">
-119 |           <h2 className="text-lg font-semibold">Your Assets</h2>
-120 |           <Link href="/wallet/history" className="text-primary text-sm font-medium flex items-center">
-121 |             <History className="h-4 w-4 mr-1" /> History
-122 |           </Link>
-123 |         </div>
-124 |         
-125 |         <div className="space-y-3">
-126 |           {walletData.assets.map((asset) => (
-127 |             <div key={asset.id} className="glass-card p-4">
-128 |               <div className="flex justify-between items-center mb-2">
-129 |                 <div className="flex items-center">
-130 |                   <div className="w-8 h-8 rounded-full bg-solana-primary/20 flex items-center justify-center mr-3">
-131 |                     <span className="text-sm font-bold text-solana-primary">{asset.symbol.charAt(0)}</span>
-132 |                   </div>
-133 |                   <div>
-134 |                     <p className="font-medium">{asset.name}</p>
-135 |                     <p className="text-xs text-muted-foreground">{asset.symbol}</p>
-136 |                   </div>
-137 |                 </div>
-138 |                 <div className="text-right">
-139 |                   <p className="font-medium">{maskValue(asset.value)}</p>
-140 |                   <p className="text-xs text-muted-foreground">{maskAmount(asset.amount)} {asset.symbol}</p>
-141 |                 </div>
-142 |               </div>
-143 |               
-144 |               {asset.staked > 0 && (
-145 |                 <div className="text-xs bg-solana-primary/10 p-2 rounded-lg text-solana-primary font-medium">
-146 |                   {maskAmount(asset.staked)} {asset.symbol} staked for credit line
-147 |                 </div>
-148 |               )}
-149 |             </div>
-150 |           ))}
-151 |         </div>
-152 |       </div>
-153 |     </div>
-154 |   );
-155 | };
-156 | 
-
-
---------------------------------------------------------------------------------
-/app/context/AuthContext.tsx:
---------------------------------------------------------------------------------
- 1 | 'use client';
- 2 | 
- 3 | import React, { createContext, useState, useContext, ReactNode, useMemo, useEffect } from 'react';
- 4 | import { useRouter } from 'next/navigation'; // Import useRouter for redirect
- 5 | import { cookies } from 'next/headers'; // Import to read initial state
- 6 | 
- 7 | // Define the same secure cookie name
- 8 | const SESSION_COOKIE_NAME = 'auth_session';
- 9 | 
-10 | interface AuthContextType {
-11 |   isLoggedIn: boolean;
-12 |   // In a real app, you might store profile info here too
-13 |   // profile: { id: string; username: string; } | null;
-14 |   login: () => void; // Will just update state, cookie is set by API
-15 |   logout: () => Promise<void>; // Make async to call API
-16 | }
+ 1 | import { useState } from 'react'
+ 2 | import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+ 3 | import { Button } from '@/components/ui/button'
+ 4 | import { Input } from '@/components/ui/input'
+ 5 | import { Label } from '@/components/ui/label'
+ 6 | import { toast } from 'sonner'
+ 7 | 
+ 8 | interface VenueImageUploadProps {
+ 9 |   venueId: string
+10 |   currentImageUrl?: string
+11 |   onImageUploaded: (url: string) => void
+12 | }
+13 | 
+14 | export function VenueImageUpload({ venueId, currentImageUrl, onImageUploaded }: VenueImageUploadProps) {
+15 |   const [uploading, setUploading] = useState(false)
+16 |   const supabase = createClientComponentClient()
 17 | 
-18 | const AuthContext = createContext<AuthContextType | undefined>(undefined);
-19 | 
-20 | // Function to check cookie on the client (can run in useEffect)
-21 | const hasSessionCookie = (): boolean => {
-22 |     if (typeof document === 'undefined') return false; // Guard for SSR
-23 |     return document.cookie.split(';').some((item) => item.trim().startsWith(`${SESSION_COOKIE_NAME}=`));
-24 | }
+18 |   const uploadImage = async (event: React.ChangeEvent<HTMLInputElement>) => {
+19 |     try {
+20 |       setUploading(true)
+21 | 
+22 |       if (!event.target.files || event.target.files.length === 0) {
+23 |         throw new Error('You must select an image to upload.')
+24 |       }
 25 | 
-26 | export const AuthProvider = ({ children }: { children: ReactNode }) => {
-27 |   const router = useRouter();
-28 | 
-29 |   // Initialize state based on cookie presence (client-side check)
-30 |   const [isLoggedIn, setIsLoggedIn] = useState(false);
-31 | 
-32 |   useEffect(() => {
-33 |       // Check cookie presence on initial client mount
-34 |       setIsLoggedIn(hasSessionCookie());
-35 |   }, []);
-36 | 
-37 |   const login = () => {
-38 |     // This function might not even be strictly necessary anymore if
-39 |     // the UI reacts directly to redirects/cookie changes.
-40 |     // But it's useful for instant UI updates before a full page reload.
-41 |     console.log("AuthContext: Setting isLoggedIn to true (client state)");
-42 |     setIsLoggedIn(true);
-43 |   };
-44 | 
-45 |   const logout = async () => {
-46 |     console.log("AuthContext: Calling logout API and setting isLoggedIn to false");
-47 |     try {
-48 |         // Call the API route to clear the server-side cookie
-49 |         await fetch('/api/logout', { method: 'POST' });
-50 |     } catch (error) { // Catch network errors etc.
-51 |         console.error("Logout API call failed:", error);
-52 |         // Decide if you still want to clear client state or show an error
-53 |     }
-54 |     setIsLoggedIn(false); // Update client state regardless of API success for responsiveness
-55 |     router.push('/login'); // Redirect to login page
-56 |   };
-57 | 
-58 |   // Memoize context value
-59 |   const value = useMemo(() => ({
-60 |     isLoggedIn,
-61 |     login,
-62 |     logout,
-63 |   }), [isLoggedIn]); // Dependency array might need router if used in memoized value
-64 | 
-65 |   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-66 | };
-67 | 
-68 | export const useSimpleAuth = (): AuthContextType => {
-69 |   const context = useContext(AuthContext);
-70 |   if (context === undefined) {
-71 |     throw new Error('useSimpleAuth must be used within an AuthProvider');
-72 |   }
-73 |   return context;
-74 | }; 
+26 |       const file = event.target.files[0]
+27 |       const fileExt = file.name.split('.').pop()
+28 |       const filePath = `${venueId}-${Math.random()}.${fileExt}`
+29 | 
+30 |       // Upload image to Supabase Storage
+31 |       const { error: uploadError, data } = await supabase.storage
+32 |         .from('venue-images')
+33 |         .upload(filePath, file)
+34 | 
+35 |       if (uploadError) {
+36 |         throw uploadError
+37 |       }
+38 | 
+39 |       // Get public URL
+40 |       const { data: { publicUrl } } = supabase.storage
+41 |         .from('venue-images')
+42 |         .getPublicUrl(filePath)
+43 | 
+44 |       // Update venue record with new image URL
+45 |       const { error: updateError } = await supabase
+46 |         .from('venues')
+47 |         .update({
+48 |           image_url: publicUrl,
+49 |           image_bucket_path: filePath
+50 |         })
+51 |         .eq('id', venueId)
+52 | 
+53 |       if (updateError) {
+54 |         throw updateError
+55 |       }
+56 | 
+57 |       onImageUploaded(publicUrl)
+58 |       toast.success('Venue image updated successfully')
+59 |     } catch (error) {
+60 |       toast.error('Error uploading image')
+61 |       console.error('Error uploading image:', error)
+62 |     } finally {
+63 |       setUploading(false)
+64 |     }
+65 |   }
+66 | 
+67 |   return (
+68 |     <div className="flex flex-col gap-4">
+69 |       <div className="grid w-full max-w-sm items-center gap-1.5">
+70 |         <Label htmlFor="image">Venue Image</Label>
+71 |         <Input
+72 |           id="image"
+73 |           type="file"
+74 |           accept="image/*"
+75 |           onChange={uploadImage}
+76 |           disabled={uploading}
+77 |         />
+78 |       </div>
+79 |       {currentImageUrl && (
+80 |         <div className="relative w-full max-w-sm aspect-video">
+81 |           {/* eslint-disable-next-line @next/next/no-img-element */}
+82 |           <img
+83 |             src={currentImageUrl}
+84 |             alt="Venue"
+85 |             className="rounded-lg object-cover w-full h-full"
+86 |           />
+87 |         </div>
+88 |       )}
+89 |     </div>
+90 |   )
+91 | } 
 
 
 --------------------------------------------------------------------------------
@@ -5666,7 +5332,7 @@
 --------------------------------------------------------------------------------
 /app/favicon.ico:
 --------------------------------------------------------------------------------
-https://raw.githubusercontent.com/ACNoonan/samachi-app/master/app/favicon.ico
+https://raw.githubusercontent.com/ACNoonan/samachi-app/ea5c59baec35c409b87c879e36c5c87228db64fe/app/favicon.ico
 
 
 --------------------------------------------------------------------------------
@@ -5838,6 +5504,20 @@ https://raw.githubusercontent.com/ACNoonan/samachi-app/master/app/favicon.ico
 
 
 --------------------------------------------------------------------------------
+/app/venue/[venueId]/page.tsx:
+--------------------------------------------------------------------------------
+1 | 'use client';
+2 | 
+3 | import React from 'react';
+4 | import { VenueDetail } from '@/app/components/venue/VenueDetail';
+5 | 
+6 | export default function VenueDetailPage() {
+7 |   // The VenueDetail component itself handles fetching data based on URL params
+8 |   return <VenueDetail />;
+9 | } 
+
+
+--------------------------------------------------------------------------------
 /app/wallet/loading.tsx:
 --------------------------------------------------------------------------------
 1 | export default function Loading() {
@@ -5862,50 +5542,6 @@ https://raw.githubusercontent.com/ACNoonan/samachi-app/master/app/favicon.ico
 
 
 --------------------------------------------------------------------------------
-/hooks/useAuth.ts:
---------------------------------------------------------------------------------
- 1 | 'use client';
- 2 | 
- 3 | import { useState, useEffect } from 'react';
- 4 | 
- 5 | // TODO: Implement actual authentication logic
- 6 | export default function useAuth() {
- 7 |   const [user, setUser] = useState<any>(null); // Replace 'any' with your user type
- 8 |   const [loading, setLoading] = useState(true);
- 9 | 
-10 |   useEffect(() => {
-11 |     // Check for existing session (e.g., from Supabase, local storage, etc.)
-12 |     const checkSession = async () => {
-13 |       // Replace with your actual session check
-14 |       await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate async check
-15 |       // Example: setUser(supabase.auth.user());
-16 |       setUser(null); // Default to not logged in
-17 |       setLoading(false);
-18 |     };
-19 |     checkSession();
-20 |   }, []);
-21 | 
-22 |   const login = async (/* credentials */) => {
-23 |     setLoading(true);
-24 |     // Implement login logic (e.g., Supabase email/pass, wallet connect)
-25 |     await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate async login
-26 |     setUser({ name: 'Test User' }); // Example user object
-27 |     setLoading(false);
-28 |   };
-29 | 
-30 |   const logout = async () => {
-31 |     setLoading(true);
-32 |     // Implement logout logic
-33 |     await new Promise(resolve => setTimeout(resolve, 500)); // Simulate async logout
-34 |     setUser(null);
-35 |     setLoading(false);
-36 |   };
-37 | 
-38 |   return { user, loading, login, logout };
-39 | } 
-
-
---------------------------------------------------------------------------------
 /lib/auth.ts:
 --------------------------------------------------------------------------------
 1 | // TODO: Add shared authentication utility functions
@@ -5916,217 +5552,6 @@ https://raw.githubusercontent.com/ACNoonan/samachi-app/master/app/favicon.ico
 6 | };
 7 | 
 8 | export {}; // Placeholder 
-
-
---------------------------------------------------------------------------------
-/lib/glownet.ts:
---------------------------------------------------------------------------------
-  1 | import { z } from 'zod';
-  2 | 
-  3 | const GLOWNET_BASE_URL = process.env.GLOWNET_BASE_URL;
-  4 | const GLOWNET_API_KEY = process.env.GLOWNET_API_KEY;
-  5 | 
-  6 | if (!GLOWNET_BASE_URL) {
-  7 |   throw new Error('Missing GLOWNET_BASE_URL environment variable');
-  8 | }
-  9 | if (!GLOWNET_API_KEY) {
- 10 |   throw new Error('Missing GLOWNET_API_KEY environment variable');
- 11 | }
- 12 | 
- 13 | interface FetchOptions extends RequestInit {
- 14 |   params?: Record<string, string | number | boolean>;
- 15 | }
- 16 | 
- 17 | /**
- 18 |  * Generic fetch function for interacting with the Glownet API.
- 19 |  * Handles adding authentication headers and base URL.
- 20 |  * Throws an error for non-2xx responses.
- 21 |  * @param endpoint - The API endpoint (e.g., '/api/v2/events')
- 22 |  * @param options - Fetch options (method, body, headers, etc.)
- 23 |  * @returns The parsed JSON response.
- 24 |  */
- 25 | async function fetchGlownet<T = unknown>(
- 26 |   endpoint: string,
- 27 |   options: FetchOptions = {}
- 28 | ): Promise<T> {
- 29 |   const url = new URL(endpoint, GLOWNET_BASE_URL);
- 30 | 
- 31 |   if (options.params) {
- 32 |     Object.entries(options.params).forEach(([key, value]) => {
- 33 |       url.searchParams.append(key, String(value));
- 34 |     });
- 35 |   }
- 36 | 
- 37 |   const { params, ...fetchOptions } = options; // Remove custom 'params' option
- 38 | 
- 39 |   const response = await fetch(url.toString(), {
- 40 |     ...fetchOptions,
- 41 |     headers: {
- 42 |       'Authorization': `Token token=${GLOWNET_API_KEY}`,
- 43 |       'Content-Type': 'application/json',
- 44 |       'Accept': 'application/json',
- 45 |       ...fetchOptions.headers,
- 46 |     },
- 47 |   });
- 48 | 
- 49 |   if (!response.ok) {
- 50 |     let errorBody;
- 51 |     try {
- 52 |       errorBody = await response.json();
- 53 |     } catch (e) {
- 54 |       errorBody = await response.text();
- 55 |     }
- 56 |     console.error('Glownet API Error:', response.status, response.statusText, errorBody);
- 57 |     throw new Error(
- 58 |       `Glownet API request failed to ${endpoint}: ${response.status} ${response.statusText}`
- 59 |     );
- 60 |   }
- 61 | 
- 62 |   // Handle cases with empty response bodies (e.g., 201 Created, 204 No Content)
- 63 |   if (response.status === 201 || response.status === 204) {
- 64 |       return {} as T; // Return an empty object or adjust as needed
- 65 |   }
- 66 | 
- 67 |   // Only attempt to parse JSON if there's content
- 68 |   const contentType = response.headers.get("content-type");
- 69 |   if (contentType && contentType.includes("application/json")) {
- 70 |       try {
- 71 |           return (await response.json()) as T;
- 72 |       } catch (e) {
- 73 |           console.error('Failed to parse Glownet JSON response:', e);
- 74 |           throw new Error(`Failed to parse JSON response from ${endpoint}`);
- 75 |       }
- 76 |   }
- 77 | 
- 78 |   // If not JSON or no content, return an empty object or handle appropriately
- 79 |   return {} as T;
- 80 | }
- 81 | 
- 82 | // --- Helper Functions ---
- 83 | 
- 84 | /**
- 85 |  * Performs a GET request to the Glownet API.
- 86 |  */
- 87 | export function getGlownet<T = unknown>(
- 88 |   endpoint: string,
- 89 |   params?: Record<string, string | number | boolean>,
- 90 |   options: FetchOptions = {}
- 91 | ): Promise<T> {
- 92 |   return fetchGlownet<T>(endpoint, { ...options, method: 'GET', params });
- 93 | }
- 94 | 
- 95 | /**
- 96 |  * Performs a POST request to the Glownet API.
- 97 |  */
- 98 | export function postGlownet<T = unknown>(
- 99 |   endpoint: string,
-100 |   body: any,
-101 |   options: FetchOptions = {}
-102 | ): Promise<T> {
-103 |   return fetchGlownet<T>(endpoint, {
-104 |     ...options,
-105 |     method: 'POST',
-106 |     body: JSON.stringify(body),
-107 |   });
-108 | }
-109 | 
-110 | /**
-111 |  * Performs a PATCH request to the Glownet API.
-112 |  */
-113 | export function patchGlownet<T = unknown>(
-114 |   endpoint: string,
-115 |   body: any,
-116 |   options: FetchOptions = {}
-117 | ): Promise<T> {
-118 |   return fetchGlownet<T>(endpoint, {
-119 |     ...options,
-120 |     method: 'PATCH',
-121 |     body: JSON.stringify(body),
-122 |   });
-123 | }
-124 | 
-125 | /**
-126 |  * Performs a DELETE request to the Glownet API.
-127 |  */
-128 | export function deleteGlownet<T = unknown>(
-129 |   endpoint: string,
-130 |   options: FetchOptions = {}
-131 | ): Promise<T> {
-132 |   return fetchGlownet<T>(endpoint, { ...options, method: 'DELETE' });
-133 | }
-134 | 
-135 | 
-136 | // --- Specific API Function Examples (using Zod for validation) ---
-137 | 
-138 | const GlownetEventSchema = z.object({
-139 |   id: z.number(),
-140 |   name: z.string(),
-141 |   slug: z.string().optional().nullable(),
-142 |   start_date: z.string(),
-143 |   end_date: z.string(),
-144 |   timezone: z.string(),
-145 |   // Add other relevant fields based on glownet_api_docs.json
-146 | });
-147 | 
-148 | export type GlownetEvent = z.infer<typeof GlownetEventSchema>;
-149 | 
-150 | /**
-151 |  * Fetches all events (venues) from Glownet.
-152 |  */
-153 | export async function getAllGlownetEvents(): Promise<GlownetEvent[]> {
-154 |   const events = await getGlownet<unknown[]>(`/api/v2/events`);
-155 |   // Validate the response structure
-156 |   return z.array(GlownetEventSchema).parse(events);
-157 | }
-158 | 
-159 | 
-160 | const GlownetCustomerSchema = z.object({
-161 |     id: z.number(), // Assuming ID is numeric, adjust if string
-162 |     first_name: z.string().optional().nullable(),
-163 |     last_name: z.string().optional().nullable(),
-164 |     email: z.string().email().optional().nullable(),
-165 |     // Add other fields as needed from docs
-166 | });
-167 | 
-168 | export type GlownetCustomer = z.infer<typeof GlownetCustomerSchema>;
-169 | 
-170 | interface CreateGlownetCustomerPayload {
-171 |     customer: {
-172 |         first_name?: string;
-173 |         last_name?: string;
-174 |         email?: string;
-175 |         phone?: string;
-176 |         birthdate?: string; // "YYYY-MM-DD" format? Docs example uses "2019-01-01"
-177 |         // Add other fields as needed/supported by POST /api/v2/events/{event_id}/customers
-178 |     };
-179 | }
-180 | 
-181 | /**
-182 |  * Creates a new customer for a specific Glownet event.
-183 |  */
-184 | export async function createGlownetCustomer(
-185 |     glownetEventId: number | string, // Can be ID or slug
-186 |     payload: CreateGlownetCustomerPayload
-187 | ): Promise<GlownetCustomer> {
-188 |     // Note: API docs indicate 201 returns an *array* of customers, potentially just one.
-189 |     // Adjust parsing if necessary. Assuming it returns the single created customer object directly for simplicity here.
-190 |     const result = await postGlownet<GlownetCustomer>( // Adjust <GlownetCustomer> if it returns an array
-191 |         `/api/v2/events/${glownetEventId}/customers`,
-192 |         payload
-193 |     );
-194 |     // If it returns an array: return GlownetCustomerSchema.parse(result[0]);
-195 |     return GlownetCustomerSchema.parse(result);
-196 | }
-197 | 
-198 | 
-199 | // We might not need checkGlownetCardStatus directly anymore,
-200 | // as card linking might happen via Gtag lookup or customer creation.
-201 | // Removing the placeholder for now.
-202 | 
-203 | // export const checkGlownetCardStatus = async (cardId: string) => { ... }
-204 | 
-205 | 
-206 | // export {}; // No longer needed as we have named exports 
 
 
 --------------------------------------------------------------------------------
@@ -6147,6 +5572,101 @@ https://raw.githubusercontent.com/ACNoonan/samachi-app/master/app/favicon.ico
 13 | }
 14 | 
 15 | export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+
+--------------------------------------------------------------------------------
+/lib/supabase/client.ts:
+--------------------------------------------------------------------------------
+ 1 | import { createBrowserClient } from '@supabase/ssr';
+ 2 | 
+ 3 | // Define a function to create a Supabase client for client-side operations
+ 4 | export function createClient() {
+ 5 |   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+ 6 |   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+ 7 | 
+ 8 |   if (!supabaseUrl) {
+ 9 |     throw new Error('Missing env.NEXT_PUBLIC_SUPABASE_URL');
+10 |   }
+11 |   if (!supabaseAnonKey) {
+12 |     throw new Error('Missing env.NEXT_PUBLIC_SUPABASE_ANON_KEY');
+13 |   }
+14 | 
+15 |   return createBrowserClient(
+16 |     supabaseUrl,
+17 |     supabaseAnonKey
+18 |   );
+19 | } 
+
+
+--------------------------------------------------------------------------------
+/lib/supabase/middleware.ts:
+--------------------------------------------------------------------------------
+ 1 | // lib/supabase/middleware.ts
+ 2 | import { createServerClient, type CookieOptions } from '@supabase/ssr'
+ 3 | import { NextResponse, type NextRequest } from 'next/server'
+ 4 | 
+ 5 | export async function updateSession(request: NextRequest) {
+ 6 |   let response = NextResponse.next({
+ 7 |     request: {
+ 8 |       headers: request.headers,
+ 9 |     },
+10 |   })
+11 | 
+12 |   const supabase = createServerClient(
+13 |     process.env.NEXT_PUBLIC_SUPABASE_URL!,
+14 |     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+15 |     {
+16 |       cookies: {
+17 |         get(name: string) {
+18 |           return request.cookies.get(name)?.value
+19 |         },
+20 |         set(name: string, value: string, options: CookieOptions) {
+21 |           request.cookies.set({ name, value, ...options })
+22 |           response = NextResponse.next({ request: { headers: request.headers } })
+23 |           response.cookies.set({ name, value, ...options })
+24 |         },
+25 |         remove(name: string, options: CookieOptions) {
+26 |           request.cookies.set({ name, value: '', ...options })
+27 |           response = NextResponse.next({ request: { headers: request.headers } })
+28 |           response.cookies.set({ name, value: '', ...options })
+29 |         },
+30 |       },
+31 |     }
+32 |   )
+33 | 
+34 |   // Refresh session if expired - important!
+35 |   const { data: { user } } = await supabase.auth.getUser();
+36 | 
+37 |   // --- Your Custom Logic Here (Copied from previous plan) ---
+38 |   const { pathname } = request.nextUrl;
+39 |   const isAuthenticated = !!user;
+40 | 
+41 |   console.log(`[Middleware] Path: ${pathname}, Auth User: ${isAuthenticated ? user.id : 'None'}`);
+42 | 
+43 |   const publicPaths = ['/login', '/card/'];
+44 |   const isPublicPath = publicPaths.some(path => pathname.startsWith(path)) || pathname === '/';
+45 | 
+46 |   // Redirect unauthenticated users from protected paths
+47 |   if (!isAuthenticated && !isPublicPath) {
+48 |      // Allow create-profile only if coming from card scan
+49 |      if (pathname === '/create-profile' && request.nextUrl.searchParams.has('cardId')) {
+50 |          console.log(`[Middleware] Allowing unauthenticated access to /create-profile with cardId`);
+51 |          // Still return the original response to allow Supabase cookie handling
+52 |          return response;
+53 |      }
+54 |      console.log(`[Middleware] Redirecting unauthenticated user from ${pathname} to /login`);
+55 |      return NextResponse.redirect(new URL('/login', request.url));
+56 |   }
+57 | 
+58 |   // Redirect authenticated users from login or root path
+59 |   if (isAuthenticated && (pathname === '/login' || pathname === '/')) {
+60 |      console.log(`[Middleware] Redirecting authenticated user from ${pathname} to /dashboard`);
+61 |      return NextResponse.redirect(new URL('/dashboard', request.url));
+62 |   }
+63 |   // --- End Custom Logic ---
+64 | 
+65 |   return response // Return the response object (handles potential cookie updates)
+66 | } 
 
 
 --------------------------------------------------------------------------------
@@ -6171,11 +5691,11 @@ https://raw.githubusercontent.com/ACNoonan/samachi-app/master/app/favicon.ico
 17 |   return createServerClient(supabaseUrl, supabaseServiceRoleKey, {
 18 |     cookies: {
 19 |       get(name: string) {
-20 |         return cookieStore.get(name)?.value;
-21 |       },
-22 |       set(name: string, value: string, options: CookieOptions) {
-23 |         try {
-24 |           // Use the cookieStore instance directly
+20 |         const cookie = cookieStore.get(name);
+21 |         return cookie?.value;
+22 |       },
+23 |       set(name: string, value: string, options: CookieOptions) {
+24 |         try {
 25 |           cookieStore.set({ name, value, ...options });
 26 |         } catch (error) {
 27 |           // The `set` method was called from a Server Component.
@@ -6185,25 +5705,24 @@ https://raw.githubusercontent.com/ACNoonan/samachi-app/master/app/favicon.ico
 31 |       },
 32 |       remove(name: string, options: CookieOptions) {
 33 |         try {
-34 |           // Use the cookieStore instance directly
-35 |           cookieStore.set({ name, value: '', ...options });
-36 |         } catch (error) {
-37 |           // The `delete` method was called from a Server Component.
-38 |           // This can be ignored if you have middleware refreshing
-39 |           // user sessions.
-40 |         }
-41 |       },
-42 |     },
-43 |     // It's generally recommended to use the service role key for server-side operations
-44 |     // that need to bypass RLS or perform admin tasks.
-45 |     auth: {
-46 |       // Required for supabase-ssr
-47 |       persistSession: true,
-48 |       autoRefreshToken: true,
-49 |       detectSessionInUrl: false,
-50 |     },
-51 |   });
-52 | } 
+34 |           cookieStore.set({ name, value: '', ...options });
+35 |         } catch (error) {
+36 |           // The `delete` method was called from a Server Component.
+37 |           // This can be ignored if you have middleware refreshing
+38 |           // user sessions.
+39 |         }
+40 |       },
+41 |     },
+42 |     // It's generally recommended to use the service role key for server-side operations
+43 |     // that need to bypass RLS or perform admin tasks.
+44 |     auth: {
+45 |       // Required for supabase-ssr
+46 |       persistSession: true,
+47 |       autoRefreshToken: true,
+48 |       detectSessionInUrl: false,
+49 |     },
+50 |   });
+51 | } 
 
 
 --------------------------------------------------------------------------------
@@ -6220,76 +5739,40 @@ https://raw.githubusercontent.com/ACNoonan/samachi-app/master/app/favicon.ico
 --------------------------------------------------------------------------------
 /middleware.ts:
 --------------------------------------------------------------------------------
- 1 | import { NextResponse } from 'next/server';
- 2 | import type { NextRequest } from 'next/server';
+ 1 | import { updateSession } from '@/lib/supabase/middleware'
+ 2 | import { NextRequest, NextResponse } from 'next/server'
  3 | 
  4 | // Define the same secure cookie name
  5 | const SESSION_COOKIE_NAME = 'auth_session';
  6 | 
  7 | // This function can be marked `async` if using `await` inside
- 8 | export function middleware(request: NextRequest) {
- 9 |   // 1. Check for the session cookie
-10 |   const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME);
-11 |   const isAuthenticated = !!sessionCookie; // User is authenticated if the cookie exists
+ 8 | export async function middleware(request: NextRequest) {
+ 9 |   // updateSession handles session refresh and contains your redirect logic
+10 |   return await updateSession(request)
+11 | }
 12 | 
-13 |   console.log(`[Middleware] Path: ${request.nextUrl.pathname}, Cookie found: ${isAuthenticated}`);
-14 | 
-15 |   // 2. Define public paths (paths accessible without authentication)
-16 |   // Remove /dashboard, /create-profile - they should require auth or be handled differently
-17 |   const publicPaths = ['/login', '/card/'];
-18 |   // Allow root path and API routes implicitly (though matcher excludes API)
-19 |   const isPublicPath = publicPaths.some(path => request.nextUrl.pathname.startsWith(path)) || request.nextUrl.pathname === '/';
-20 | 
-21 |   // 3. Handle Redirections
-22 | 
-23 |   // If user is NOT authenticated and trying to access a non-public path
-24 |   if (!isAuthenticated && !isPublicPath) {
-25 |     console.log(`[Middleware] Redirecting unauthenticated user from ${request.nextUrl.pathname} to /login`);
-26 |     // Special case: Allow access to /create-profile only if coming from card scan (has cardId query param)
-27 |     if (request.nextUrl.pathname === '/create-profile' && request.nextUrl.searchParams.has('cardId')) {
-28 |         console.log(`[Middleware] Allowing unauthenticated access to /create-profile with cardId`);
-29 |         return NextResponse.next();
-30 |     }
-31 |     return NextResponse.redirect(new URL('/login', request.url));
-32 |   }
-33 | 
-34 |   // If user IS authenticated and trying to access login or root path (after login)
-35 |   if (isAuthenticated && (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/')) {
-36 |     console.log(`[Middleware] Redirecting authenticated user from ${request.nextUrl.pathname} to /dashboard`);
-37 |     return NextResponse.redirect(new URL('/dashboard', request.url));
-38 |   }
-39 | 
-40 |   // If user IS authenticated and trying to access /create-profile (shouldn't happen)
-41 |   if (isAuthenticated && request.nextUrl.pathname === '/create-profile') {
-42 |      console.log(`[Middleware] Redirecting authenticated user from /create-profile to /dashboard`);
-43 |      return NextResponse.redirect(new URL('/dashboard', request.url));
-44 |   }
-45 | 
-46 |   // Otherwise, allow the request to proceed
-47 |   return NextResponse.next();
-48 | }
-49 | 
-50 | // See "Matching Paths" below to learn more
-51 | export const config = {
-52 |   matcher: [
-53 |     /*
-54 |      * Match all request paths except for the ones starting with:
-55 |      * - api (API routes)
-56 |      * - _next/static (static files)
-57 |      * - _next/image (image optimization files)
-58 |      * - favicon.ico (favicon file)
-59 |      */
-60 |     '/((?!api|_next/static|_next/image|favicon.ico).*)',
-61 |   ],
-62 | }; 
+13 | // See "Matching Paths" below to learn more
+14 | export const config = {
+15 |   matcher: [
+16 |     /*
+17 |      * Match all request paths except for the ones starting with:
+18 |      * - api (API routes)
+19 |      * - _next/static (static files)
+20 |      * - _next/image (image optimization files)
+21 |      * - favicon.ico (favicon file)
+22 |      * Feel free to modify this pattern to include more paths.
+23 |      */
+24 |     '/((?!api|_next/static|_next/image|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+25 |   ],
+26 | }; 
 
 
 --------------------------------------------------------------------------------
-/next.config.ts:
+/next.config.mjs:
 --------------------------------------------------------------------------------
-1 | import type { NextConfig } from "next";
+1 | // import type { NextConfig } from "next";
 2 | 
-3 | const nextConfig: NextConfig = {
+3 | const nextConfig = {
 4 |   /* config options here */
 5 | };
 6 | 
@@ -6312,40 +5795,48 @@ https://raw.githubusercontent.com/ACNoonan/samachi-app/master/app/favicon.ico
 10 |   },
 11 |   "dependencies": {
 12 |     "@hookform/resolvers": "^5.0.1",
-13 |     "@radix-ui/react-label": "^2.1.3",
-14 |     "@radix-ui/react-slot": "^1.2.0",
-15 |     "@radix-ui/react-switch": "^1.1.4",
-16 |     "@solana/wallet-adapter-base": "^0.9.24",
-17 |     "@solana/wallet-adapter-react": "^0.15.36",
-18 |     "@solana/wallet-adapter-react-ui": "^0.9.36",
-19 |     "@solana/wallet-adapter-wallets": "^0.19.34",
-20 |     "@solana/web3.js": "^1.98.0",
-21 |     "@supabase/supabase-js": "^2.49.4",
-22 |     "@types/bcryptjs": "^3.0.0",
-23 |     "bcryptjs": "^3.0.2",
-24 |     "class-variance-authority": "^0.7.1",
-25 |     "clsx": "^2.1.1",
-26 |     "lucide-react": "^0.487.0",
-27 |     "next": "15.3.0",
-28 |     "next-themes": "^0.4.6",
-29 |     "pino-pretty": "^13.0.0",
-30 |     "react": "^19.0.0",
-31 |     "react-dom": "^19.0.0",
-32 |     "react-hook-form": "^7.55.0",
-33 |     "sonner": "^2.0.3",
-34 |     "tailwind-merge": "^3.2.0",
-35 |     "zod": "^3.24.2"
-36 |   },
-37 |   "devDependencies": {
-38 |     "@tailwindcss/postcss": "^4",
-39 |     "@types/node": "^20",
-40 |     "@types/react": "^19",
-41 |     "@types/react-dom": "^19",
-42 |     "tailwindcss": "^4",
-43 |     "typescript": "^5"
-44 |   }
-45 | }
-46 | 
+13 |     "@radix-ui/react-accordion": "^1.2.4",
+14 |     "@radix-ui/react-alert-dialog": "^1.1.7",
+15 |     "@radix-ui/react-label": "^2.1.3",
+16 |     "@radix-ui/react-separator": "^1.1.3",
+17 |     "@radix-ui/react-slot": "^1.2.0",
+18 |     "@radix-ui/react-switch": "^1.1.4",
+19 |     "@solana/wallet-adapter-base": "^0.9.24",
+20 |     "@solana/wallet-adapter-react": "^0.15.36",
+21 |     "@solana/wallet-adapter-react-ui": "^0.9.36",
+22 |     "@solana/wallet-adapter-wallets": "^0.19.34",
+23 |     "@solana/web3.js": "^1.98.0",
+24 |     "@supabase/ssr": "^0.6.1",
+25 |     "@supabase/supabase-js": "^2.49.4",
+26 |     "@types/bcryptjs": "^3.0.0",
+27 |     "@types/dotenv": "^8.2.3",
+28 |     "axios": "^1.8.4",
+29 |     "bcryptjs": "^3.0.2",
+30 |     "class-variance-authority": "^0.7.1",
+31 |     "clsx": "^2.1.1",
+32 |     "dotenv": "^16.5.0",
+33 |     "framer-motion": "^12.7.3",
+34 |     "lucide-react": "^0.487.0",
+35 |     "next": "14.2.28",
+36 |     "next-themes": "^0.4.6",
+37 |     "pino-pretty": "^13.0.0",
+38 |     "react": "^18.3.1",
+39 |     "react-dom": "^18.3.1",
+40 |     "react-hook-form": "^7.55.0",
+41 |     "sonner": "^2.0.3",
+42 |     "tailwind-merge": "^3.2.0",
+43 |     "zod": "^3.24.2"
+44 |   },
+45 |   "devDependencies": {
+46 |     "@tailwindcss/postcss": "^4",
+47 |     "@types/node": "^20",
+48 |     "@types/react": "^18.3.20",
+49 |     "@types/react-dom": "^18.3.6",
+50 |     "tailwindcss": "^4",
+51 |     "typescript": "^5"
+52 |   }
+53 | }
+54 | 
 
 
 --------------------------------------------------------------------------------
@@ -6362,19 +5853,19 @@ https://raw.githubusercontent.com/ACNoonan/samachi-app/master/app/favicon.ico
 --------------------------------------------------------------------------------
 /public/barrage-club.png:
 --------------------------------------------------------------------------------
-https://raw.githubusercontent.com/ACNoonan/samachi-app/master/public/barrage-club.png
+https://raw.githubusercontent.com/ACNoonan/samachi-app/ea5c59baec35c409b87c879e36c5c87228db64fe/public/barrage-club.png
 
 
 --------------------------------------------------------------------------------
-/public/bertha-club.png:
+/public/berhta-club.png:
 --------------------------------------------------------------------------------
-https://raw.githubusercontent.com/ACNoonan/samachi-app/master/public/bertha-club.png
+https://raw.githubusercontent.com/ACNoonan/samachi-app/ea5c59baec35c409b87c879e36c5c87228db64fe/public/berhta-club.png
 
 
 --------------------------------------------------------------------------------
 /public/bloom-festival.png:
 --------------------------------------------------------------------------------
-https://raw.githubusercontent.com/ACNoonan/samachi-app/master/public/bloom-festival.png
+https://raw.githubusercontent.com/ACNoonan/samachi-app/ea5c59baec35c409b87c879e36c5c87228db64fe/public/bloom-festival.png
 
 
 --------------------------------------------------------------------------------
@@ -6398,7 +5889,7 @@ https://raw.githubusercontent.com/ACNoonan/samachi-app/master/public/bloom-festi
 --------------------------------------------------------------------------------
 /public/novi1.png:
 --------------------------------------------------------------------------------
-https://raw.githubusercontent.com/ACNoonan/samachi-app/master/public/novi1.png
+https://raw.githubusercontent.com/ACNoonan/samachi-app/ea5c59baec35c409b87c879e36c5c87228db64fe/public/novi1.png
 
 
 --------------------------------------------------------------------------------
@@ -6411,6 +5902,470 @@ https://raw.githubusercontent.com/ACNoonan/samachi-app/master/public/novi1.png
 /public/window.svg:
 --------------------------------------------------------------------------------
 1 | <svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M1.5 2.5h13v10a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1zM0 1h16v11.5a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 0 12.5zm3.75 4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5M7 4.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0m1.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5" fill="#666"/></svg>
+
+
+--------------------------------------------------------------------------------
+/python/create_glownet_events.py:
+--------------------------------------------------------------------------------
+  1 | # samachi-app/create_glownet_test_data.py
+  2 | import os
+  3 | import requests
+  4 | import sys
+  5 | from datetime import datetime, timedelta
+  6 | from dotenv import load_dotenv
+  7 | 
+  8 | # --- Configuration ---
+  9 | # Construct the path to .env.local relative to this script file
+ 10 | script_dir = os.path.dirname(os.path.abspath(__file__))
+ 11 | parent_dir = os.path.dirname(script_dir)  # Go up one level
+ 12 | dotenv_path = os.path.join(parent_dir, '.env.local')
+ 13 | 
+ 14 | print(f"Looking for .env.local at: {dotenv_path}")
+ 15 | if not os.path.exists(dotenv_path):
+ 16 |     print(f"Warning: .env.local not found at {dotenv_path}")
+ 17 |     
+ 18 | load_dotenv(dotenv_path=dotenv_path)
+ 19 | 
+ 20 | GLOWNET_API_BASE_URL = os.getenv("GLOWNET_API_BASE_URL", "https://opera.glownet.com")
+ 21 | GLOWNET_API_KEY = os.getenv("GLOWNET_API_KEY")
+ 22 | 
+ 23 | if not GLOWNET_API_KEY:
+ 24 |     print("Error: GLOWNET_API_KEY environment variable not set in .env.local")
+ 25 |     sys.exit(1)
+ 26 | 
+ 27 | HEADERS = {
+ 28 |     "AUTHORIZATION": f"Token token={GLOWNET_API_KEY}",
+ 29 |     "Content-Type": "application/json",
+ 30 |     "Accept": "application/json"
+ 31 | }
+ 32 | 
+ 33 | # --- Helper Functions ---
+ 34 | 
+ 35 | def handle_response(response, success_status_codes=(200, 201)):
+ 36 |     """Checks response status and returns JSON or raises error."""
+ 37 |     if response.status_code in success_status_codes:
+ 38 |         try:
+ 39 |             if response.text:
+ 40 |                 return response.json()
+ 41 |             else:
+ 42 |                 return None # Success, but no JSON body
+ 43 |         except requests.exceptions.JSONDecodeError:
+ 44 |             print(f"Warning: Successful status ({response.status_code}) but could not decode JSON.")
+ 45 |             print(f"Response Text: {response.text}")
+ 46 |             return None
+ 47 |     else:
+ 48 |         print(f"Error: API returned status {response.status_code}")
+ 49 |         try:
+ 50 |             error_details = response.json()
+ 51 |             print(f"Response: {error_details}")
+ 52 |             message = error_details.get('error') or error_details.get('message') or str(error_details)
+ 53 |             print(f"API Error Details: {message}")
+ 54 |         except requests.exceptions.JSONDecodeError:
+ 55 |             print(f"Response Text (non-JSON): {response.text}")
+ 56 |         return None # Indicate failure
+ 57 | 
+ 58 | def ask_yes_no(prompt):
+ 59 |     """Asks a yes/no question and returns True for yes, False for no."""
+ 60 |     while True:
+ 61 |         response = input(f"{prompt} (y/n): ").lower().strip()
+ 62 |         if response == 'y':
+ 63 |             return True
+ 64 |         elif response == 'n':
+ 65 |             return False
+ 66 |         else:
+ 67 |             print("Invalid input. Please enter 'y' or 'n'.")
+ 68 | 
+ 69 | def create_event(name, start_date, end_date, timezone):
+ 70 |     """Creates a single event."""
+ 71 |     url = f"{GLOWNET_API_BASE_URL}/api/v2/events"
+ 72 |     payload = {
+ 73 |         "event": {
+ 74 |             "name": name,
+ 75 |             "start_date": start_date,
+ 76 |             "end_date": end_date,
+ 77 |             "timezone": timezone
+ 78 |         }
+ 79 |     }
+ 80 |     print(f"\nAttempting to create event: {name}...")
+ 81 |     print(f"Request URL: {url}")
+ 82 |     print(f"Request Headers: {HEADERS}")
+ 83 |     print(f"Request Payload: {payload}")
+ 84 |     
+ 85 |     try:
+ 86 |         response = requests.post(url, headers=HEADERS, json=payload)
+ 87 |         result = handle_response(response, success_status_codes=(201,))
+ 88 |         if result:
+ 89 |             print(f"Successfully created event:")
+ 90 |             print(f"  ID: {result.get('id')}")
+ 91 |             print(f"  Slug: {result.get('slug')}")
+ 92 |             print(f"  State: {result.get('state')}")
+ 93 |         return result
+ 94 |     except requests.exceptions.RequestException as e:
+ 95 |         print(f"  Network error creating event '{name}': {e}")
+ 96 |         return None
+ 97 | 
+ 98 | # --- Main Interactive Script ---
+ 99 | if __name__ == "__main__":
+100 |     print("--- Glownet Event Creator ---")
+101 |     print(f"API Base URL: {GLOWNET_API_BASE_URL}")
+102 |     print("-" * 40)
+103 | 
+104 |     while True:
+105 |         if not ask_yes_no("Do you want to create a new event?"):
+106 |             break
+107 | 
+108 |         event_name = input("Enter the name for the new event: ").strip()
+109 |         
+110 |         # Get dates from user or use defaults
+111 |         use_default_dates = ask_yes_no("Use default dates (today + 7 days)?")
+112 |         
+113 |         if use_default_dates:
+114 |             now = datetime.now()
+115 |             start_date = now.strftime("%d/%m/%Y %H:%M:%S")
+116 |             end_date = (now + timedelta(days=7)).strftime("%d/%m/%Y %H:%M:%S")
+117 |         else:
+118 |             print("Enter dates in format DD/MM/YYYY HH:MM:SS")
+119 |             start_date = input("Enter start date: ").strip()
+120 |             end_date = input("Enter end date: ").strip()
+121 | 
+122 |         timezone = input("Enter timezone (default: Madrid): ").strip() or "Madrid"
+123 | 
+124 |         created_event_info = create_event(event_name, start_date, end_date, timezone)
+125 |         
+126 |         if created_event_info:
+127 |             print("\nEvent created successfully!")
+128 |             print("You can now use create_glownet_assets.py to add customers and G-Tags to this event.")
+129 |         else:
+130 |             print(f"\nFailed to create event '{event_name}'.")
+131 |         
+132 |         print("-" * 40)
+133 | 
+134 |     print("\nEvent Creation Script finished.")
+135 | 
+
+
+--------------------------------------------------------------------------------
+/python/sync_cards.py:
+--------------------------------------------------------------------------------
+  1 | import os
+  2 | import sys
+  3 | import requests
+  4 | import time
+  5 | import json
+  6 | from dotenv import load_dotenv
+  7 | 
+  8 | # --- Configuration ---
+  9 | # Construct the path to .env.local relative to this script file
+ 10 | script_dir = os.path.dirname(os.path.abspath(__file__))
+ 11 | parent_dir = os.path.dirname(script_dir)  # Go up one level
+ 12 | dotenv_path = os.path.join(parent_dir, '.env.local')
+ 13 | 
+ 14 | print(f"Looking for .env.local at: {dotenv_path}")
+ 15 | if not os.path.exists(dotenv_path):
+ 16 |     print(f"Warning: .env.local not found at {dotenv_path}")
+ 17 |     
+ 18 | load_dotenv(dotenv_path=dotenv_path)
+ 19 | 
+ 20 | # App base URL will now point to the Next.js app
+ 21 | APP_BASE_URL = os.getenv("NEXT_PUBLIC_APP_URL", "http://localhost:3000")
+ 22 | GLOWNET_API_KEY = os.getenv("GLOWNET_API_KEY")
+ 23 | 
+ 24 | if not GLOWNET_API_KEY:
+ 25 |     print("Error: Required environment variables not set in .env.local")
+ 26 |     print("Required: GLOWNET_API_KEY")
+ 27 |     sys.exit(1)
+ 28 | 
+ 29 | def test_api_sync(sync_type="full", batch_size=50):
+ 30 |     """Tests the cards API sync endpoint."""
+ 31 |     url = f"{APP_BASE_URL}/api/cards/sync-glownet"
+ 32 |     
+ 33 |     headers = {
+ 34 |         "Content-Type": "application/json"
+ 35 |     }
+ 36 |     
+ 37 |     payload = {
+ 38 |         "type": sync_type,
+ 39 |         "batchSize": batch_size
+ 40 |     }
+ 41 |     
+ 42 |     print(f"Testing Card Sync API at: {url}")
+ 43 |     print(f"Parameters: {json.dumps(payload, indent=2)}")
+ 44 |     
+ 45 |     try:
+ 46 |         start_time = time.time()
+ 47 |         response = requests.post(url, json=payload, headers=headers)
+ 48 |         elapsed_time = time.time() - start_time
+ 49 |         
+ 50 |         print("\n" + "=" * 50)
+ 51 |         print(f"Response Status: {response.status_code}")
+ 52 |         print(f"Time taken: {elapsed_time:.2f} seconds")
+ 53 |         
+ 54 |         if response.status_code == 200:
+ 55 |             result = response.json()
+ 56 |             print("\nSync Results:")
+ 57 |             print(f"Message: {result.get('message', 'No message')}")
+ 58 |             
+ 59 |             if 'stats' in result:
+ 60 |                 stats = result['stats']
+ 61 |                 print(f"\nTotal cards processed: {stats.get('total', 0)}")
+ 62 |                 print(f"Synced: {stats.get('synced', 0)}")
+ 63 |                 print(f"Failed: {stats.get('failed', 0)}")
+ 64 |             
+ 65 |             return result
+ 66 |         else:
+ 67 |             print(f"Error: API returned status {response.status_code}")
+ 68 |             try:
+ 69 |                 error_details = response.json()
+ 70 |                 print(f"Error details: {json.dumps(error_details, indent=2)}")
+ 71 |             except:
+ 72 |                 print(f"Response text: {response.text}")
+ 73 |             return None
+ 74 |             
+ 75 |     except requests.exceptions.RequestException as e:
+ 76 |         print(f"Network error while testing API: {e}")
+ 77 |         return None
+ 78 | 
+ 79 | def test_cron_trigger():
+ 80 |     """Tests the cron trigger endpoint for cards sync."""
+ 81 |     url = f"{APP_BASE_URL}/api/cards/sync-glownet"
+ 82 |     
+ 83 |     print(f"Testing Card Sync Cron Trigger at: {url}")
+ 84 |     print("Note: This should return 401 Unauthorized since it's not coming from Vercel cron")
+ 85 |     
+ 86 |     try:
+ 87 |         response = requests.get(url)
+ 88 |         
+ 89 |         print("\n" + "=" * 50)
+ 90 |         print(f"Response Status: {response.status_code}")
+ 91 |         
+ 92 |         if response.status_code == 200:
+ 93 |             result = response.json()
+ 94 |             print("\nSync Results:")
+ 95 |             print(f"Message: {result.get('message', 'No message')}")
+ 96 |             
+ 97 |             if 'stats' in result:
+ 98 |                 stats = result['stats']
+ 99 |                 print(f"\nTotal cards processed: {stats.get('total', 0)}")
+100 |                 print(f"Synced: {stats.get('synced', 0)}")
+101 |                 print(f"Failed: {stats.get('failed', 0)}")
+102 |                 
+103 |             return result
+104 |         else:
+105 |             print(f"Expected error response: {response.status_code}")
+106 |             try:
+107 |                 error_details = response.json()
+108 |                 print(f"Response details: {json.dumps(error_details, indent=2)}")
+109 |             except:
+110 |                 print(f"Response text: {response.text}")
+111 |             return None
+112 |             
+113 |     except requests.exceptions.RequestException as e:
+114 |         print(f"Network error while testing cron trigger: {e}")
+115 |         return None
+116 | 
+117 | # --- Main Script ---
+118 | if __name__ == "__main__":
+119 |     print("=== Card Sync API Test Tool ===")
+120 |     print(f"App Base URL: {APP_BASE_URL}")
+121 |     print("=" * 40)
+122 | 
+123 |     if len(sys.argv) > 1 and sys.argv[1] == "cron":
+124 |         # Test cron trigger endpoint
+125 |         test_cron_trigger()
+126 |     else:
+127 |         # Test sync endpoint with parameters
+128 |         sync_type = "full"
+129 |         batch_size = 50
+130 |         
+131 |         # Parse command line arguments for sync_type and batch_size
+132 |         if len(sys.argv) > 1:
+133 |             sync_type = sys.argv[1]
+134 |         if len(sys.argv) > 2:
+135 |             try:
+136 |                 batch_size = int(sys.argv[2])
+137 |             except ValueError:
+138 |                 print(f"Invalid batch size: {sys.argv[2]}, using default: 50")
+139 |                 
+140 |         test_api_sync(sync_type, batch_size)
+141 |         
+142 |     print("\nAPI test completed.") 
+
+
+--------------------------------------------------------------------------------
+/python/sync_venues.py:
+--------------------------------------------------------------------------------
+  1 | import os
+  2 | import sys
+  3 | import json
+  4 | import requests
+  5 | from dotenv import load_dotenv
+  6 | import time
+  7 | 
+  8 | # --- Configuration ---
+  9 | # Construct the path to .env.local relative to this script file
+ 10 | script_dir = os.path.dirname(os.path.abspath(__file__))
+ 11 | parent_dir = os.path.dirname(script_dir)  # Go up one level
+ 12 | dotenv_path = os.path.join(parent_dir, '.env.local')
+ 13 | 
+ 14 | print(f"Looking for .env.local at: {dotenv_path}")
+ 15 | if not os.path.exists(dotenv_path):
+ 16 |     print(f"Warning: .env.local not found at {dotenv_path}")
+ 17 |     
+ 18 | load_dotenv(dotenv_path=dotenv_path)
+ 19 | 
+ 20 | # App base URL will now point to the Next.js app
+ 21 | APP_BASE_URL = os.getenv("NEXT_PUBLIC_APP_URL", "http://localhost:3000")
+ 22 | GLOWNET_API_KEY = os.getenv("GLOWNET_API_KEY")
+ 23 | 
+ 24 | if not GLOWNET_API_KEY:
+ 25 |     print("Error: Required environment variables not set in .env.local")
+ 26 |     print("Required: GLOWNET_API_KEY")
+ 27 |     sys.exit(1)
+ 28 | 
+ 29 | def load_venue_images():
+ 30 |     """Load venue image mappings from JSON file"""
+ 31 |     image_file_path = os.path.join(script_dir, 'venue_images.json')
+ 32 |     try:
+ 33 |         with open(image_file_path, 'r') as f:
+ 34 |             data = json.load(f)
+ 35 |             return data.get('venue_images', {})
+ 36 |     except FileNotFoundError:
+ 37 |         print(f"Warning: venue_images.json not found at {image_file_path}")
+ 38 |         return {}
+ 39 |     except json.JSONDecodeError:
+ 40 |         print(f"Warning: venue_images.json at {image_file_path} is not valid JSON")
+ 41 |         return {}
+ 42 | 
+ 43 | def test_api_sync(sync_type="full", venue_images=None):
+ 44 |     """Tests the venues API sync endpoint."""
+ 45 |     url = f"{APP_BASE_URL}/api/venues/sync-glownet"
+ 46 |     
+ 47 |     headers = {
+ 48 |         "Content-Type": "application/json"
+ 49 |     }
+ 50 |     
+ 51 |     payload = {
+ 52 |         "type": sync_type,
+ 53 |         "venue_images": venue_images or {}
+ 54 |     }
+ 55 |     
+ 56 |     print(f"Testing Venue Sync API at: {url}")
+ 57 |     print(f"Parameters: {json.dumps(payload, indent=2)}")
+ 58 |     
+ 59 |     try:
+ 60 |         start_time = time.time()
+ 61 |         response = requests.post(url, json=payload, headers=headers)
+ 62 |         elapsed_time = time.time() - start_time
+ 63 |         
+ 64 |         print("\n" + "=" * 50)
+ 65 |         print(f"Response Status: {response.status_code}")
+ 66 |         print(f"Time taken: {elapsed_time:.2f} seconds")
+ 67 |         
+ 68 |         if response.status_code == 200:
+ 69 |             result = response.json()
+ 70 |             print("\nSync Results:")
+ 71 |             print(f"Message: {result.get('message', 'No message')}")
+ 72 |             
+ 73 |             if 'data' in result:
+ 74 |                 print(f"\nVenues synced: {len(result['data'])}")
+ 75 |                 print("Synced venues:")
+ 76 |                 for venue in result['data']:
+ 77 |                     print(f"- {venue.get('name', 'Unknown')} (ID: {venue.get('id', 'Unknown')})")
+ 78 |             
+ 79 |             return result
+ 80 |         else:
+ 81 |             print(f"Error: API returned status {response.status_code}")
+ 82 |             try:
+ 83 |                 error_details = response.json()
+ 84 |                 print(f"Error details: {json.dumps(error_details, indent=2)}")
+ 85 |             except:
+ 86 |                 print(f"Response text: {response.text}")
+ 87 |             return None
+ 88 |             
+ 89 |     except requests.exceptions.RequestException as e:
+ 90 |         print(f"Network error while testing API: {e}")
+ 91 |         return None
+ 92 | 
+ 93 | def test_cron_trigger():
+ 94 |     """Tests the cron trigger endpoint for venues sync."""
+ 95 |     url = f"{APP_BASE_URL}/api/venues/sync-glownet"
+ 96 |     
+ 97 |     print(f"Testing Venue Sync Cron Trigger at: {url}")
+ 98 |     print("Note: This should return 401 Unauthorized since it's not coming from Vercel cron")
+ 99 |     
+100 |     try:
+101 |         response = requests.get(url)
+102 |         
+103 |         print("\n" + "=" * 50)
+104 |         print(f"Response Status: {response.status_code}")
+105 |         
+106 |         if response.status_code == 200:
+107 |             result = response.json()
+108 |             print("\nSync Results:")
+109 |             print(f"Message: {result.get('message', 'No message')}")
+110 |             return result
+111 |         else:
+112 |             print(f"Expected error response: {response.status_code}")
+113 |             try:
+114 |                 error_details = response.json()
+115 |                 print(f"Response details: {json.dumps(error_details, indent=2)}")
+116 |             except:
+117 |                 print(f"Response text: {response.text}")
+118 |             return None
+119 |             
+120 |     except requests.exceptions.RequestException as e:
+121 |         print(f"Network error while testing cron trigger: {e}")
+122 |         return None
+123 | 
+124 | # --- Main Script ---
+125 | if __name__ == "__main__":
+126 |     print("=== Venue Sync API Test Tool ===")
+127 |     print(f"App Base URL: {APP_BASE_URL}")
+128 |     print("=" * 40)
+129 | 
+130 |     # Load venue images
+131 |     venue_images = load_venue_images()
+132 |     print(f"Loaded {len(venue_images)} venue image mappings")
+133 | 
+134 |     if len(sys.argv) > 1 and sys.argv[1] == "cron":
+135 |         # Test cron trigger endpoint
+136 |         test_cron_trigger()
+137 |     else:
+138 |         # Test sync endpoint with parameters
+139 |         sync_type = "full"
+140 |         
+141 |         # Parse command line arguments for sync_type
+142 |         if len(sys.argv) > 1:
+143 |             sync_type = sys.argv[1]
+144 |                 
+145 |         test_api_sync(sync_type, venue_images)
+146 |         
+147 |     print("\nAPI test completed.") 
+
+
+--------------------------------------------------------------------------------
+/python/venue_images.json:
+--------------------------------------------------------------------------------
+ 1 | {
+ 2 |   "venue_images": {
+ 3 |     "802": {
+ 4 |       "image_url": "/novi1.png",
+ 5 |       "image_alt": "Noviciado"
+ 6 |     },
+ 7 |     "803": {
+ 8 |       "image_url": "/barrage-club.png",
+ 9 |       "image_alt": "Barrage Club"
+10 |     },
+11 |     "808": {
+12 |       "image_url": "/berhta-club.png",
+13 |       "image_alt": "Berhta Club"  
+14 |     },
+15 |     "804": {
+16 |       "image_url": "/bloom-festival.png",
+17 |       "image_alt": "Bloom Festival"
+18 |     }
+19 |   }
+20 | } 
 
 
 --------------------------------------------------------------------------------
@@ -6444,6 +6399,23 @@ https://raw.githubusercontent.com/ACNoonan/samachi-app/master/public/novi1.png
 26 |   "exclude": ["node_modules"]
 27 | }
 28 | 
+
+
+--------------------------------------------------------------------------------
+/vercel.json:
+--------------------------------------------------------------------------------
+ 1 | {
+ 2 |     "crons": [
+ 3 |         {
+ 4 |             "path": "/api/venues/sync-glownet", 
+ 5 |             "schedule": "0 0 * * *"
+ 6 |         },
+ 7 |         {
+ 8 |             "path": "/api/cards/sync-glownet",
+ 9 |             "schedule": "30 0 * * *"
+10 |         }
+11 |     ]
+12 | }
 
 
 --------------------------------------------------------------------------------

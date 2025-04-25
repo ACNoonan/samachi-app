@@ -9,6 +9,7 @@ import {
 import { Button } from '@/app/components/ui/button';
 import { Switch } from '@/app/components/ui/switch';
 import { useAuth } from '@/app/context/AuthContext';
+import { toast } from 'sonner';
 
 // Define a more specific type for settings items
 type SettingItem = {
@@ -26,6 +27,16 @@ export const ProfileSettings: React.FC = () => {
   const [darkMode, setDarkMode] = useState(false);
   const [notifications, setNotifications] = useState(true);
   
+  const handleLogout = async () => {
+    try {
+      await logout();
+      // No need to manually redirect as the auth state change will trigger a redirect
+    } catch (error) {
+      console.error("Logout failed:", error);
+      toast.error("Failed to log out. Please try again.");
+    }
+  };
+
   // Use the defined type
   const settingGroups: { title: string; items: SettingItem[] }[] = [
     {
@@ -41,6 +52,11 @@ export const ProfileSettings: React.FC = () => {
           label: 'Connected Wallet',
           value: profile?.walletAddress ? `${profile.walletAddress.substring(0, 6)}...${profile.walletAddress.substring(profile.walletAddress.length - 4)}` : 'Not Connected',
           onClick: () => router.push('/connect-wallet'),
+        },
+        {
+          icon: LogOut,
+          label: 'Sign Out',
+          onClick: handleLogout,
         },
       ]
     },
@@ -85,22 +101,6 @@ export const ProfileSettings: React.FC = () => {
       ]
     },
   ];
-
-  const handleLogout = async () => {
-    if (logout) {
-      try {
-        await logout();
-        // Assuming logout in useAuth handles clearing state and potentially redirecting
-        // If not, uncomment the line below:
-        // router.push('/login'); 
-      } catch (error) {
-        console.error("Logout failed:", error);
-        // TODO: Show error toast to user
-      }
-    } else {
-      console.error("Logout function not available from useAuth");
-    }
-  };
 
   return (
     <div className="flex flex-col pt-10 pb-20 px-6">
@@ -160,14 +160,6 @@ export const ProfileSettings: React.FC = () => {
           </div>
         </div>
       ))}
-      
-      <Button 
-        onClick={handleLogout}
-        variant="destructive"
-        className="w-full bg-red-500/90 backdrop-blur-sm hover:bg-red-600/80 animate-fade-in"
-      >
-        <LogOut className="mr-2 h-4 w-4" /> Log Out
-      </Button>
     </div>
   );
 };

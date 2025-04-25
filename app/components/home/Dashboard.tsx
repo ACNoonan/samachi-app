@@ -10,6 +10,7 @@ import { StakingModal } from './StakingModal';
 import { Skeleton } from "@/app/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/app/components/ui/alert";
 import { Terminal } from "lucide-react";
+import { useSolana } from '@/app/context/SolanaContext';
 
 // Define the structure of the membership data returned by /api/memberships
 interface Membership {
@@ -38,6 +39,7 @@ interface Venue {
 export function Dashboard() {
   const router = useRouter();
   const [showStakingModal, setShowStakingModal] = useState(false);
+  const { userState, loading: solanaLoading, isWalletConnected, connectWallet } = useSolana();
   
   // State for memberships
   const [memberships, setMemberships] = useState<Membership[]>([]);
@@ -49,12 +51,11 @@ export function Dashboard() {
   const [isLoadingVenues, setIsLoadingVenues] = useState(true);
   const [venuesError, setVenuesError] = useState<string | null>(null);
 
-  // TODO: Replace these hardcoded values with actual data from state/props
-  // Initialize with 0 or null until data is loaded
-  const stakedAmount = 0; // Placeholder - fetch actual staked amount
-  const stakedSymbol = 'SOL'; // Placeholder - this might come with staked amount
-  const availableCredit = 0; // Placeholder - fetch actual credit
-  const creditProgress = 0; // Placeholder - calculate based on staked amount/limits
+  // Update staking values to use actual data from SolanaContext
+  const stakedAmount = userState ? userState.stakedAmount.toNumber() : 0;
+  const stakedSymbol = 'USDC';
+  const availableCredit = userState ? userState.creditLine.toNumber() : 0;
+  const creditProgress = availableCredit > 0 ? (stakedAmount / availableCredit) * 100 : 0;
 
   // Fetch memberships on component mount
   useEffect(() => {
@@ -130,40 +131,65 @@ export function Dashboard() {
           <CreditCard className="h-6 w-6 text-primary" />
         </div>
         
-        <div className="mb-6">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm text-muted-foreground">Staked Amount</span>
-            {/* Display loading state or actual value */}
-            <span className="font-semibold">{stakedAmount > 0 ? `${stakedAmount} ${stakedSymbol}` : '0.00'}</span>
+        {!isWalletConnected ? (
+          <div className="text-center py-6">
+            <p className="text-muted-foreground mb-4">Connect your wallet to view and manage your credit line</p>
+            <Button 
+              onClick={connectWallet}
+              className="glass-button"
+            >
+              Connect Wallet
+            </Button>
           </div>
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm text-muted-foreground">Available Credit</span>
-             {/* Display loading state or actual value */}
-            <span className="font-semibold text-lg">€{availableCredit > 0 ? availableCredit.toLocaleString() : '0.00'}</span>
-          </div>
-          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-primary rounded-full" 
-              style={{ width: `${creditProgress}%` }}
-            />
-          </div>
-        </div>
-        
-        <div className="flex gap-2">
-          <Button 
-            onClick={() => setShowStakingModal(true)}
-            className="flex-1 glass-button"
-          >
-            <Plus className="mr-2 h-4 w-4" /> Stake More
-          </Button>
-          <Button 
-            onClick={() => router.push('/wallet')}
-            variant="outline"
-            className="flex-1 bg-white/50 backdrop-blur-sm hover:bg-white/60"
-          >
-            <Wallet className="mr-2 h-4 w-4" /> Wallet
-          </Button>
-        </div>
+        ) : (
+          <>
+            <div className="mb-6">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm text-muted-foreground">Staked Amount</span>
+                <span className="font-semibold">
+                  {solanaLoading ? (
+                    <Skeleton className="h-4 w-20" />
+                  ) : (
+                    `${stakedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${stakedSymbol}`
+                  )}
+                </span>
+              </div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm text-muted-foreground">Available Credit</span>
+                <span className="font-semibold text-lg">
+                  {solanaLoading ? (
+                    <Skeleton className="h-6 w-24" />
+                  ) : (
+                    `€${availableCredit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  )}
+                </span>
+              </div>
+              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-primary rounded-full transition-all duration-300" 
+                  style={{ width: `${creditProgress}%` }}
+                />
+              </div>
+            </div>
+            
+            <div className="flex gap-2">
+              <Button 
+                onClick={() => setShowStakingModal(true)}
+                className="flex-1 glass-button"
+                disabled={solanaLoading}
+              >
+                <Plus className="mr-2 h-4 w-4" /> Stake More
+              </Button>
+              <Button 
+                onClick={() => router.push('/wallet')}
+                variant="outline"
+                className="flex-1 bg-white/50 backdrop-blur-sm hover:bg-white/60"
+              >
+                <Wallet className="mr-2 h-4 w-4" /> Wallet
+              </Button>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="mb-8 animate-fade-in">
