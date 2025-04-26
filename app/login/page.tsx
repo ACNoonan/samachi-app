@@ -108,8 +108,10 @@ const SamachiLoginPage = () => {
       }
 
       toast.success("Signed in successfully!");
-      // Let the middleware handle the redirect
-      router.refresh(); // Refresh the page to trigger middleware
+      // Refresh the page to trigger middleware and update server components
+      router.refresh(); 
+      // Explicitly redirect the user to the dashboard client-side
+      router.push('/dashboard');
     } catch (error: any) {
       console.error("Supabase login error:", error);
       toast.error(

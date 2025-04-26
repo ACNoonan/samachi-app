@@ -5,8 +5,7 @@ import { BN } from '@coral-xyz/anchor';
 export interface UserState {
   authority: PublicKey;
   stakedAmount: BN;
-  lastStakeTime: BN;
-  lastUnstakeTime: BN;
+  bump: number;
 }
 
 export interface AdminState {
@@ -18,7 +17,16 @@ export interface VaultTokenAccount {
   authority: PublicKey;
 }
 
+interface IdlMetadata {
+  name: string;
+  version: string;
+  spec: string;
+  description: string;
+}
+
 export interface SamachiProgram {
+  address: string;
+  metadata: IdlMetadata;
   name: string;
   version: string;
   instructions: {

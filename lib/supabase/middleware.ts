@@ -25,7 +25,8 @@ const STATIC_PATTERNS = [
   '/favicon.ico',
   '/images',
   '/fonts',
-  '/api'
+  // Remove '/api' from static patterns as API routes might need auth
+  // '/api' 
 ];
 
 function isPublicPath(pathname: string, searchParams: URLSearchParams) {
@@ -48,16 +49,23 @@ function isPublicPath(pathname: string, searchParams: URLSearchParams) {
 }
 
 function isStaticPath(pathname: string) {
+  // Check if the path starts with /api or any other static pattern
+  if (pathname.startsWith('/api')) return false; // API routes are not static
   return STATIC_PATTERNS.some(pattern => pathname.startsWith(pattern));
 }
 
 export async function middleware(request: NextRequest) {
-  // Skip middleware for static files and API routes
+  // Skip middleware for static files (but NOT API routes)
   if (isStaticPath(request.nextUrl.pathname)) {
+    // console.log('[Middleware] Skipping static path:', request.nextUrl.pathname);
     return NextResponse.next();
   }
 
-  let response = NextResponse.next({ request: { headers: request.headers } });
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -66,13 +74,15 @@ export async function middleware(request: NextRequest) {
       cookies: {
         get: (name: string) => request.cookies.get(name)?.value,
         set: (name: string, value: string, options: CookieOptions) => {
+          // Modify the request cookies for the current request flow
           request.cookies.set({ name, value, ...options });
-          response = NextResponse.next({ request: { headers: request.headers } });
+          // Set the cookie on the response to be sent back to the browser
           response.cookies.set({ name, value, ...SECURE_COOKIE_OPTIONS, ...options });
         },
         remove: (name: string, options: CookieOptions) => {
+          // Modify the request cookies for the current request flow
           request.cookies.set({ name, value: '', ...options });
-          response = NextResponse.next({ request: { headers: request.headers } });
+          // Set the cookie on the response to be sent back to the browser
           response.cookies.set({ name, value: '', ...SECURE_COOKIE_OPTIONS, ...options });
         },
       },
@@ -85,57 +95,70 @@ export async function middleware(request: NextRequest) {
   const publicPath = isPublicPath(pathname, searchParams);
 
   // Add logging for debugging
-  console.log('[Middleware] Path:', pathname, 'Authenticated:', authenticated, 'Public:', publicPath, 'Error:', error);
+  console.log('[Middleware] Path:', pathname, 'Authenticated:', authenticated, 'Public:', publicPath, 'Error:', error ? error.name : null);
 
-  // If session error, clear cookies
+
+  // Handle potential session errors first
   if (error) {
-    // Clear all auth-related cookies
-    const cookies = ['sb-auth-token', 'sb-access-token', 'sb-refresh-token'];
-    cookies.forEach(cookieName => {
-      response.cookies.set({
-        name: cookieName,
-        value: '',
-        ...SECURE_COOKIE_OPTIONS,
-        maxAge: 0 // Immediately expire the cookie
-      });
-    });
-    
-    // Only redirect if we're not already on the login page
-    if (pathname !== '/login') {
-      return NextResponse.redirect(new URL('/login', request.url));
-    }
+    console.warn('[Middleware] Auth error encountered:', error.message);
+    // Attempt to clear potentially corrupted cookies
+    // Note: Supabase client might have already tried to remove them via the 'remove' handler
+    response.cookies.delete('sb-auth-token', { path: '/', ...SECURE_COOKIE_OPTIONS });
+    // Don't immediately redirect here if it's AuthSessionMissingError,
+    // let the logic below handle redirection based on path and auth status.
+    // Only redirect on more severe errors if necessary.
+    // if (error.name !== 'AuthSessionMissingError') {
+       // If it's a severe error and we're not already going to login, redirect.
+       // if (pathname !== '/login') {
+       //   console.log('[Middleware] Redirecting to login due to severe auth error.');
+       //   return NextResponse.redirect(new URL('/login', request.url));
+       // }
+    // }
+    // Fall through to let the standard auth checks handle redirection
   }
 
-  // If accessing root path ('/'), redirect based on auth status
+
+  // --- Authentication and Redirection Logic ---
+
+  // Rule 1: If accessing root path ('/'), redirect based on auth status
   if (pathname === '/') {
-    if (authenticated) {
-      // If authenticated, redirect to dashboard
+    const targetUrl = authenticated ? '/dashboard' : '/login';
+    // console.log(`[Middleware] Root path access. Redirecting to ${targetUrl}`);
+    return NextResponse.redirect(new URL(targetUrl, request.url));
+  }
+
+  // Rule 2: If authenticated...
+  if (authenticated) {
+    // ...and trying to access login or create-profile, redirect to dashboard
+    if (pathname === '/login' || pathname === '/create-profile') {
+      // console.log('[Middleware] Authenticated user on auth page. Redirecting to dashboard.');
       return NextResponse.redirect(new URL('/dashboard', request.url));
-    } else {
-      // If not authenticated, redirect to login
-      return NextResponse.redirect(new URL('/login', request.url));
     }
+    // ...otherwise, allow access (response is already set to NextResponse.next())
+  } 
+  // Rule 3: If NOT authenticated...
+  else {
+    // ...and trying to access a protected path, redirect to login
+    if (!publicPath) {
+      // console.log('[Middleware] Unauthenticated user on protected path. Redirecting to login.');
+      const redirectUrl = new URL('/login', request.url);
+      // Add the original URL as a query parameter to redirect back after login
+      if (pathname !== '/') { // Avoid redirecting back to root
+          redirectUrl.searchParams.set('redirectTo', pathname + request.nextUrl.search);
+      }
+      return NextResponse.redirect(redirectUrl);
+    }
+    // ...and accessing a public path, allow access (response is already NextResponse.next())
   }
 
-  // If not authenticated and not on a public path, redirect to login
-  if (!authenticated && !publicPath) {
-    const redirectUrl = new URL('/login', request.url);
-    // Add the original URL as a query parameter to redirect back after login
-    redirectUrl.searchParams.set('redirectTo', pathname);
-    return NextResponse.redirect(redirectUrl);
-  }
-
-  // If authenticated and on /login, redirect to dashboard
-  if (authenticated && pathname === '/login') {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
-  }
-
-  // Otherwise, allow
+  // --- Default: Allow the request ---
+  // console.log('[Middleware] Allowing request for path:', pathname);
   return response;
 }
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Match all routes except static files and specific assets
+    '/((?!_next/static|_next/image|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }; 

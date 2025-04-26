@@ -1,11 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
-import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import { useConnection, useWallet, useAnchorWallet } from '@solana/wallet-adapter-react';
 import { Program, AnchorProvider, BN, Idl } from '@coral-xyz/anchor';
 import { PublicKey } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress } from '@solana/spl-token';
 import { useToast } from '@/app/components/ui/use-toast';
-import { SamachiProgram, UserState } from '@/app/types/samachi-program';
-import { SamachiStaking } from '@/app/types/samachi_staking';
+import { UserState } from '@/app/types/samachi-program';
 import idlJson from '../idl/samachi_staking.json';
 
 // Define the program ID from environment variable
@@ -13,9 +12,6 @@ const PROGRAM_ID = new PublicKey(process.env.NEXT_PUBLIC_SOLANA_PROGRAM_ID || "G
 
 // USDC mint address (devnet)
 const USDC_MINT = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAVERNBjziTuSfM4");
-
-// Cast the imported JSON directly to the Anchor IDL type
-const idl: Idl = idlJson as Idl;
 
 interface SolanaContextType {
   program: Program<Idl> | null;
@@ -45,59 +41,49 @@ const SolanaContext = createContext<SolanaContextType>({
 
 export function SolanaProvider({ children }: { children: React.ReactNode }) {
   const { connection } = useConnection();
-  const { publicKey, signTransaction, signAllTransactions, connect, disconnect, connected } = useWallet();
+  const { connected } = useWallet();
+  const anchorWallet = useAnchorWallet();
   const [program, setProgram] = useState<Program<Idl> | null>(null);
   const [userState, setUserState] = useState<UserState | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
+  /*
+  // TEMPORARILY COMMENTED OUT TO ISOLATE AUTH FLOW
   // Initialize the program when wallet is connected
   useEffect(() => {
-    // Ensure connection, wallet is fully connected, and methods are available
-    if (!connection || !connected || !publicKey || !signTransaction || !signAllTransactions) {
+    if (!connection || !connected || !anchorWallet) { 
       console.log('Program initialization dependencies not ready:', {
         connection: !!connection,
         connected,
-        publicKey: !!publicKey,
-        signTransaction: !!signTransaction,
-        signAllTransactions: !!signAllTransactions,
+        anchorWallet: !!anchorWallet, 
       });
       setProgram(null);
       return;
     }
 
     try {
-      // Simple console logging for debugging
-      console.log('Starting program initialization with wallet:', publicKey.toString());
+      console.log('Starting program initialization with anchor wallet:', anchorWallet.publicKey.toString());
       console.log('Connection status:', connection ? 'Connected' : 'Not connected');
-      console.log('Wallet connected status:', connected);
-      console.log('signTransaction defined:', !!signTransaction);
-      console.log('signAllTransactions defined:', !!signAllTransactions);
-      
-      // Create wallet adapter for AnchorProvider ONLY when dependencies are ready
-      const wallet = {
-        publicKey,
-        signTransaction,
-        signAllTransactions,
-      };
-      
-      // Create provider with proper typing
+      console.log('Anchor Wallet connected status:', !!anchorWallet);
+
       const provider = new AnchorProvider(
         connection,
-        wallet, // Pass the wallet adapter
-        { commitment: 'confirmed' } // Options
+        anchorWallet, 
+        { commitment: 'confirmed' } 
       );
 
-      // Initialize the program with the IDL, Program ID, and Provider
+      console.log("Initializing Program with loaded IDL JSON...");
       const program = new Program(
-        idl,        // 1st arg: IDL
-        PROGRAM_ID, // 2nd arg: Program ID (PublicKey)
-        provider    // 3rd arg: Provider
+        idlJson,    // Raw IDL JSON object
+        PROGRAM_ID, // Program ID PublicKey
+        provider    // AnchorProvider
       );
       
-      console.log('Program initialized successfully');
-      setProgram(program);
+      console.log('Program initialized successfully.'); 
+      setProgram(program); // Set state with Program<Idl>
+
     } catch (err) {
       console.error("Error initializing program:", err);
       setError(`Failed to initialize program: ${err instanceof Error ? err.message : String(err)}`);
@@ -107,19 +93,18 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
         variant: "destructive",
       });
     }
-  }, [connection, publicKey, signTransaction, signAllTransactions, toast]);
+  }, [connection, connected, anchorWallet, toast]); 
+  */
 
-  // Find the user state PDA
   const findUserStatePDA = async () => {
-    if (!publicKey) return null;
+    if (!anchorWallet?.publicKey) return null;
     const [pda] = await PublicKey.findProgramAddress(
-      [Buffer.from("user"), publicKey.toBuffer()],
+      [Buffer.from("user"), anchorWallet.publicKey.toBuffer()],
       PROGRAM_ID
     );
     return pda;
   };
 
-  // Find the vault PDA
   const findVaultPDA = async () => {
     const [pda] = await PublicKey.findProgramAddress(
       [Buffer.from("vault"), USDC_MINT.toBuffer()],
@@ -128,9 +113,8 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
     return pda;
   };
 
-  // Refresh user state
   const refreshUserState = async () => {
-    if (!program || !publicKey) {
+    if (!program || !anchorWallet?.publicKey) {
       setUserState(null);
       return;
     }
@@ -140,7 +124,6 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
       const userStatePDA = await findUserStatePDA();
       if (!userStatePDA) return;
       
-      // Cast the program to any to access the account
       const userState = await (program as any).account.userState.fetch(userStatePDA) as UserState;
       setUserState(userState);
       setError(null);
@@ -157,9 +140,8 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Stake tokens
   const stake = async (amount: number) => {
-    if (!program || !publicKey) {
+    if (!program || !anchorWallet?.publicKey) {
       throw new Error("Wallet not connected");
     }
 
@@ -169,7 +151,7 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
       const vaultPDA = await findVaultPDA();
       if (!userStatePDA || !vaultPDA) return;
 
-      const userTokenAccount = await getAssociatedTokenAddress(USDC_MINT, publicKey);
+      const userTokenAccount = await getAssociatedTokenAddress(USDC_MINT, anchorWallet.publicKey);
 
       const tx = await program.methods
         .stake(new BN(amount))
@@ -178,7 +160,7 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
           vault_token_account: vaultPDA,
           user_token_account: userTokenAccount,
           mint: USDC_MINT,
-          authority: publicKey,
+          authority: anchorWallet.publicKey,
           token_program: TOKEN_PROGRAM_ID,
         })
         .rpc();
@@ -193,9 +175,8 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Unstake tokens
   const unstake = async (amount: number) => {
-    if (!program || !publicKey) {
+    if (!program || !anchorWallet?.publicKey) {
       throw new Error("Wallet not connected");
     }
 
@@ -205,7 +186,7 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
       const vaultPDA = await findVaultPDA();
       if (!userStatePDA || !vaultPDA) return;
 
-      const userTokenAccount = await getAssociatedTokenAddress(USDC_MINT, publicKey);
+      const userTokenAccount = await getAssociatedTokenAddress(USDC_MINT, anchorWallet.publicKey);
 
       const tx = await program.methods
         .unstake(new BN(amount))
@@ -214,7 +195,7 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
           vault_token_account: vaultPDA,
           user_token_account: userTokenAccount,
           mint: USDC_MINT,
-          authority: publicKey,
+          authority: anchorWallet.publicKey,
           token_program: TOKEN_PROGRAM_ID,
         })
         .rpc();
@@ -229,7 +210,7 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Connect wallet
+  const { connect } = useWallet();
   const connectWallet = async () => {
     try {
       await connect();
@@ -247,7 +228,7 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Disconnect wallet
+  const { disconnect } = useWallet();
   const disconnectWallet = async () => {
     try {
       await disconnect();
@@ -266,14 +247,13 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Refresh user state when program or public key changes
   useEffect(() => {
-    if (connected && program && publicKey) {
+    if (connected && program && anchorWallet?.publicKey) {
       refreshUserState();
     } else {
       setUserState(null);
     }
-  }, [program, publicKey, connected]);
+  }, [program, anchorWallet, connected]);
 
   return (
     <SolanaContext.Provider
