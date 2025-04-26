@@ -1,5 +1,3 @@
-/Users/adamnoonan/Documents/samachi-app
-
 ├── .gitignore
 ├── .sql
 ├── README.md
@@ -35,23 +33,14 @@
     ├── components
     │   ├── auth
     │   │   ├── ConnectWallet.tsx
-    │   │   ├── CreateProfileForm.tsx
-    │   │   └── LoginForm.tsx
-    │   ├── discover
-    │   │   ├── DiscoverVenues.tsx
-    │   │   ├── VenueList.tsx
-    │   │   └── VenueMap.tsx
-    │   ├── home
-    │   │   ├── Dashboard.tsx
-    │   │   └── StakingModal.tsx
+    │   │   └── CreateProfileForm.tsx
+    │   ├── debug
+    │   │   └── AuthDebug.tsx
     │   ├── layout
     │   │   ├── Navbar.tsx
     │   │   └── PageLayout.tsx
     │   ├── onboarding
-    │   │   ├── CardLanding.tsx
-    │   │   └── OnboardingVideo.tsx
-    │   ├── profile
-    │   │   └── ProfileSettings.tsx
+    │   │   └── CardLanding.tsx
     │   ├── ui
     │   │   ├── accordion.tsx
     │   │   ├── alert-dialog.tsx
@@ -112,7 +101,8 @@
     │   └── wallet
     │   │   └── WalletDashboard.tsx
     ├── context
-    │   └── AuthContext.tsx
+    │   ├── AuthContext.tsx
+    │   └── SolanaContext.tsx
     ├── create-profile
     │   └── page.tsx
     ├── dashboard
@@ -123,6 +113,11 @@
     │   └── page.tsx
     ├── favicon.ico
     ├── globals.css
+    ├── hooks
+    │   └── use-toast.ts
+    ├── idl
+    │   ├── samachi_staking.json
+    │   └── samachi_staking.ts
     ├── layout.tsx
     ├── login
     │   └── page.tsx
@@ -130,6 +125,10 @@
     ├── profile
     │   ├── loading.tsx
     │   └── page.tsx
+    ├── providers.tsx
+    ├── types
+    │   ├── samachi-program.ts
+    │   └── samachi_staking.ts
     ├── venue
     │   └── [venueId]
     │   │   └── page.tsx
@@ -139,7 +138,6 @@
 ├── lib
     ├── auth.ts
     ├── glownet.ts
-    ├── supabase.ts
     ├── supabase
     │   ├── client.ts
     │   ├── middleware.ts
@@ -150,12 +148,28 @@
 ├── package-lock.json
 ├── package.json
 ├── pnpm-lock.yaml
+├── pnpm-workspace.yaml
 ├── postcss.config.mjs
 ├── public
     ├── barrage-club.png
     ├── berhta-club.png
     ├── bloom-festival.png
     ├── file.svg
+    ├── fonts
+    │   ├── Glancyr-Bold.woff2
+    │   ├── Glancyr-BoldItalic.woff2
+    │   ├── Glancyr-ExtraLight.woff2
+    │   ├── Glancyr-ExtraLightItalic.woff2
+    │   ├── Glancyr-Italic.woff2
+    │   ├── Glancyr-Light.woff2
+    │   ├── Glancyr-LightItalic.woff2
+    │   ├── Glancyr-Medium.woff2
+    │   ├── Glancyr-MediumItalic.woff2
+    │   ├── Glancyr-Regular.woff2
+    │   ├── Glancyr-SemiBold.woff2
+    │   ├── Glancyr-SemiBoldItalic.woff2
+    │   ├── Glancyr-Thin.woff2
+    │   └── Glancyr-ThinItalic.woff2
     ├── globe.svg
     ├── next.svg
     ├── novi1.png
@@ -171,8 +185,11 @@
     ├── sync_venues.py
     └── venue_images.json
 ├── repo.md
+├── schema.sql
 ├── scripts
     ├── sync-cards.ts
     └── sync-venues.ts
+├── tests
+    └── auth.test.ts
 ├── tsconfig.json
 └── vercel.json

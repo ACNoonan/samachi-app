@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
-import { Dashboard } from '@/app/components/home/Dashboard';
+import { WalletDashboard } from '@/app/components/wallet/WalletDashboard';
 import DashboardLoading from './loading';
 import { PageLayout } from '@/app/components/layout/PageLayout';
 
@@ -29,7 +29,7 @@ export default function DashboardPage() {
   if (user) {
     return (
       <PageLayout>
-        <Dashboard user={user} profile={profile} />
+        <WalletDashboard />
       </PageLayout>
     );
   }
