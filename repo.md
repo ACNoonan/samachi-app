@@ -36,6 +36,13 @@
     │   │   └── CreateProfileForm.tsx
     │   ├── debug
     │   │   └── AuthDebug.tsx
+    │   ├── discover
+    │   │   ├── DiscoverVenues.tsx
+    │   │   ├── VenueList.tsx
+    │   │   └── VenueMap.tsx
+    │   ├── home
+    │   │   ├── Dashboard.tsx
+    │   │   └── StakingModal.tsx
     │   ├── layout
     │   │   ├── Navbar.tsx
     │   │   └── PageLayout.tsx

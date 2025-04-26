@@ -23,7 +23,8 @@ interface AuthContextType {
   session: Session | null; // Supabase session object
   user: User | null; // Supabase auth user object
   profile: Profile | null; // Your public profile data
-  isLoading: boolean; // Combined loading state for auth and profile
+  isLoading: boolean; // Loading state for initial auth check
+  isProfileLoading: boolean; // Loading state specifically for profile data
   logout: () => Promise<void>;
   // Add specific sign-in methods if needed, or components can use supabase.auth directly
 }
@@ -37,11 +38,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // Start loading initially
+  const [isLoading, setIsLoading] = useState(true); // Auth loading state
+  const [isProfileLoading, setIsProfileLoading] = useState(true); // Profile loading state
 
   // Fetch profile data based on user ID
   const fetchProfile = async (userId: string) => {
     console.log("AuthContext: Fetching profile for user:", userId);
+    setIsProfileLoading(true); // Start profile loading
     try {
       const { data, error, status } = await supabase
         .from('profiles')
@@ -63,57 +66,105 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error("AuthContext: Exception fetching profile:", error);
       setProfile(null);
     } finally {
-      console.log("AuthContext: fetchProfile finally block. Setting isLoading to false.");
-      setIsLoading(false); // Ensure loading is set to false after profile fetch
+      console.log("AuthContext: fetchProfile finally block. Setting isProfileLoading to false.");
+      setIsProfileLoading(false); // End profile loading
     }
   };
 
   // Initialize auth state and listen for changes
   useEffect(() => {
+    console.log("AuthContext: useEffect START");
     let mounted = true;
-
-    // Start loading
     setIsLoading(true);
+    setIsProfileLoading(true); 
 
-    // Listen for auth state changes
+    // --- Initial Session Check --- 
+    console.log("AuthContext: useEffect - Calling getSession()...");
+    supabase.auth.getSession().then(async ({ data: { session: currentSession }, error }) => {
+      console.log("AuthContext: getSession() completed.", { hasSession: !!currentSession, error });
+      if (!mounted) {
+          console.log("AuthContext: getSession() - Component unmounted, bailing.");
+          return; 
+      }
+
+      if (error) {
+        console.error("AuthContext: getSession() - Error received:", error);
+        // Set loading false even on error
+        setIsLoading(false);
+        setIsProfileLoading(false);
+      }
+      else if (currentSession) {
+        console.log("AuthContext: Initial session FOUND. Setting state...");
+        setSession(currentSession);
+        setUser(currentSession.user);
+        console.log("AuthContext: Initial session - State update called for session/user.");
+        // Fetch profile immediately since we have the user ID
+        await fetchProfile(currentSession.user.id);
+        // Set auth loading false, profile loading is handled by fetchProfile
+        setIsLoading(false); 
+        console.log("AuthContext: Initial session - Set isLoading=false.");
+      } else {
+        console.log("AuthContext: No initial session found.");
+        // If no initial session, mark auth and profile loading as done
+        setIsLoading(false);
+        setIsProfileLoading(false); 
+        console.log("AuthContext: No initial session - Set loading states false.");
+      }
+    }).catch((error) => {
+      // Handle potential errors during getSession promise itself
+      console.error("AuthContext: Error during initial getSession promise chain:", error);
+      if(mounted) {
+        setIsLoading(false);
+        setIsProfileLoading(false);
+      }
+    });
+
+    // --- Auth State Change Listener --- 
+    console.log("AuthContext: useEffect - Setting up onAuthStateChange listener...");
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, newSession) => {
-        console.log("AuthContext: Auth state changed:", event, newSession);
-
-        if (!mounted) return;
+        console.log(`AuthContext: onAuthStateChange - Event: ${event}`, { hasSession: !!newSession });
+        
+        // Avoid duplicate processing if the initial check already handled it?
+        // Let's simplify: The listener should ALWAYS reflect the latest state.
+        // if (!mounted || (newSession?.user.id === session?.user.id && event === 'INITIAL_SESSION')) {
+        //   console.log("AuthContext: Listener ignoring redundant initial session event.");
+        //   return;
+        // }
+        if (!mounted) {
+            console.log("AuthContext: onAuthStateChange - Component unmounted, bailing.");
+            return;
+        }
+        
+        // console.log("AuthContext: Auth state CHANGED:", event, newSession); // Redundant log
 
         if (newSession) {
+          console.log("AuthContext: onAuthStateChange - Updating state for new session...");
           setSession(newSession);
           setUser(newSession.user);
-          // Fetch profile *after* setting user, then update loading state
-          await fetchProfile(newSession.user.id);
-          // No need to set isLoading(false) here, fetchProfile does it.
+          setIsLoading(false); // Ensure loading is false
+          await fetchProfile(newSession.user.id); 
+          console.log("AuthContext: onAuthStateChange - Session updated, profile fetched.");
         } else {
-          // No session or logout
+          console.log("AuthContext: onAuthStateChange - Setting state to logged out...");
           setSession(null);
           setUser(null);
           setProfile(null);
-          setIsLoading(false); // Set loading to false if no session/logged out
+          setIsLoading(false); 
+          setIsProfileLoading(false);
+          console.log("AuthContext: onAuthStateChange - State set to logged out.");
         }
       }
     );
 
-    // Initial check to handle case where listener might not fire immediately
-    // or if there's no session at all on first load.
-    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
-      if (mounted && !currentSession) {
-        // If after a brief moment there's still no session, stop loading.
-        // The listener will handle the case where a session appears later.
-        setIsLoading(false);
-        console.log("AuthContext: No initial session found after listener setup.");
-      }
-    });
+    console.log("AuthContext: useEffect END - Listener setup.");
 
     return () => {
+      console.log("AuthContext: useEffect CLEANUP - Unsubscribing listener.");
       mounted = false;
       authListener?.subscription.unsubscribe();
     };
-  }, [supabase]); // Add supabase as dependency
+  }, [supabase]); // Dependency remains supabase
 
   const logout = async () => {
     console.log("AuthContext: Signing out...");
@@ -129,7 +180,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setSession(null);
       setUser(null);
       setProfile(null);
-      setIsLoading(false);
+      setIsLoading(false); // Ensure both are false on logout
+      setIsProfileLoading(false);
 
       // Clear any local storage items
       localStorage.clear();
@@ -150,8 +202,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     user,
     profile,
     isLoading,
+    isProfileLoading, // Add new state
     logout
-  }), [supabase, session, user, profile, isLoading]);
+  }), [supabase, session, user, profile, isLoading, isProfileLoading]); // Update dependencies
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

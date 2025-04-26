@@ -22,15 +22,26 @@ export const CardLanding = () => {
     // Determine if user is logged in based on the presence of user data
     const isLoggedIn = !!user;
 
-    // Redirect logged-in users immediately
-    if (!authLoading && isLoggedIn) {
-      console.log('CardLanding: User is logged in, redirecting to /dashboard');
-      router.replace('/dashboard');
-      return; // Don't proceed if already logged in
-    }
+    // REMOVED: Redundant redirect logic. Middleware handles this.
+    // if (!authLoading && isLoggedIn) {
+    //   console.log('CardLanding: User is logged in, redirecting to /dashboard');
+    //   router.replace('/dashboard');
+    //   return; // Don't proceed if already logged in
+    // }
 
     // Fetch card status only if not logged in and card_id is present
-    if (!authLoading && !isLoggedIn && card_id) {
+    // If auth is still loading, wait.
+    if (authLoading) {
+      return; // Wait for auth check to complete
+    }
+    
+    // If logged in, we don't need to check card status here (middleware already redirected or will redirect)
+    if (isLoggedIn) {
+      return; 
+    }
+
+    // Proceed with card status check only if auth is done, user is NOT logged in, and card_id exists
+    if (card_id) { // We already know !authLoading and !isLoggedIn from checks above
       const checkCardStatus = async () => {
         setCardStatus('loading');
         setCardError(null);
@@ -58,8 +69,8 @@ export const CardLanding = () => {
       };
       checkCardStatus();
     }
-    // Dependencies updated: removed user, authLoading, added isLoggedIn
-  }, [authLoading, router, card_id, user]);
+    // Dependencies updated: check dependencies are correct
+  }, [authLoading, router, card_id, user]); // Removed isLoggedIn
 
   const handleCreateProfile = () => {
     if (!card_id) return;

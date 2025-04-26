@@ -101,20 +101,16 @@ export async function middleware(request: NextRequest) {
   // Handle potential session errors first
   if (error) {
     console.warn('[Middleware] Auth error encountered:', error.message);
-    // Attempt to clear potentially corrupted cookies
-    // Note: Supabase client might have already tried to remove them via the 'remove' handler
-    response.cookies.delete('sb-auth-token', { path: '/', ...SECURE_COOKIE_OPTIONS });
-    // Don't immediately redirect here if it's AuthSessionMissingError,
-    // let the logic below handle redirection based on path and auth status.
-    // Only redirect on more severe errors if necessary.
-    // if (error.name !== 'AuthSessionMissingError') {
-       // If it's a severe error and we're not already going to login, redirect.
-       // if (pathname !== '/login') {
-       //   console.log('[Middleware] Redirecting to login due to severe auth error.');
-       //   return NextResponse.redirect(new URL('/login', request.url));
-       // }
-    // }
-    // Fall through to let the standard auth checks handle redirection
+    // If it's not the expected "no session" error, try clearing cookies.
+    if (error.name !== 'AuthSessionMissingError' && error.name !== 'AuthInvalidCredentialsError') { 
+      console.log('[Middleware] Clearing auth cookies due to unexpected error:', error.name);
+      // Clear the main auth token cookie by name
+      response.cookies.delete('sb-auth-token'); 
+      // Attempt to clear potential PKCE-related cookies as well
+      response.cookies.delete('sb-pkce-verifier');
+    }
+    // Allow the request to continue; the redirection logic below will handle
+    // redirecting to login if necessary based on the (now potentially cleared) auth state.
   }
 
 
@@ -159,6 +155,8 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     // Match all routes except static files and specific assets
-    '/((?!_next/static|_next/image|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Exclude paths starting with /_next/ (static files), /api/ (API routes, handled separately), 
+    // and paths containing a dot (.) indicating a file extension.
+    '/((?!api|_next/static|_next/image|favicon.ico|.*\..*).*)',
   ],
 }; 

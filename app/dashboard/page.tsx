@@ -2,12 +2,12 @@
 
 import { useEffect } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
-import { WalletDashboard } from '@/app/components/wallet/WalletDashboard';
+import { Dashboard } from '@/app/components/home/Dashboard';
 import DashboardLoading from './loading';
 import { PageLayout } from '@/app/components/layout/PageLayout';
 
 export default function DashboardPage() {
-  const { user, profile, isLoading, logout } = useAuth();
+  const { user, isLoading, logout } = useAuth();
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -29,7 +29,7 @@ export default function DashboardPage() {
   if (user) {
     return (
       <PageLayout>
-        <WalletDashboard />
+        <Dashboard />
       </PageLayout>
     );
   }
