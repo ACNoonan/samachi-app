@@ -9,13 +9,13 @@ import { SamachiStaking } from '@/app/types/samachi_staking';
 import idlJson from '../idl/samachi_staking.json';
 
 // Define the program ID from environment variable
-const PROGRAM_ID = new PublicKey(process.env.NEXT_PUBLIC_SOLANA_PROGRAM_ID || "8n1omncNHsRzUARf4w5jAqXjLJihiCCgESixrzj7EJSJ");
+const PROGRAM_ID = new PublicKey(process.env.NEXT_PUBLIC_SOLANA_PROGRAM_ID || "GeJd3Em3sfV7LZZDiwmXdJWeDas8ea5GTGvSmX1F4Wkk");
 
 // USDC mint address (devnet)
 const USDC_MINT = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAVERNBjziTuSfM4");
 
-// Create a properly typed IDL
-const idl = idlJson as unknown as SamachiStaking;
+// Cast the imported JSON directly to the Anchor IDL type
+const idl: Idl = idlJson as Idl;
 
 interface SolanaContextType {
   program: Program<Idl> | null;
@@ -91,9 +91,9 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
 
       // Initialize the program with the IDL, Program ID, and Provider
       const program = new Program(
-        idl as unknown as Idl,
-        PROGRAM_ID,
-        provider
+        idl,        // 1st arg: IDL
+        PROGRAM_ID, // 2nd arg: Program ID (PublicKey)
+        provider    // 3rd arg: Provider
       );
       
       console.log('Program initialized successfully');
