@@ -1,20 +1,24 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
-import { Program, AnchorProvider, BN } from '@coral-xyz/anchor';
+import { Program, AnchorProvider, BN, Idl } from '@coral-xyz/anchor';
 import { PublicKey } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress } from '@solana/spl-token';
 import { useToast } from '@/app/components/ui/use-toast';
 import { SamachiProgram, UserState } from '@/app/types/samachi-program';
-import idl from '../idl/samachi_staking.json';
+import { SamachiStaking } from '@/app/types/samachi_staking';
+import idlJson from '../idl/samachi_staking.json';
 
-// Define the program ID from your deployed contract
-const PROGRAM_ID = new PublicKey("BAxhgSfwjWh5z6SMU6kVvgdEAkmqbipWeCKVuG4xMYFF");
+// Define the program ID from environment variable
+const PROGRAM_ID = new PublicKey(process.env.NEXT_PUBLIC_SOLANA_PROGRAM_ID || "8n1omncNHsRzUARf4w5jAqXjLJihiCCgESixrzj7EJSJ");
 
 // USDC mint address (devnet)
 const USDC_MINT = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAVERNBjziTuSfM4");
 
+// Create a properly typed IDL
+const idl = idlJson as unknown as SamachiStaking;
+
 interface SolanaContextType {
-  program: Program<any> | null;
+  program: Program<Idl> | null;
   userState: UserState | null;
   loading: boolean;
   error: string | null;
@@ -42,7 +46,7 @@ const SolanaContext = createContext<SolanaContextType>({
 export function SolanaProvider({ children }: { children: React.ReactNode }) {
   const { connection } = useConnection();
   const { publicKey, signTransaction, signAllTransactions, connect, disconnect, connected } = useWallet();
-  const [program, setProgram] = useState<Program<any> | null>(null);
+  const [program, setProgram] = useState<Program<Idl> | null>(null);
   const [userState, setUserState] = useState<UserState | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,23 +54,53 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize the program when wallet is connected
   useEffect(() => {
-    if (!connection || !publicKey || !signTransaction || !signAllTransactions) {
+    // Ensure connection, wallet is fully connected, and methods are available
+    if (!connection || !connected || !publicKey || !signTransaction || !signAllTransactions) {
+      console.log('Program initialization dependencies not ready:', {
+        connection: !!connection,
+        connected,
+        publicKey: !!publicKey,
+        signTransaction: !!signTransaction,
+        signAllTransactions: !!signAllTransactions,
+      });
       setProgram(null);
       return;
     }
 
     try {
+      // Simple console logging for debugging
+      console.log('Starting program initialization with wallet:', publicKey.toString());
+      console.log('Connection status:', connection ? 'Connected' : 'Not connected');
+      console.log('Wallet connected status:', connected);
+      console.log('signTransaction defined:', !!signTransaction);
+      console.log('signAllTransactions defined:', !!signAllTransactions);
+      
+      // Create wallet adapter for AnchorProvider ONLY when dependencies are ready
+      const wallet = {
+        publicKey,
+        signTransaction,
+        signAllTransactions,
+      };
+      
+      // Create provider with proper typing
       const provider = new AnchorProvider(
         connection,
-        { publicKey, signTransaction, signAllTransactions },
-        { commitment: "confirmed" }
+        wallet, // Pass the wallet adapter
+        { commitment: 'confirmed' } // Options
       );
 
-      const program = new Program(idl as any, PROGRAM_ID, provider);
+      // Initialize the program with the IDL, Program ID, and Provider
+      const program = new Program(
+        idl as unknown as Idl,
+        PROGRAM_ID,
+        provider
+      );
+      
+      console.log('Program initialized successfully');
       setProgram(program);
     } catch (err) {
       console.error("Error initializing program:", err);
-      setError("Failed to initialize program");
+      setError(`Failed to initialize program: ${err instanceof Error ? err.message : String(err)}`);
       toast({
         title: "Error",
         description: "Failed to initialize Solana program",
@@ -106,8 +140,9 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
       const userStatePDA = await findUserStatePDA();
       if (!userStatePDA) return;
       
-      const userState = await program.account.userState.fetch(userStatePDA);
-      setUserState(userState as UserState);
+      // Cast the program to any to access the account
+      const userState = await (program as any).account.userState.fetch(userStatePDA) as UserState;
+      setUserState(userState);
       setError(null);
     } catch (err) {
       console.error("Error fetching user state:", err);
@@ -139,12 +174,12 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
       const tx = await program.methods
         .stake(new BN(amount))
         .accounts({
-          userState: userStatePDA,
-          userTokenAccount,
-          vault: vaultPDA,
+          user_state: userStatePDA,
+          vault_token_account: vaultPDA,
+          user_token_account: userTokenAccount,
           mint: USDC_MINT,
           authority: publicKey,
-          tokenProgram: TOKEN_PROGRAM_ID,
+          token_program: TOKEN_PROGRAM_ID,
         })
         .rpc();
 
@@ -175,12 +210,12 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
       const tx = await program.methods
         .unstake(new BN(amount))
         .accounts({
-          userState: userStatePDA,
-          userTokenAccount,
-          vault: vaultPDA,
+          user_state: userStatePDA,
+          vault_token_account: vaultPDA,
+          user_token_account: userTokenAccount,
           mint: USDC_MINT,
           authority: publicKey,
-          tokenProgram: TOKEN_PROGRAM_ID,
+          token_program: TOKEN_PROGRAM_ID,
         })
         .rpc();
 

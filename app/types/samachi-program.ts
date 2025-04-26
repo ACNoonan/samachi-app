@@ -1,156 +1,106 @@
-import { BN } from '@coral-xyz/anchor';
+import { Program } from '@coral-xyz/anchor';
 import { PublicKey } from '@solana/web3.js';
-
-export type SamachiProgram = {
-  version: "0.1.0";
-  name: "samachi_staking";
-  instructions: [
-    {
-      name: "initialize";
-      accounts: [
-        {
-          name: "vault";
-          isMut: true;
-          isSigner: false;
-        },
-        {
-          name: "authority";
-          isMut: true;
-          isSigner: true;
-        },
-        {
-          name: "systemProgram";
-          isMut: false;
-          isSigner: false;
-        }
-      ];
-      args: [];
-    },
-    {
-      name: "stake";
-      accounts: [
-        {
-          name: "userState";
-          isMut: true;
-          isSigner: false;
-        },
-        {
-          name: "vault";
-          isMut: true;
-          isSigner: false;
-        },
-        {
-          name: "user";
-          isMut: true;
-          isSigner: true;
-        },
-        {
-          name: "userTokenAccount";
-          isMut: true;
-          isSigner: false;
-        },
-        {
-          name: "tokenProgram";
-          isMut: false;
-          isSigner: false;
-        }
-      ];
-      args: [
-        {
-          name: "amount";
-          type: "u64";
-        }
-      ];
-    },
-    {
-      name: "unstake";
-      accounts: [
-        {
-          name: "userState";
-          isMut: true;
-          isSigner: false;
-        },
-        {
-          name: "vault";
-          isMut: true;
-          isSigner: false;
-        },
-        {
-          name: "user";
-          isMut: true;
-          isSigner: true;
-        },
-        {
-          name: "userTokenAccount";
-          isMut: true;
-          isSigner: false;
-        },
-        {
-          name: "tokenProgram";
-          isMut: false;
-          isSigner: false;
-        }
-      ];
-      args: [
-        {
-          name: "amount";
-          type: "u64";
-        }
-      ];
-    }
-  ];
-  accounts: [
-    {
-      name: "userState";
-      type: {
-        kind: "struct";
-        fields: [
-          {
-            name: "user";
-            type: "publicKey";
-          },
-          {
-            name: "stakedAmount";
-            type: "u64";
-          },
-          {
-            name: "lastStakeTime";
-            type: "i64";
-          }
-        ];
-      };
-    },
-    {
-      name: "vault";
-      type: {
-        kind: "struct";
-        fields: [
-          {
-            name: "authority";
-            type: "publicKey";
-          },
-          {
-            name: "tokenMint";
-            type: "publicKey";
-          },
-          {
-            name: "tokenAccount";
-            type: "publicKey";
-          }
-        ];
-      };
-    }
-  ];
-};
+import { BN } from '@coral-xyz/anchor';
 
 export interface UserState {
-  user: PublicKey;
+  authority: PublicKey;
   stakedAmount: BN;
   lastStakeTime: BN;
+  lastUnstakeTime: BN;
 }
 
-export interface Vault {
+export interface AdminState {
   authority: PublicKey;
-  tokenMint: PublicKey;
-  tokenAccount: PublicKey;
-} 
+}
+
+export interface VaultTokenAccount {
+  mint: PublicKey;
+  authority: PublicKey;
+}
+
+export interface SamachiProgram {
+  name: string;
+  version: string;
+  instructions: {
+    initialize_admin: {
+      accounts: {
+        admin: { isMut: true; isSigner: false };
+        admin_authority: { isMut: true; isSigner: true };
+        system_program: { isMut: false; isSigner: false };
+      };
+      args: [];
+    };
+    initialize_user: {
+      accounts: {
+        user_state: { isMut: true; isSigner: false };
+        authority: { isMut: true; isSigner: true };
+        system_program: { isMut: false; isSigner: false };
+      };
+      args: [];
+    };
+    initialize_vault: {
+      accounts: {
+        vault_token_account: { isMut: true; isSigner: false };
+        mint: { isMut: false; isSigner: false };
+        payer: { isMut: true; isSigner: true };
+        system_program: { isMut: false; isSigner: false };
+        token_program: { isMut: false; isSigner: false };
+        rent: { isMut: false; isSigner: false };
+      };
+      args: [];
+    };
+    settle_bill: {
+      accounts: {
+        user_state: { isMut: true; isSigner: false };
+        vault_token_account: { isMut: true; isSigner: false };
+        treasury_token_account: { isMut: true; isSigner: false };
+        mint: { isMut: false; isSigner: false };
+        admin: { isMut: false; isSigner: false };
+        admin_authority: { isMut: true; isSigner: true };
+        token_program: { isMut: false; isSigner: false };
+      };
+      args: [{ amount: BN }];
+    };
+    stake: {
+      accounts: {
+        user_state: { isMut: true; isSigner: false };
+        vault_token_account: { isMut: true; isSigner: false };
+        user_token_account: { isMut: true; isSigner: false };
+        mint: { isMut: false; isSigner: false };
+        authority: { isMut: false; isSigner: true };
+        token_program: { isMut: false; isSigner: false };
+      };
+      args: [{ amount: BN }];
+    };
+    unstake: {
+      accounts: {
+        user_state: { isMut: true; isSigner: false };
+        vault_token_account: { isMut: true; isSigner: false };
+        user_token_account: { isMut: true; isSigner: false };
+        mint: { isMut: false; isSigner: false };
+        authority: { isMut: false; isSigner: true };
+        token_program: { isMut: false; isSigner: false };
+      };
+      args: [{ amount: BN }];
+    };
+  };
+  accounts: {
+    userState: UserState;
+    adminState: AdminState;
+    vaultTokenAccount: VaultTokenAccount;
+  };
+  errors: {
+    InsufficientFunds: {
+      code: number;
+      name: string;
+      msg: string;
+    };
+    InvalidAmount: {
+      code: number;
+      name: string;
+      msg: string;
+    };
+  };
+}
+
+export type SamachiProgramType = Program<SamachiProgram>; 

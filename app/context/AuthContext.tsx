@@ -13,6 +13,8 @@ interface Profile {
     email?: string;
     name?: string;
     walletAddress?: string;
+    twitter?: string;
+    telegram?: string;
     // Add other relevant profile fields from your 'profiles' table
 }
 
@@ -61,86 +63,80 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error("AuthContext: Exception fetching profile:", error);
       setProfile(null);
     } finally {
+      console.log("AuthContext: fetchProfile finally block. Setting isLoading to false.");
       setIsLoading(false); // Ensure loading is set to false after profile fetch
     }
   };
 
-  // Initialize auth state
+  // Initialize auth state and listen for changes
   useEffect(() => {
     let mounted = true;
 
-    const initializeAuth = async () => {
-      try {
-        // Get initial session
-        const { data: { session: initialSession }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error("AuthContext: Error getting initial session:", error);
-          if (mounted) setIsLoading(false);
-          return;
-        }
-
-        console.log("AuthContext: Initial session:", initialSession);
-        
-        if (initialSession && mounted) {
-          setSession(initialSession);
-          setUser(initialSession.user);
-          await fetchProfile(initialSession.user.id);
-        } else if (mounted) {
-          setIsLoading(false); // Set loading to false if no session
-        }
-      } catch (error) {
-        console.error("AuthContext: Error in initializeAuth:", error);
-        if (mounted) setIsLoading(false);
-      }
-    };
-
-    initializeAuth();
+    // Start loading
+    setIsLoading(true);
 
     // Listen for auth state changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, newSession) => {
         console.log("AuthContext: Auth state changed:", event, newSession);
-        
+
         if (!mounted) return;
 
         if (newSession) {
           setSession(newSession);
           setUser(newSession.user);
+          // Fetch profile *after* setting user, then update loading state
           await fetchProfile(newSession.user.id);
+          // No need to set isLoading(false) here, fetchProfile does it.
         } else {
+          // No session or logout
           setSession(null);
           setUser(null);
           setProfile(null);
-          setIsLoading(false); // Ensure loading is set to false on logout
+          setIsLoading(false); // Set loading to false if no session/logged out
         }
       }
     );
+
+    // Initial check to handle case where listener might not fire immediately
+    // or if there's no session at all on first load.
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      if (mounted && !currentSession) {
+        // If after a brief moment there's still no session, stop loading.
+        // The listener will handle the case where a session appears later.
+        setIsLoading(false);
+        console.log("AuthContext: No initial session found after listener setup.");
+      }
+    });
 
     return () => {
       mounted = false;
       authListener?.subscription.unsubscribe();
     };
-  }, []); // Empty dependency array is fine here as we're using mounted flag
+  }, [supabase]); // Add supabase as dependency
 
   const logout = async () => {
     console.log("AuthContext: Signing out...");
     try {
-      // Clear local state first
-      setSession(null);
-      setUser(null);
-      setProfile(null);
-      setIsLoading(false);
-
-      // Then sign out from Supabase
+      // First sign out from Supabase
       const { error } = await supabase.auth.signOut();
       if (error) {
         console.error("AuthContext: Error signing out:", error);
         throw error;
       }
 
-      // Finally, redirect to login page
-      router.push('/login');
+      // Clear all local state
+      setSession(null);
+      setUser(null);
+      setProfile(null);
+      setIsLoading(false);
+
+      // Clear any local storage items
+      localStorage.clear();
+      sessionStorage.clear();
+
+      // Let the middleware handle the redirect
+      router.refresh();
     } catch (error) {
       console.error("AuthContext: Error in logout:", error);
       throw error;

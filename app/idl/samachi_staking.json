@@ -1,5 +1,5 @@
 {
-  "address": "BAxhgSfwjWh5z6SMU6kVvgdEAkmqbipWeCKVuG4xMYFF",
+  "address": "8n1omncNHsRzUARf4w5jAqXjLJihiCCgESixrzj7EJSJ",
   "metadata": {
     "name": "samachi_staking",
     "version": "0.1.0",
@@ -416,55 +416,67 @@
   "accounts": [
     {
       "name": "UserState",
-      "discriminator": [
-        72,
-        177,
-        85,
-        249,
-        76,
-        167,
-        186,
-        126
-      ]
-    }
-  ],
-  "errors": [
-    {
-      "code": 6000,
-      "name": "InsufficientStake",
-      "msg": "Insufficient stake for withdrawal."
-    },
-    {
-      "code": 6001,
-      "name": "MathOverflow",
-      "msg": "Math operation overflow."
-    },
-    {
-      "code": 6002,
-      "name": "Unauthorized",
-      "msg": "Unauthorized admin."
-    }
-  ],
-  "types": [
-    {
-      "name": "UserState",
       "type": {
         "kind": "struct",
         "fields": [
           {
             "name": "authority",
-            "type": "pubkey"
+            "type": "publicKey"
           },
           {
-            "name": "staked_amount",
+            "name": "stakedAmount",
             "type": "u64"
           },
           {
-            "name": "bump",
-            "type": "u8"
+            "name": "lastStakeTime",
+            "type": "i64"
+          },
+          {
+            "name": "lastUnstakeTime",
+            "type": "i64"
           }
         ]
       }
+    },
+    {
+      "name": "AdminState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "publicKey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VaultTokenAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "publicKey"
+          },
+          {
+            "name": "authority",
+            "type": "publicKey"
+          }
+        ]
+      }
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "InsufficientFunds",
+      "msg": "Insufficient funds for operation"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidAmount",
+      "msg": "Invalid amount specified"
     }
   ]
 }

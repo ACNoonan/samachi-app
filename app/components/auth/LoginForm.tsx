@@ -4,7 +4,6 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
-import { Label } from '@/app/components/ui/label';
 import { toast } from 'sonner';
 import { useAuth } from '@/app/context/AuthContext';
 import { ArrowLeft } from 'lucide-react';
@@ -20,6 +19,13 @@ import {
   FormMessage,
 } from '@/app/components/ui/form';
 import Link from 'next/link';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 
 // 1. Define Zod Schema
 const formSchema = z.object({
@@ -29,7 +35,7 @@ const formSchema = z.object({
 
 export const LoginForm: React.FC = () => {
   const router = useRouter();
-  const { supabase } = useAuth();
+  const { supabase, user, isLoading } = useAuth();
 
   // 2. Initialize react-hook-form
   const form = useForm<z.infer<typeof formSchema>>({
@@ -56,102 +62,104 @@ export const LoginForm: React.FC = () => {
       }
 
       toast.success('Signed in successfully!');
-      // No need to call login() from context anymore
-      // Redirect is handled by middleware or can be done explicitly
-      router.push('/dashboard'); // Or router.refresh() if middleware handles redirect
+      // Let the middleware handle the redirect
+      router.refresh(); // Refresh the page to trigger middleware
 
     } catch (error: any) {
       console.error('Supabase login error:', error);
       toast.error(error.message || 'Login failed. Please check your credentials.');
     }
-    // isSubmitting is handled by react-hook-form
   }
 
   return (
-    <div className="flex flex-col min-h-screen p-6">
-       <button
-        onClick={() => router.back()}
-        className="self-start mb-8 p-2 rounded-full hover:bg-black/5 transition-colors"
-        aria-label="Go back"
-        disabled={form.formState.isSubmitting}
-      >
-        <ArrowLeft className="h-6 w-6" strokeWidth={1.5} />
-      </button>
+    <div 
+      className="min-h-screen flex items-center justify-center p-4" 
+      style={{ 
+        background: 'linear-gradient(to bottom right, #3b82f6, #8b5cf6)',
+        color: 'white' 
+      }}
+    >
+      <Card className="w-full max-w-md bg-white/90 backdrop-blur-sm border-0 shadow-xl">
+        <CardHeader className="pb-2">
+          <div className="flex items-center mb-2">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="mr-2 text-blue-600 hover:text-blue-700 hover:bg-blue-100" 
+              onClick={() => router.back()}
+              aria-label="Go back"
+              disabled={form.formState.isSubmitting}
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <CardTitle className="text-2xl font-bold text-blue-800">Samachi Sign In</CardTitle>
+          </div>
+          <CardDescription className="text-gray-600">
+            Access your Samachi membership securely
+          </CardDescription>
+        </CardHeader>
+        
+        <CardContent className="pt-4">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-gray-700 font-medium">Email Address</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        placeholder="your@email.com"
+                        autoComplete="email"
+                        className="bg-white/80 backdrop-blur-sm border-gray-300 focus:border-blue-500 focus:ring focus:ring-blue-200"
+                        disabled={form.formState.isSubmitting}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage className="text-red-500" />
+                  </FormItem>
+                )}
+              />
 
-      <div className="mb-10">
-        <h1 className="text-3xl font-bold mb-2">Sign In</h1>
-        <p className="text-muted-foreground">Access your Samachi membership</p>
-      </div>
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <div className="flex items-center justify-between">
+                      <FormLabel className="text-gray-700 font-medium">Password</FormLabel>
+                      <Link href="/forgot-password" className="text-sm text-blue-600 hover:text-blue-800 hover:underline">
+                        Forgot password?
+                      </Link>
+                    </div>
+                    <FormControl>
+                      <Input
+                        type="password"
+                        placeholder="••••••••"
+                        autoComplete="current-password"
+                        className="bg-white/80 backdrop-blur-sm border-gray-300 focus:border-blue-500 focus:ring focus:ring-blue-200"
+                        disabled={form.formState.isSubmitting}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage className="text-red-500" />
+                  </FormItem>
+                )}
+              />
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          {/* Email Field */}
-          <FormField
-            control={form.control}
-            name="email"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Email</FormLabel>
-                <FormControl>
-                  <Input
-                    type="email"
-                    placeholder="your@email.com"
-                    autoComplete="email"
-                    className="bg-white/50 backdrop-blur-sm border-gray-200"
-                    disabled={form.formState.isSubmitting}
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Password Field */}
-          <FormField
-            control={form.control}
-            name="password"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Password</FormLabel>
-                <FormControl>
-                  <Input
-                    type="password"
-                    placeholder="••••••••"
-                    autoComplete="current-password"
-                    className="bg-white/50 backdrop-blur-sm border-gray-200"
-                    disabled={form.formState.isSubmitting}
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-                <div className="text-right">
-                  <Link href="/forgot-password"
-                    className="text-sm text-primary hover:underline">
-                    Forgot Password?
-                  </Link>
-                </div>
-              </FormItem>
-            )}
-          />
-
-          <Button
-            type="submit"
-            className="w-full glass-button"
-            disabled={form.formState.isSubmitting}
-          >
-            {form.formState.isSubmitting ? 'Signing In...' : 'Sign In'}
-          </Button>
-
-          {/* Comments remain the same */}
-          {/* Link to create profile if they landed here by mistake? Or is CardLanding the only entry? */}
-          {/* For MVP, maybe omit this link if flow is strictly Card -> Create or Card -> Login */}
-          {/* <p className="text-center text-sm">
-            Don't have an account? You need a membership card to sign up.
-            <Link href="/" className="text-primary font-medium hover:underline"> Learn More</Link> 
-          </p> */}
-        </form>
-      </Form>
+              <Button
+                type="submit"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 font-medium rounded-lg shadow-md transition-colors"
+                disabled={form.formState.isSubmitting}
+              >
+                {form.formState.isSubmitting ? 'Signing In...' : 'Sign In'}
+              </Button>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
     </div>
   );
 }; 

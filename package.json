@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "mocha -r ts-node/register tests/**/*.test.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",
@@ -56,11 +57,17 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@supabase/auth-helpers-nextjs": "^0.10.0",
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/chai": "^5.2.1",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.17.30",
     "@types/react": "^18.3.20",
     "@types/react-dom": "^18.3.6",
+    "chai": "^5.2.0",
+    "mocha": "^11.1.0",
     "node-gyp": "^11.2.0",
+    "puppeteer": "^24.7.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

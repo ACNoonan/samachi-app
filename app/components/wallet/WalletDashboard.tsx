@@ -32,6 +32,7 @@ interface GlownetWalletData {
 }
 
 export function WalletDashboard() {
+  console.log('WalletDashboard: Component rendering');
   const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
   const { connection } = useConnection();
@@ -350,13 +351,18 @@ export function WalletDashboard() {
       );
   }
 
-  // Render Loading Data State
+  // Render Loading Data State - Modified to show more information
   if (isLoadingData && !initialLoadComplete) {
       return (
           <div className="flex flex-col pt-10 pb-20 px-6 space-y-8">
               <div className="mb-6">
                   <h1 className="text-2xl font-bold mb-1">Wallet</h1>
                   <p className="text-muted-foreground">Loading your assets...</p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Status: {connected ? 'Wallet Connected' : 'Wallet Disconnected'} | 
+                    Auth: {user ? 'Logged In' : 'Not Logged In'} | 
+                    Solana: {solanaLoading ? 'Loading' : 'Ready'}
+                  </p>
               </div>
               <Skeleton className="h-40 w-full rounded-lg" />
               <Skeleton className="h-40 w-full rounded-lg" />
