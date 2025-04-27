@@ -134,7 +134,7 @@ export const StakingModal: React.FC<StakingModalProps> = ({ onClose }) => {
           <Button 
             onClick={handleSubmit}
             disabled={!amount || parseFloat(amount) <= 0 || isProcessing}
-            className="w-full glass-button"
+            className="w-full glass-button mt-6"
           >
             {isProcessing ? (
               <div className="flex items-center justify-center">
@@ -143,7 +143,7 @@ export const StakingModal: React.FC<StakingModalProps> = ({ onClose }) => {
               </div>
             ) : (
               <>
-                {action === 'stake' ? 'Stake' : 'Unstake'} USDC
+                {action === 'stake' ? 'Stake' : 'Unstake'} 
                 <ChevronRight className="ml-2 h-4 w-4" />
               </>
             )}
@@ -163,7 +163,7 @@ export const StakingModal: React.FC<StakingModalProps> = ({ onClose }) => {
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-400">Credit Line</span>
                 <span className="font-medium text-white">
-                  {userState.creditLine.toString()} USDC
+                  {userState.stakedAmount.toString()} USDC
                 </span>
               </div>
             </div>

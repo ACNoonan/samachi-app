@@ -1,5 +1,5 @@
 {
-  "address": "GeJd3Em3sfV7LZZDiwmXdJWeDas8ea5GTGvSmX1F4Wkk",
+  "address": "8VtCsstcdNp1vCoUA1epHXgar9tsKurPZ9eQhrieVrCX",
   "metadata": {
     "name": "samachi_staking",
     "version": "0.1.0",
@@ -7,49 +7,6 @@
     "description": "Created with Anchor"
   },
   "instructions": [
-    {
-      "name": "initialize_admin",
-      "discriminator": [
-        35,
-        176,
-        8,
-        143,
-        42,
-        160,
-        61,
-        158
-      ],
-      "accounts": [
-        {
-          "name": "admin",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  97,
-                  100,
-                  109,
-                  105,
-                  110
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "name": "admin_authority",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "system_program",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": []
-    },
     {
       "name": "initialize_user",
       "discriminator": [
@@ -74,7 +31,13 @@
                   117,
                   115,
                   101,
-                  114
+                  114,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
                 ]
               },
               {
@@ -110,6 +73,38 @@
       ],
       "accounts": [
         {
+          "name": "vault_authority",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
           "name": "vault_token_account",
           "writable": true,
           "pda": {
@@ -121,7 +116,14 @@
                   97,
                   117,
                   108,
-                  116
+                  116,
+                  95,
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  115
                 ]
               },
               {
@@ -178,16 +180,31 @@
                   117,
                   115,
                   101,
-                  114
+                  114,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
                 ]
               },
               {
                 "kind": "account",
-                "path": "user_state.authority",
-                "account": "UserState"
+                "path": "authority"
               }
             ]
           }
+        },
+        {
+          "name": "authority",
+          "docs": [
+            "The `has_one = authority` constraint ensures this key matches the one stored in `user_state`.",
+            "It does not need to be a signer or mutable for this specific instruction."
+          ],
+          "relations": [
+            "user_state"
+          ]
         },
         {
           "name": "vault_token_account",
@@ -201,7 +218,45 @@
                   97,
                   117,
                   108,
-                  116
+                  116,
+                  95,
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
                 ]
               },
               {
@@ -217,23 +272,6 @@
         },
         {
           "name": "mint"
-        },
-        {
-          "name": "admin",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  97,
-                  100,
-                  109,
-                  105,
-                  110
-                ]
-              }
-            ]
-          }
         },
         {
           "name": "admin_authority",
@@ -276,7 +314,13 @@
                   117,
                   115,
                   101,
-                  114
+                  114,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
                 ]
               },
               {
@@ -302,7 +346,45 @@
                   97,
                   117,
                   108,
-                  116
+                  116,
+                  95,
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
                 ]
               },
               {
@@ -318,7 +400,10 @@
         {
           "name": "authority",
           "writable": true,
-          "signer": true
+          "signer": true,
+          "relations": [
+            "user_state"
+          ]
         },
         {
           "name": "token_program",
@@ -356,7 +441,13 @@
                   117,
                   115,
                   101,
-                  114
+                  114,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
                 ]
               },
               {
@@ -382,7 +473,45 @@
                   97,
                   117,
                   108,
-                  116
+                  116,
+                  95,
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
                 ]
               },
               {
@@ -398,7 +527,10 @@
         {
           "name": "authority",
           "writable": true,
-          "signer": true
+          "signer": true,
+          "relations": [
+            "user_state"
+          ]
         },
         {
           "name": "token_program",
@@ -426,23 +558,46 @@
         186,
         126
       ]
+    },
+    {
+      "name": "VaultAuthority",
+      "discriminator": [
+        132,
+        34,
+        187,
+        202,
+        202,
+        195,
+        211,
+        53
+      ]
     }
   ],
   "errors": [
     {
       "code": 6000,
       "name": "InsufficientStake",
-      "msg": "Insufficient stake for withdrawal."
+      "msg": "Insufficient staked amount for withdrawal or settlement."
     },
     {
       "code": 6001,
       "name": "MathOverflow",
-      "msg": "Math operation overflow."
+      "msg": "Mathematical operation resulted in an overflow."
     },
     {
       "code": 6002,
-      "name": "Unauthorized",
-      "msg": "Unauthorized admin."
+      "name": "InvalidAuthority",
+      "msg": "The provided authority does not match the expected authority."
+    },
+    {
+      "code": 6003,
+      "name": "InvalidAuthorityForState",
+      "msg": "The user authority provided does not match the authority stored in the user state."
+    },
+    {
+      "code": 6004,
+      "name": "ZeroAmount",
+      "msg": "Operation cannot be performed with zero amount."
     }
   ],
   "types": [
@@ -459,6 +614,18 @@
             "name": "staked_amount",
             "type": "u64"
           },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VaultAuthority",
+      "type": {
+        "kind": "struct",
+        "fields": [
           {
             "name": "bump",
             "type": "u8"

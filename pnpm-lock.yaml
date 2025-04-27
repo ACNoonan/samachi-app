@@ -9,7 +9,7 @@ importers:
   .:
     dependencies:
       '@coral-xyz/anchor':
-        specifier: ^0.31.1
+        specifier: 0.31.1
         version: 0.31.1(bufferutil@4.0.9)(encoding@0.1.13)(typescript@5.8.3)(utf-8-validate@6.0.5)
       '@hookform/resolvers':
         specifier: ^5.0.1
