@@ -1,14 +1,20 @@
-{
+/**
+ * Program IDL in camelCase format in order to be used in JS/TS.
+ *
+ * Note that this is only a type helper and is not the actual IDL. The original
+ * IDL can be found at `target/idl/samachi_staking.json`.
+ */
+export type SamachiStaking = {
   "address": "89yQQn9poeC6Co2s6fpqio7sHH7jx5s9Qgtem4uZqwrN",
   "metadata": {
-    "name": "samachi_staking",
+    "name": "samachiStaking",
     "version": "0.1.0",
     "spec": "0.1.0",
     "description": "Created with Anchor"
   },
   "instructions": [
     {
-      "name": "initialize_vault",
+      "name": "initializeVault",
       "discriminator": [
         48,
         191,
@@ -21,7 +27,7 @@
       ],
       "accounts": [
         {
-          "name": "vault_authority",
+          "name": "vaultAuthority",
           "writable": true,
           "pda": {
             "seeds": [
@@ -53,7 +59,7 @@
           }
         },
         {
-          "name": "vault_token_account",
+          "name": "vaultTokenAccount",
           "writable": true,
           "pda": {
             "seeds": [
@@ -90,11 +96,11 @@
           "signer": true
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         },
         {
-          "name": "token_program",
+          "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
         {
@@ -107,7 +113,7 @@
   ],
   "accounts": [
     {
-      "name": "VaultAuthority",
+      "name": "vaultAuthority",
       "discriminator": [
         132,
         34,
@@ -123,33 +129,33 @@
   "errors": [
     {
       "code": 6000,
-      "name": "InsufficientStake",
+      "name": "insufficientStake",
       "msg": "Insufficient staked amount for withdrawal or settlement."
     },
     {
       "code": 6001,
-      "name": "MathOverflow",
+      "name": "mathOverflow",
       "msg": "Mathematical operation resulted in an overflow."
     },
     {
       "code": 6002,
-      "name": "InvalidAuthority",
+      "name": "invalidAuthority",
       "msg": "The provided authority does not match the expected authority."
     },
     {
       "code": 6003,
-      "name": "InvalidAuthorityForState",
+      "name": "invalidAuthorityForState",
       "msg": "The user authority provided does not match the authority stored in the user state."
     },
     {
       "code": 6004,
-      "name": "ZeroAmount",
+      "name": "zeroAmount",
       "msg": "Operation cannot be performed with zero amount."
     }
   ],
   "types": [
     {
-      "name": "VaultAuthority",
+      "name": "vaultAuthority",
       "type": {
         "kind": "struct",
         "fields": [
@@ -161,4 +167,4 @@
       }
     }
   ]
-}
+};

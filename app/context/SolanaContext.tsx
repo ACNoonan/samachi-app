@@ -97,9 +97,8 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
           // console.log('Cleaned IDL object:', cleanIdlObject);
 
           // Initialize Program, casting IDL to Idl (imported from anchor)
-          // @ts-ignore
           const samachiProgram = new Program<SamachiStaking>(
-            cleanIdlObject as Idl,
+            cleanIdlObject as Idl, // Reverted cast
             PROGRAM_ID,
             provider
           );
@@ -259,11 +258,11 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
         instructions.push(
           await program.methods
             .initializeUser()
-            // @ts-ignore
+            // @ts-ignore - Re-added while investigating IDL mismatch
             .accounts({
-              userState: userStatePDA,
+              userState: userStatePDA, // Reverted: camelCase
               authority: anchorWallet.publicKey,
-              systemProgram: SystemProgram.programId,
+              systemProgram: SystemProgram.programId, // Reverted: camelCase
             })
             .instruction()
         );
@@ -273,15 +272,15 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
       instructions.push(
         await program.methods
           .stake(new BN(amount * 1_000_000))
-          // @ts-ignore
+          // @ts-ignore - Re-added while investigating IDL mismatch
           .accounts({
-            userState: userStatePDA,
-            vaultTokenAccount: vaultTokenAccountPDA,
-            vaultAuthority: vaultAuthorityPDA,
-            userTokenAccount: userTokenAccount,
+            userState: userStatePDA, // Reverted: camelCase
+            vaultTokenAccount: vaultTokenAccountPDA, // Reverted: camelCase
+            vaultAuthority: vaultAuthorityPDA, // Reverted: camelCase
+            userTokenAccount: userTokenAccount, // Reverted: camelCase
             mint: USDC_MINT,
             authority: anchorWallet.publicKey,
-            tokenProgram: TOKEN_PROGRAM_ID,
+            tokenProgram: TOKEN_PROGRAM_ID, // Reverted: camelCase
           })
           .instruction()
       );
@@ -366,15 +365,15 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
       // Use program.methods for consistency and type safety
       const txSignature = await program.methods
         .unstake(new BN(amount * 1_000_000))
-        // @ts-ignore
+        // @ts-ignore - Re-added while investigating IDL mismatch
         .accounts({
-          userState: userStatePDA,
-          vaultTokenAccount: vaultTokenAccountPDA,
-          vaultAuthority: vaultAuthorityPDA,
-          userTokenAccount: userTokenAccount,
+          userState: userStatePDA, // Reverted: camelCase
+          vaultTokenAccount: vaultTokenAccountPDA, // Reverted: camelCase
+          vaultAuthority: vaultAuthorityPDA, // Reverted: camelCase
+          userTokenAccount: userTokenAccount, // Reverted: camelCase
           mint: USDC_MINT,
           authority: anchorWallet.publicKey,
-          tokenProgram: TOKEN_PROGRAM_ID,
+          tokenProgram: TOKEN_PROGRAM_ID, // Reverted: camelCase
         })
         .rpc();
 
