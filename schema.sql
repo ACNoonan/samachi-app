@@ -1,4 +1,65 @@
 
+-- supabase/migrations/YYYYMMDDHHMMSS_create_custodial_stakes.sql
+
+CREATE TABLE public.custodial_stakes (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_profile_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    amount_staked numeric NOT NULL CHECK (amount_staked > 0),
+    usdc_mint_address text NOT NULL DEFAULT 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', -- Mainnet USDC Mint
+    deposit_transaction_signature text NOT NULL UNIQUE,
+    deposit_timestamp timestamptz NOT NULL DEFAULT now(),
+    status text NOT NULL CHECK (status IN ('staked', 'unstaking_requested', 'unstaked')),
+    unstake_request_timestamp timestamptz,
+    unstake_transaction_signature text UNIQUE,
+    unstake_timestamp timestamptz,
+
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Optional: Indexes for faster lookups
+CREATE INDEX idx_custodial_stakes_user_profile_id ON public.custodial_stakes(user_profile_id);
+CREATE INDEX idx_custodial_stakes_status ON public.custodial_stakes(status);
+CREATE INDEX idx_custodial_stakes_deposit_tx_sig ON public.custodial_stakes(deposit_transaction_signature);
+CREATE INDEX idx_custodial_stakes_unstake_tx_sig ON public.custodial_stakes(unstake_transaction_signature);
+
+-- Enable Row Level Security (RLS)
+ALTER TABLE public.custodial_stakes ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Users can view their own stakes
+CREATE POLICY "Allow users to view their own stakes"
+ON public.custodial_stakes
+FOR SELECT
+USING (auth.uid() = (SELECT user_id FROM public.profiles WHERE id = user_profile_id)); -- Assuming profiles.user_id links to auth.users
+
+-- Policy: Allow backend service role to perform all operations (needed for API routes)
+-- Note: Supabase API calls using the SERVICE_ROLE_KEY bypass RLS by default.
+-- If using a specific backend user/role, create policies accordingly.
+
+-- Trigger to update updated_at timestamp
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_custodial_stakes_updated_at
+BEFORE UPDATE ON public.custodial_stakes
+FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+COMMENT ON TABLE public.custodial_stakes IS 'Tracks user USDC deposits treated as custodial stakes.';
+COMMENT ON COLUMN public.custodial_stakes.usdc_mint_address IS 'The mint address of the USDC token being tracked (e.g., EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v for mainnet).';
+COMMENT ON COLUMN public.custodial_stakes.deposit_transaction_signature IS 'Solana transaction signature of the deposit.';
+COMMENT ON COLUMN public.custodial_stakes.status IS 'Current status: staked, unstaking_requested, unstaked.';
+
+
+
+
+
+
+
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
