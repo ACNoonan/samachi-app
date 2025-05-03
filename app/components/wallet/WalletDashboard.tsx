@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  CreditCard, Wallet, RefreshCw, History, Eye, EyeOff, Info, Coins
+  CreditCard, Wallet, RefreshCw, History, Eye, EyeOff, Info, Coins, Copy, PiggyBank
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import Link from 'next/link';
@@ -14,6 +14,17 @@ import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { toast } from 'sonner';
 import { useSolana } from '@/app/context/SolanaContext';
 import { WalletName } from '@solana/wallet-adapter-base';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/app/components/ui/card";
+import { Input } from "@/app/components/ui/input";
+import { Separator } from "@/app/components/ui/separator";
+import { Alert, AlertDescription, AlertTitle } from "@/app/components/ui/alert";
 
 // Define a basic type for assets
 interface Asset {
@@ -36,8 +47,15 @@ export function WalletDashboard() {
   const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
   const { connection } = useConnection();
-  const { publicKey, connected, select } = useWallet();
-  const { userState, loading: solanaLoading } = useSolana();
+  const { publicKey, connected, select, wallet } = useWallet();
+  const {
+    custodialStakeBalance,
+    treasuryAddress,
+    loading: solanaContextLoading,
+    error: solanaError,
+    unstake,
+    fetchCustodialBalance,
+  } = useSolana();
 
   // Log initial hook states
   console.log('WalletDashboard: Initial hook states:', {
@@ -46,13 +64,14 @@ export function WalletDashboard() {
     connection: connection ? 'connected' : 'not connected',
     publicKey: publicKey?.toString(),
     connected,
-    solanaLoading,
-    userState
+    solanaContextLoading,
+    custodialStakeBalance,
+    treasuryAddress: treasuryAddress?.toString(),
   });
 
   // UI State
   const [hideBalances, setHideBalances] = useState(false);
-  const [refreshing, setRefreshing] = useState(false); 
+  const [refreshing, setRefreshing] = useState(false);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
@@ -66,41 +85,46 @@ export function WalletDashboard() {
   useEffect(() => {
     console.log('WalletDashboard: State updated:', {
       isLoadingData,
+      solanaContextLoading,
       initialLoadComplete,
       refreshing,
       dataError,
+      solanaError,
       solBalance,
+      custodialStakeBalance,
       glownetData,
       walletAssets
     });
-  }, [isLoadingData, initialLoadComplete, refreshing, dataError, solBalance, glownetData, walletAssets]);
+  }, [isLoadingData, solanaContextLoading, initialLoadComplete, refreshing, dataError, solanaError, solBalance, custodialStakeBalance, glownetData, walletAssets]);
 
-  // --- Data Fetching ---
-  const fetchData = useCallback(async () => {
-    console.log('WalletDashboard: Starting fetchData...');
-    
-    // Skip fetching if user is not authenticated yet
-    if (authLoading) {
+  // --- Data Fetching (SOL Balance & Glownet) ---
+  const fetchData = useCallback(async (isManualRefresh = false) => {
+    console.log('WalletDashboard: Starting fetchData...', { isManualRefresh });
+
+    // Skip if still authenticating user
+    if (authLoading && !user) {
       console.log('WalletDashboard: Auth still loading, skipping fetch');
       return;
     }
-    
-    // Clear previous errors before new fetch attempt
+
+    // Clear previous SOL/Glownet errors
     setDataError(null);
-    
-    // Only show loading indicator if this is not a refresh operation
+
+    // Show loading state only if it's not a background refresh
     if (!refreshing) {
       setIsLoadingData(true);
     }
-    
-    setRefreshing(true);
-    console.log('WalletDashboard: Starting data fetch...');
+    if (isManualRefresh) {
+        setRefreshing(true);
+    }
+
+    console.log('WalletDashboard: Starting SOL/Glownet data fetch...');
 
     let fetchedSol: number | null = null;
     let fetchedGlownet: GlownetWalletData | null = null;
     let errorMessages: string[] = [];
 
-    // Fetch Glownet Data - Only if user is logged in
+    // --- Fetch Glownet Data ---
     if (user) {
         try {
             console.log('WalletDashboard: Fetching Glownet wallet details...');
@@ -110,30 +134,26 @@ export function WalletDashboard() {
                 throw new Error(result.error || `Failed to fetch Glownet data: ${response.statusText}`);
             }
             const result = await response.json();
-            
-            if (result.glownetData) {
-                fetchedGlownet = result.glownetData;
-                console.log('WalletDashboard: Glownet data received:', fetchedGlownet);
-            } else {
-                console.log('WalletDashboard: No active Glownet membership found or empty data returned.');
-            }
+            fetchedGlownet = result.glownetData || null; // Assign null if no data
+            console.log('WalletDashboard: Glownet data received:', fetchedGlownet);
         } catch (error: any) {
             console.error('WalletDashboard: Error fetching Glownet data:', error);
             errorMessages.push(error.message || 'Could not load Glownet balances.');
         }
     } else {
         console.log('WalletDashboard: User not logged in, skipping Glownet data fetch.');
+        fetchedGlownet = null; // Ensure it's null if user logs out
     }
 
-    // Fetch Solana Data if wallet connected
+    // --- Fetch Solana Data (SOL Balance only for now) ---
     if (connected && publicKey && connection) {
         try {
             console.log('WalletDashboard: Fetching SOL balance...');
             const lamports = await connection.getBalance(publicKey);
             fetchedSol = lamports / LAMPORTS_PER_SOL;
             console.log('WalletDashboard: SOL balance received:', fetchedSol);
-            
-            // Update Assets List (Start with SOL)
+
+            // Update SOL Asset
             const updatedAssets: Asset[] = [];
             // TODO: Fetch real SOL price for value
             const solPriceEur = 150; // Placeholder price
@@ -144,418 +164,351 @@ export function WalletDashboard() {
                 amount: fetchedSol,
                 value: fetchedSol * solPriceEur
             });
-            console.log('WalletDashboard: Updated assets list:', updatedAssets);
+            console.log('WalletDashboard: Updated assets list (SOL only):', updatedAssets);
             setWalletAssets(updatedAssets);
 
         } catch (error: any) {
             console.error('WalletDashboard: Error fetching SOL balance:', error);
             errorMessages.push(error.message || 'Could not load Solana balance.');
+            setWalletAssets([]); // Clear assets on error
         }
     } else {
-        console.log('WalletDashboard: Solana wallet not connected, skipping balance fetch.');
-        // If wallet not connected, ensure we have an empty asset list
-        setWalletAssets([]);
+        console.log('WalletDashboard: Solana wallet not connected, skipping SOL balance fetch.');
+        fetchedSol = null; // Ensure null if wallet disconnects
+        setWalletAssets([]); // Clear assets if wallet not connected
     }
 
-    // Update State
+    // --- Update State ---
     console.log('WalletDashboard: Updating state with:', { solBalance: fetchedSol, glownetData: fetchedGlownet });
     setSolBalance(fetchedSol);
     setGlownetData(fetchedGlownet);
 
-    // Handle Errors
+    // --- Handle Errors ---
     if (errorMessages.length > 0) {
         const combinedError = errorMessages.join(' \n ');
         setDataError(combinedError);
-        // Only show toast if these are actual errors (not just "wallet not connected" situations)
-        if (user || connected) {
+        if (user || connected) { // Only toast if we expected data
             toast.error("Error loading wallet data", { description: combinedError });
         }
     }
 
-    // Complete loading regardless of success/failure
+    // --- Complete Loading ---
     setIsLoadingData(false);
     setRefreshing(false);
-    setInitialLoadComplete(true);
-    console.log('WalletDashboard: Data fetch complete.');
+    setInitialLoadComplete(true); // Mark initial load as done after first attempt
+    console.log('WalletDashboard: SOL/Glownet data fetch complete.');
 
-  }, [user, connected, publicKey, connection, authLoading]);
+  }, [user, connected, publicKey, connection, authLoading, refreshing]);
 
-  // Track key connection changes that should trigger a refresh
-  const [prevConnected, setPrevConnected] = useState<boolean | null>(null);
-  const [prevPublicKey, setPrevPublicKey] = useState<string | null>(null);
-  const [prevUser, setPrevUser] = useState<any>(null);
-
-  // Initial data fetch - run when auth loading completes or wallet connection changes significantly
+  // --- Trigger Initial SOL/Glownet Fetch ---
   useEffect(() => {
-    console.log('WalletDashboard: Checking for key dependency changes...');
-    
-    // Skip if still loading auth
-    if (authLoading) {
-      console.log('WalletDashboard: Auth still loading, skipping fetch');
-      return;
-    }
-    
-    const publicKeyStr = publicKey?.toString() || null;
-    const userChanged = prevUser !== user;
-    const connectionChanged = prevConnected !== connected;
-    const publicKeyChanged = prevPublicKey !== publicKeyStr;
-    
-    console.log('WalletDashboard: Dependency changes:', {
-      userChanged,
-      connectionChanged,
-      publicKeyChanged,
-      prevConnected,
-      connected,
-      prevPublicKey,
-      publicKeyStr,
-      prevUser,
-      user: user ? 'logged in' : 'not logged in'
-    });
-    
-    // Only fetch if:
-    // 1. First load (prevConnected is null)
-    // 2. Connection state changed
-    // 3. Public key changed
-    // 4. User changed
-    if (prevConnected === null || connectionChanged || publicKeyChanged || userChanged) {
-      console.log('WalletDashboard: Key dependencies changed, fetching data...');
-      
-      // Update previous values
-      setPrevConnected(connected);
-      setPrevPublicKey(publicKeyStr);
-      setPrevUser(user);
-      
-      // Execute the fetch
+    console.log('WalletDashboard: Checking dependencies for initial SOL/Glownet fetch...');
+    if (!authLoading && !initialLoadComplete) { // Fetch only once after auth settles
+      console.log('WalletDashboard: Auth loaded, triggering initial SOL/Glownet fetch...');
       fetchData();
+    } else if (connected && publicKey && !isLoadingData && !initialLoadComplete) {
+        // Edge case: Auth was fast, wallet connects later, still need initial fetch
+        console.log('WalletDashboard: Wallet connected after auth, triggering initial SOL/Glownet fetch...');
+        fetchData();
+    } else if (!connected && !publicKey) {
+        // Clear SOL balance and assets if wallet disconnects
+        setSolBalance(null);
+        setWalletAssets([]);
     }
-  }, [authLoading, user, connected, publicKey, fetchData]);
+  }, [authLoading, connected, publicKey, initialLoadComplete, fetchData]);
 
-  // Add staked USDC to wallet assets
-  useEffect(() => {
-    console.log('WalletDashboard: Checking userState for staked USDC...', { userState });
-    if (userState) {
-      setWalletAssets(prevAssets => {
-        const existingAssets = prevAssets.filter(asset => asset.id !== 'usdc-staked');
-        const newAssets = [
-          ...existingAssets,
-          {
-            id: 'usdc-staked',
-            name: 'Staked USDC',
-            symbol: 'USDC',
-            amount: userState.stakedAmount.toNumber(),
-            value: userState.stakedAmount.toNumber() // 1:1 value for USDC
-          }
-        ];
-        console.log('WalletDashboard: Updated assets with staked USDC:', newAssets);
-        return newAssets;
-      });
-    }
-  }, [userState]);
-
-  // --- Derived/Calculated Values ---
-  const connectedWalletValue = solBalance !== null ? solBalance * 150 : null; // Placeholder value
-  const glownetStakedBalance = glownetData?.virtual_money ?? 0;
-  const glownetTotalCreditLimit = glownetData?.money ?? 0;
-
-  const totalBalance = (connectedWalletValue ?? 0) + glownetStakedBalance;
-
-  // Check if Glownet features are available
-  const hasGlownetFeatures = glownetData !== null;
-
-  // Simplified Credit Line: Available = Total Limit (assuming no active tab/usage info yet)
-  const creditLineAvailable = glownetTotalCreditLimit;
-
-  // --- UI Functions ---
-  const handleRefresh = () => {
-      if (refreshing) return; // Prevent multiple simultaneous refreshes
-      setRefreshing(true);
-      fetchData(); // Call the memoized fetch function
+  // --- Refresh Handler ---
+  const handleRefresh = async () => {
+    if (refreshing || solanaContextLoading) return; // Prevent multiple refreshes
+    console.log('WalletDashboard: Manual refresh triggered.');
+    setRefreshing(true); // Indicate refresh visually if needed
+    await Promise.all([
+        fetchData(true), // Fetch SOL/Glownet
+        fetchCustodialBalance() // Fetch staking balance
+    ]);
+    setRefreshing(false);
+    toast.info("Balances refreshed");
   };
 
+  // --- Formatting Helpers ---
   const maskValue = (value: number | null, symbol: string = '€') => {
-    if (value === null) return hideBalances ? '••••••' : 'N/A';
-    // Format based on symbol
-    if (symbol === 'SOL') {
-      return hideBalances ? '••••••' : `${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })} SOL`;
-    }
-    // Default to currency (Euro)
-    return hideBalances ? '••••••' : `${symbol}${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    if (hideBalances) return '*****';
+    if (value === null || isNaN(value)) return 'N/A';
+    return `${symbol}${value.toFixed(2)}`;
   };
 
   const formatAmount = (amount: number | null, symbol: string = '') => {
-      if (amount === null) return hideBalances ? '••••••' : 'N/A';
-      return hideBalances ? '••••••' : `${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}${symbol ? ' ' + symbol : ''}`;
-  }
+    if (hideBalances) return '*****';
+    if (amount === null || isNaN(amount)) return 'N/A';
+    // Basic formatting, consider Intl.NumberFormat for complex cases
+    return `${amount.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${symbol}`;
+  };
+
+  // --- Copy Helper ---
+  const copyToClipboard = (text: string | null | undefined) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text)
+      .then(() => toast.success("Address copied to clipboard!"))
+      .catch(err => toast.error("Failed to copy address"));
+  };
+
+  // --- Derived State ---
+  const showLoadingSkeletons = (isLoadingData || solanaContextLoading || authLoading) && !initialLoadComplete;
 
   // --- Render Logic ---
-
-  // Render Loading State
-  if (authLoading) {
+  if (authLoading && !user) {
+      console.log('WalletDashboard: Auth loading, rendering skeleton...');
       return (
-          <div className="flex flex-col pt-10 pb-20 px-6 space-y-8">
-              <div className="mb-6">
-                  <h1 className="text-2xl font-bold mb-1">Wallet</h1>
-                  <p className="text-muted-foreground">Loading your wallet data...</p>
-              </div>
-              <Skeleton className="h-8 w-1/3" />
-              <Skeleton className="h-40 w-full rounded-lg" />
-              <Skeleton className="h-40 w-full rounded-lg" />
-              <Skeleton className="h-6 w-1/4 mb-3" />
-              <Skeleton className="h-24 w-full rounded-lg" />
+          <div className="space-y-6">
+              <Skeleton className="h-10 w-3/4" />
+              <Skeleton className="h-40 w-full" />
+              <Skeleton className="h-40 w-full" />
           </div>
       );
   }
 
-  // Render Not Logged In State
-  if (!user && !authLoading) {
-       return (
-         <div className="flex flex-col items-center justify-center min-h-[60vh] p-6">
-            <Wallet className="h-12 w-12 text-muted-foreground mb-4"/>
-           <p className="text-center text-muted-foreground mb-4">Please log in to view your wallet.</p>
-           <Button onClick={() => router.push('/login')}>Log In</Button>
-         </div>
-       );
+  // If user is not logged in AT ALL (post auth check)
+  if (!user && !connected) {
+    console.log('WalletDashboard: Not logged in, not connected, rendering prompt.');
+    return (
+        <div className="text-center space-y-4 p-8 border rounded-lg shadow-md bg-card">
+            <Wallet size={48} className="mx-auto text-primary" />
+            <h2 className="text-2xl font-semibold">Connect Your Wallet</h2>
+            <p className="text-muted-foreground">
+                Connect your Solana wallet or log in to manage your balances and stake USDC.
+            </p>
+            <div className="flex justify-center gap-4">
+                <Button onClick={() => router.push('/login')}>Log In / Sign Up</Button>
+                <Button onClick={() => wallet?.adapter.connect()} variant="outline">
+                    Connect Phantom
+                </Button>
+            </div>
+        </div>
+    );
   }
 
-  // Render Error State (only if not loading and error exists)
-  if (dataError && !isLoadingData && initialLoadComplete) {
-       return (
-         <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center">
-            <Info className="h-12 w-12 text-destructive mb-4"/>
-           <p className="text-destructive mb-2">Could not load wallet data.</p>
-           <p className="text-sm text-muted-foreground mb-4 whitespace-pre-line">{dataError}</p>
-           <Button onClick={handleRefresh} disabled={refreshing}>
-               <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-               Try Again
-            </Button>
-         </div>
-       );
-  }
-
-  // Render Wallet Not Connected State
-  if (!connected) {
-      return (
-          <div className="flex flex-col pt-10 pb-20 px-6 space-y-8">
-              <div className="mb-6">
-                  <h1 className="text-2xl font-bold mb-1">Wallet</h1>
-                  <p className="text-muted-foreground">Connect your wallet to view your assets</p>
-              </div>
-              <div className="glass-card p-6 text-center">
-                  <Wallet className="h-12 w-12 text-muted-foreground mx-auto mb-4"/>
-                  <p className="text-muted-foreground mb-4">Your Solana wallet is not connected</p>
-                  <Button onClick={() => select('Phantom' as WalletName)} className="w-full">
-                      Connect Wallet
-                  </Button>
-              </div>
-          </div>
-      );
-  }
-
-  // Render Loading Data State - Modified to show more information
-  if (isLoadingData && !initialLoadComplete) {
-      return (
-          <div className="flex flex-col pt-10 pb-20 px-6 space-y-8">
-              <div className="mb-6">
-                  <h1 className="text-2xl font-bold mb-1">Wallet</h1>
-                  <p className="text-muted-foreground">Loading your assets...</p>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Status: {connected ? 'Wallet Connected' : 'Wallet Disconnected'} | 
-                    Auth: {user ? 'Logged In' : 'Not Logged In'} | 
-                    Solana: {solanaLoading ? 'Loading' : 'Ready'}
-                  </p>
-              </div>
-              <Skeleton className="h-40 w-full rounded-lg" />
-              <Skeleton className="h-40 w-full rounded-lg" />
-              <Skeleton className="h-6 w-1/4 mb-3" />
-              <Skeleton className="h-24 w-full rounded-lg" />
-          </div>
-      );
-  }
-
-  // Render Logged In Dashboard
+  console.log('WalletDashboard: Rendering main dashboard content...');
   return (
-    <div className="flex flex-col pt-10 pb-20 px-6 space-y-8">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="mb-6 animate-fade-in">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold mb-1">Wallet</h1>
-          <button
-            onClick={() => setHideBalances(!hideBalances)}
-            className="p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10"
-            aria-label={hideBalances ? "Show balances" : "Hide balances"}
-          >
-            {hideBalances ? (
-              <EyeOff className="h-5 w-5 text-muted-foreground" />
-            ) : (
-              <Eye className="h-5 w-5 text-muted-foreground" />
-            )}
-          </button>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Wallet</h1>
+        <div className="flex items-center gap-2">
+           <Button variant="ghost" size="icon" onClick={() => setHideBalances(!hideBalances)} aria-label={hideBalances ? "Show balances" : "Hide balances"}>
+                {hideBalances ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+            </Button>
+           <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={refreshing || solanaContextLoading} aria-label="Refresh balances">
+                 <RefreshCw className={`h-5 w-5 ${ (refreshing || solanaContextLoading) ? 'animate-spin' : ''}`} />
+            </Button>
         </div>
-        <p className="text-muted-foreground">Manage your Solana & network assets</p>
       </div>
 
-      {refreshing && (
-        <div className="mb-4 text-center text-sm text-muted-foreground">
-          <RefreshCw className="h-3 w-3 inline-block mr-1 animate-spin" />
-          Refreshing data...
-        </div>
+      {/* Display Errors */}
+      {dataError && (
+        <Alert variant="destructive">
+            <AlertTitle>Error Loading Data</AlertTitle>
+            <AlertDescription>{dataError}</AlertDescription>
+        </Alert>
+      )}
+       {solanaError && (
+        <Alert variant="destructive">
+            <AlertTitle>Staking Error</AlertTitle>
+            <AlertDescription>{solanaError}</AlertDescription>
+        </Alert>
       )}
 
-      {/* Total Balance Card */}
-      <div className="glass-card p-6 mb-8 animate-fade-in">
-        <div className="flex justify-between items-start mb-6">
-          <div>
-            <h2 className="text-lg font-medium mb-1">Total Balance</h2>
-            <p className="text-sm text-muted-foreground">
-              {hasGlownetFeatures ? 'Wallet Value + Glownet Staked' : 'Wallet Value'}
-            </p>
-          </div>
-          <Wallet className="h-6 w-6 text-primary" />
-        </div>
-
-        <div className="mb-4">
-          <h3 className="text-3xl font-bold mb-2">{maskValue(totalBalance)}</h3>
-          <div className="flex items-center">
-            <button
-              onClick={handleRefresh}
-              className={`p-1 rounded-full ${refreshing ? 'animate-spin' : 'hover:bg-black/5 dark:hover:bg-white/10'}`}
-              disabled={refreshing}
-              aria-label="Refresh balances"
-            >
-              <RefreshCw className={`h-4 w-4 text-muted-foreground ${refreshing ? 'animate-spin' : 'hover:opacity-70'}`} />
-            </button>
-            <span className="text-xs text-muted-foreground ml-1">Last updated {refreshing ? 'updating...' : 'just now'}</span>
-          </div>
-        </div>
-
-        <div className="text-xs space-y-1 text-muted-foreground">
-            <div className="flex justify-between">
-              <span>Connected Wallet (Value):</span>
-              <span>{maskValue(connectedWalletValue)}</span>
-            </div>
-            {hasGlownetFeatures && (
-              <div className="flex justify-between">
-                <span>Glownet Staked (Virtual):</span>
-                <span>{maskValue(glownetStakedBalance)}</span>
-              </div>
-            )}
-         </div>
-      </div>
-
-      {/* Credit Line Card - Only show if Glownet features are available */}
-      {hasGlownetFeatures ? (
-        <div className="glass-card p-6 mb-8 animate-fade-in">
-          <div className="flex justify-between items-start mb-6">
-            <div>
-              <h2 className="text-lg font-medium mb-1">Network Credit</h2>
-              <p className="text-sm text-muted-foreground">Available spending power (Money)</p>
-            </div>
-            <CreditCard className="h-6 w-6 text-primary" />
-          </div>
-
-          <div className="mb-6">
-            <h3 className="text-2xl font-bold mb-1">{maskValue(glownetTotalCreditLimit)} Available</h3>
-            <p className="text-sm text-muted-foreground">
-              Total Limit: {maskValue(glownetTotalCreditLimit)}
-            </p>
-          </div>
-
-          <Button
-            className="w-full glass-button"
-            onClick={() => { console.log("Navigate to Glownet/Staking management..."); }}
-          >
-            Manage Glownet / Staking
-          </Button>
-        </div>
-      ) : (
-        <div className="glass-card p-6 mb-8 animate-fade-in">
-          <div className="flex justify-between items-start mb-6">
-            <div>
-              <h2 className="text-lg font-medium mb-1">Glownet Features Unavailable</h2>
-              <p className="text-sm text-muted-foreground">No active Glownet membership found</p>
-            </div>
-            <CreditCard className="h-6 w-6 text-muted-foreground" />
-          </div>
-
-          <Button
-            className="w-full glass-button"
-            onClick={() => router.push('/discover')} // Navigate to discover page to find venues
-          >
-            Join a Venue
-          </Button>
-        </div>
+      {/* --- Glownet Card --- */}
+      {user && ( // Only show Glownet card if logged in via email/phantom session
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <CreditCard className="h-5 w-5 text-blue-500" />
+                    Venue Balance (Glownet)
+                </CardTitle>
+                <CardDescription>Your current balance at the venue.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+                {isLoadingData ? (
+                    <>
+                        <Skeleton className="h-6 w-1/2" />
+                        <Skeleton className="h-4 w-1/3" />
+                    </>
+                ) : glownetData ? (
+                    <>
+                        <p className="text-2xl font-semibold">
+                           {maskValue(glownetData.money, '€')}
+                        </p>
+                        {/* Add more details if needed, e.g., virtual money */}
+                        {glownetData.virtual_money !== null && (
+                             <p className="text-sm text-muted-foreground">
+                                Virtual: {maskValue(glownetData.virtual_money, '€')}
+                             </p>
+                        )}
+                    </>
+                ) : (
+                    <p className="text-muted-foreground">No active venue membership found.</p>
+                )}
+            </CardContent>
+             {/* Optional Footer */}
+             {/* <CardFooter>
+                <Button variant="outline" size="sm" disabled>Top Up (Coming Soon)</Button>
+            </CardFooter> */}
+        </Card>
       )}
 
-      {/* Staking Section */}
-      {userState && (
-        <div className="glass-card p-6 animate-fade-in">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <h2 className="text-lg font-medium mb-1">Staking Status</h2>
-              <p className="text-sm text-muted-foreground">Your staked USDC balance</p>
-            </div>
-            <Coins className="h-6 w-6 text-primary" />
-          </div>
-          
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">Staked Amount</span>
-              <span className="font-medium">
-                {userState.stakedAmount.toString()} USDC
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Assets Section */}
-      <div className="mb-4 animate-fade-in">
-        <div className="flex justify-between items-center mb-3">
-          <h2 className="text-lg font-semibold">Your Wallet Assets</h2>
-          <Link href="/wallet/history" className="text-primary text-sm font-medium flex items-center">
-            <History className="h-4 w-4 mr-1" /> History
-          </Link>
-        </div>
-
-        <div className="space-y-3">
-          {/* Display loading skeleton for assets if still loading */}
-          {(isLoadingData && !initialLoadComplete) && (
-            <>
-              <Skeleton className="h-20 w-full rounded-lg" />
-              <Skeleton className="h-20 w-full rounded-lg" />
-            </>
-          )}
-
-          {/* Display assets or empty state */}
-          {initialLoadComplete && walletAssets.length > 0 ? walletAssets.map((asset: Asset) => (
-            <div key={asset.id} className="glass-card p-4">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center">
-                  {/* Basic Icon Placeholder */}
-                  <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center mr-3">
-                    <span className="text-sm font-bold text-primary">{asset.symbol.charAt(0)}</span>
-                  </div>
-                  <div>
-                    <p className="font-medium">{asset.name}</p>
-                    <p className="text-xs text-muted-foreground">{asset.symbol}</p>
-                  </div>
+      {/* --- Solana Wallet Card --- */}
+       {connected && publicKey && (
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                     <Wallet className="h-5 w-5 text-purple-500" />
+                    Solana Wallet
+                </CardTitle>
+                 <CardDescription>Your connected Solana wallet balance.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                 {/* SOL Balance */}
+                 <div>
+                    <p className="text-sm font-medium text-muted-foreground">SOL Balance</p>
+                     {isLoadingData ? (
+                        <Skeleton className="h-6 w-1/3" />
+                    ) : (
+                        <p className="text-2xl font-semibold">
+                           {formatAmount(solBalance, 'SOL')}
+                        </p>
+                     )}
+                     {/* Placeholder for value in EUR */}
+                    {/* {solBalance !== null && !hideBalances && <p className="text-sm text-muted-foreground">{maskValue(solBalance * 150, '€')}</p>} */}
                 </div>
-                <div className="text-right">
-                  {/* Display value in currency */}
-                  <p className="font-medium">{maskValue(asset.value)}</p>
-                  {/* Display amount in token */}
-                  <p className="text-xs text-muted-foreground">{formatAmount(asset.amount, asset.symbol)}</p>
-                </div>
-              </div>
-            </div>
-          )) : (initialLoadComplete && (
-            <div className="glass-card p-4 text-center text-muted-foreground">
-              <Info className="h-5 w-5 mx-auto mb-2"/>
-              {connected ? 'No Solana assets found.' : 'Wallet not connected. Connect your wallet to view assets.'}
-            </div>
-          ))}
-        </div>
-      </div>
+
+                {/* Separator */}
+                 <Separator />
+
+                {/* Asset List (Currently only SOL) */}
+                 <div>
+                    <h3 className="text-lg font-semibold mb-2">Assets</h3>
+                     {isLoadingData ? (
+                        <Skeleton className="h-10 w-full" />
+                    ) : walletAssets.length > 0 ? (
+                        <ul className="space-y-2">
+                            {walletAssets.map(asset => (
+                                <li key={asset.id} className="flex justify-between items-center">
+                                    <div>
+                                        <span className="font-medium">{asset.name} ({asset.symbol})</span>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="font-medium">{formatAmount(asset.amount)}</span>
+                                        {/* <span className="text-sm text-muted-foreground block">{maskValue(asset.value, '€')}</span> */}
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="text-muted-foreground">No assets found.</p>
+                    )}
+                 </div>
+            </CardContent>
+             {/* <CardFooter>
+                 <Button variant="outline" size="sm">View on Explorer</Button>
+            </CardFooter> */}
+        </Card>
+       )}
+
+       {/* --- Custodial Staking Card --- */}
+       {connected && publicKey && ( // Show staking only if wallet is connected
+           <Card>
+               <CardHeader>
+                   <CardTitle className="flex items-center gap-2">
+                       <PiggyBank className="h-5 w-5 text-green-600" />
+                       Custodial USDC Staking
+                   </CardTitle>
+                   <CardDescription>Stake USDC by sending it to the treasury address.</CardDescription>
+               </CardHeader>
+               <CardContent className="space-y-4">
+                   {/* Staked Balance */}
+                   <div>
+                       <p className="text-sm font-medium text-muted-foreground">Your Staked Balance</p>
+                       {solanaContextLoading && !refreshing ? ( // Show skeleton only on initial/context load
+                           <Skeleton className="h-6 w-1/3" />
+                       ) : (
+                           <p className="text-2xl font-semibold">
+                               {formatAmount(custodialStakeBalance, 'USDC')}
+                           </p>
+                       )}
+                        {/* Display value if needed */}
+                       {/* {custodialStakeBalance !== null && !hideBalances && <p className="text-sm text-muted-foreground">{maskValue(custodialStakeBalance, '$')}</p>} */}
+                   </div>
+
+                   <Separator />
+
+                   {/* Staking Instructions & Address */}
+                   <div>
+                       <h3 className="text-lg font-semibold mb-2">How to Stake</h3>
+                       <Alert>
+                           <Coins className="h-4 w-4" />
+                           <AlertTitle>Send USDC (Devnet)</AlertTitle>
+                           <AlertDescription>
+                               To stake, send Devnet USDC (<span className="font-mono text-xs">{process.env.NEXT_PUBLIC_USDC_MINT_ADDRESS || 'Gh9Zw...'}</span>) from your connected wallet to the following treasury address.
+                               Your staked balance will update automatically after the transaction is confirmed and processed by our system (may take a minute).
+                           </AlertDescription>
+                       </Alert>
+                       <div className="mt-3 flex items-center gap-2">
+                           <Input
+                               readOnly
+                               value={treasuryAddress ? treasuryAddress.toString() : 'Loading...'}
+                               className="font-mono text-sm flex-grow"
+                           />
+                           <Button
+                               variant="outline"
+                               size="icon"
+                               onClick={() => copyToClipboard(treasuryAddress?.toString())}
+                               disabled={!treasuryAddress}
+                               aria-label="Copy Treasury Address"
+                           >
+                               <Copy className="h-4 w-4" />
+                           </Button>
+                       </div>
+                   </div>
+
+                   <Separator />
+
+                   {/* Unstake Action */}
+                    <div>
+                       <h3 className="text-lg font-semibold mb-2">Unstake</h3>
+                       <p className="text-sm text-muted-foreground mb-3">
+                           Request to withdraw your staked USDC. Processing may take some time as it requires backend confirmation.
+                       </p>
+                       <Button
+                           onClick={unstake}
+                           disabled={!custodialStakeBalance || custodialStakeBalance <= 0 || solanaContextLoading || refreshing}
+                           className="w-full sm:w-auto"
+                       >
+                           Request Unstake
+                       </Button>
+                        {(solanaContextLoading || refreshing) && custodialStakeBalance && custodialStakeBalance > 0 &&
+                            <p className="text-sm text-muted-foreground mt-2">Processing...</p>
+                        }
+                       {!custodialStakeBalance || custodialStakeBalance <= 0 &&
+                            <p className="text-sm text-muted-foreground mt-2">No balance available to unstake.</p>
+                       }
+                   </div>
+
+               </CardContent>
+               <CardFooter className="text-xs text-muted-foreground">
+                    Note: This is a custodial staking system. Your USDC is held in the platform treasury wallet.
+               </CardFooter>
+           </Card>
+       )}
+
+      {/* Action Buttons (Placeholder examples) */}
+      {/* <div className="grid grid-cols-2 gap-4">
+        <Button variant="outline">
+          <History className="mr-2 h-4 w-4" /> Transaction History
+        </Button>
+        <Button variant="outline" disabled>
+           <Coins className="mr-2 h-4 w-4" /> Swap Tokens (Coming Soon)
+        </Button>
+      </div> */}
     </div>
   );
 }

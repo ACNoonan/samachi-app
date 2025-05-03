@@ -25,10 +25,11 @@ interface SolanaContextType {
   // program: Program<SamachiStaking> | null; // <-- Removed program
   // userState: UserStateInfo | null; // <-- Removed userState
   custodialStakeBalance: number | null; // <-- New state for custodial balance
+  treasuryAddress: PublicKey | null; // <-- Expose treasury address
   loading: boolean;
   error: string | null;
   stake: (amount: number) => Promise<void>; // Signature kept, implementation needs change
-  unstake: (amount: number) => Promise<void>; // Signature kept, implementation needs change
+  unstake: () => Promise<void>; // Signature updated, amount not needed for request
   // refreshUserState: () => Promise<void>; // <-- Removed state refresh
   fetchCustodialBalance: () => Promise<void>; // <-- New function to get balance from API
   isWalletConnected: boolean;
@@ -40,6 +41,7 @@ const SolanaContext = createContext<SolanaContextType>({
   // program: null, // <-- Removed
   // userState: null, // <-- Removed
   custodialStakeBalance: null, // <-- New default
+  treasuryAddress: null, // <-- New default
   loading: false,
   error: null,
   stake: async () => { console.warn("Stake function not implemented for custodial model."); },
@@ -58,6 +60,7 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
   // const [program, setProgram] = useState<Program<SamachiStaking> | null>(null); // <-- Removed program state
   // const [userState, setUserState] = useState<UserStateInfo | null>(null); // <-- Removed user state
   const [custodialStakeBalance, setCustodialStakeBalance] = useState<number | null>(null); // <-- New balance state
+  const [treasuryAddress, setTreasuryAddress] = useState<PublicKey | null>(null); // <-- New treasury address state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
@@ -198,101 +201,52 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
     }
   }, [connected, publicKey]);
 
-  // --- Update Stake function --- 
+  // --- Update Stake function ---
+  // Stake is now purely informational - user sends funds manually.
   const stake = async (amount: number) => {
-    console.warn('Stake function (custodial) needs implementation.');
-    // TODO: 
-    // 1. Guide user to send `amount` USDC to `TREASURY_WALLET`.
-    // 2. OR: Use wallet adapter (`publicKey`, `sendTransaction`) to construct 
-    //    and send an SPL token transfer from user to treasury.
-    // 3. After sending, perhaps prompt user to wait and refresh balance,
-    //    as the webhook needs to process the deposit.
-    toast({ title: "Info", description: "Custodial stake function not yet implemented." });
-    // Example using constructed transaction (more user-friendly):
-    /*
-    if (!publicKey || !sendTransaction || !connection) { ... check deps ... }
-    setLoading(true);
-    try {
-      const userTokenAccount = await getAssociatedTokenAddress(USDC_MINT, publicKey);
-      const treasuryTokenAccount = await getAssociatedTokenAddress(USDC_MINT, TREASURY_WALLET, true); // Allow owner off-curve for ATA of treasury
-      
-      // Check if treasury ATA exists, create if not (requires treasury SOL)
-      const treasuryAtaInfo = await connection.getAccountInfo(treasuryTokenAccount);
-      // If (!treasuryAtaInfo) { ... handle ATA creation - likely needs backend/admin action first ... }
-
-      const instructions = [createTransferInstruction(
-        userTokenAccount,
-        treasuryTokenAccount,
-        publicKey, // User is the owner/signer
-        amount * Math.pow(10, 6), // Assuming 6 decimals for USDC
-        [],
-        TOKEN_PROGRAM_ID
-      )];
-      
-      let blockhash = await connection.getLatestBlockhash().then(res => res.blockhash);
-      const messageV0 = new TransactionMessage({
-        payerKey: publicKey,
-        recentBlockhash: blockhash,
-        instructions,
-      }).compileToV0Message();
-      const transaction = new VersionedTransaction(messageV0);
-      
-      const txid = await sendTransaction(transaction, connection);
-      console.log(`Sent stake transaction: ${txid}`);
-      await connection.confirmTransaction(txid, 'confirmed');
-      toast({ title: "Success", description: `Stake transaction sent: ${txid}. Balance will update shortly.`});
-      // Optionally trigger balance refresh after a delay
-      setTimeout(fetchCustodialBalance, 15000); // Refresh after 15s
-
-    } catch (err) { ... handle error ... }
-    finally { setLoading(false); }
-    */
+    console.info(`Please send ${amount} USDC to the treasury address: ${TREASURY_WALLET.toString()}`);
+    toast({
+        title: "Stake Instruction",
+        description: `To stake, please send USDC to the treasury address: ${TREASURY_WALLET.toString()}. Your balance will update after the transaction is confirmed and processed. You may need to refresh manually.`,
+        duration: 10000 // Show for 10 seconds
+    });
   };
 
-  // --- Update Unstake function --- 
-  const unstake = async (amount: number) => {
-    console.warn('Unstake function (custodial) called.');
-    if (!connected || !publicKey) {
-      toast({ title: "Error", description: "Wallet not connected.", variant: "destructive"});
-      throw new Error("Wallet not connected");
-    }
-    if (amount <= 0) {
-      toast({ title: "Error", description: "Unstake amount must be positive.", variant: "destructive"});
-      throw new Error("Unstake amount must be positive.");
+  // --- Update Unstake function ---
+  // Calls the backend API to request unstaking. Amount is not needed as API likely processes all 'staked' records for the user.
+  const unstake = async () => {
+    if (!connected) {
+      toast({ title: "Error", description: "Wallet not connected.", variant: "destructive" });
+      return;
     }
 
     setLoading(true);
     setError(null);
     try {
-      // Call the backend API to request unstaking
       const response = await fetch('/api/staking/request-unstake', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ amount }),
+        // No body needed as the API identifies user via session/token
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({})); // Try to parse error, default to empty object
         throw new Error(errorData.message || `Failed to request unstake: ${response.statusText}`);
       }
 
       const result = await response.json();
-      toast({ 
-        title: "Unstake Requested", 
-        description: result.message || "Your unstake request has been submitted. It will be processed shortly.",
+      toast({
+        title: "Unstake Requested",
+        description: result.message || "Your unstake request has been submitted. Processing may take some time.",
       });
-      // Optionally optimistic update or trigger balance refresh after delay
-      // Note: Balance won't decrease until backend processes the withdrawal.
-      // setTimeout(fetchCustodialBalance, 15000); 
+      // Optionally: Refresh balance after a delay, though it won't change until processed
+      // setTimeout(fetchCustodialBalance, 5000);
 
     } catch (err: any) {
       console.error("Error requesting unstake:", err);
-      setError("Failed to request unstake.");
+      setError(err.message || "Failed to request unstake.");
       toast({
-        title: "Error",
-        description: err.message || "Could not submit unstake request.",
+        title: "Unstake Error",
+        description: err.message || "An error occurred while requesting unstake.",
         variant: "destructive",
       });
     } finally {
@@ -334,25 +288,30 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(() => ({
     // program, // <-- Removed
     // userState, // <-- Removed
-    custodialStakeBalance, // <-- Added
+    custodialStakeBalance,
+    treasuryAddress: TREASURY_WALLET, // <-- Expose treasury address
     loading,
     error,
     stake,
     unstake,
     // refreshUserState, // <-- Removed
-    fetchCustodialBalance, // <-- Added
+    fetchCustodialBalance,
     isWalletConnected: connected,
     connectWallet,
     disconnectWallet,
   }), [
-    connected, 
-    // program, 
-    // userState, 
+    // program, // <-- Removed
+    // userState, // <-- Removed
     custodialStakeBalance,
-    loading, 
-    error, 
-    connectWallet, 
-    disconnectWallet
+    loading,
+    error,
+    connected,
+    // refreshUserState, // <-- Removed
+    fetchCustodialBalance,
+    connectWallet,
+    disconnectWallet,
+    stake,
+    unstake
   ]);
 
   return <SolanaContext.Provider value={value}>{children}</SolanaContext.Provider>;

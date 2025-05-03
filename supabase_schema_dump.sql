@@ -1,8 +1,5 @@
 
 
-
-
-
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
@@ -15,56 +12,13 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 
-CREATE EXTENSION IF NOT EXISTS "pgsodium";
+CREATE SCHEMA IF NOT EXISTS "public";
 
 
-
-
+ALTER SCHEMA "public" OWNER TO "pg_database_owner";
 
 
 COMMENT ON SCHEMA "public" IS 'standard public schema';
-
-
-
-CREATE EXTENSION IF NOT EXISTS "pg_graphql" WITH SCHEMA "graphql";
-
-
-
-
-
-
-CREATE EXTENSION IF NOT EXISTS "pg_stat_statements" WITH SCHEMA "extensions";
-
-
-
-
-
-
-CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA "extensions";
-
-
-
-
-
-
-CREATE EXTENSION IF NOT EXISTS "pgjwt" WITH SCHEMA "extensions";
-
-
-
-
-
-
-CREATE EXTENSION IF NOT EXISTS "supabase_vault" WITH SCHEMA "vault";
-
-
-
-
-
-
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA "extensions";
-
-
-
 
 
 
@@ -76,6 +30,38 @@ CREATE TYPE "public"."sync_status_type" AS ENUM (
 
 
 ALTER TYPE "public"."sync_status_type" OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_current_user_profile_id"() RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+  auth_id uuid := auth.uid();
+  jwt_profile_id text := auth.jwt() ->> 'profile_id'; -- Adjust 'profile_id' if your JWT uses a different claim name
+  profile_id_uuid uuid;
+BEGIN
+  IF auth_id IS NOT NULL THEN
+    -- User authenticated via Supabase Auth (Magic Link)
+    -- Assumes profiles.id matches auth.uid() for these users
+    RETURN auth_id;
+  ELSIF jwt_profile_id IS NOT NULL THEN
+    -- User authenticated via custom JWT (Phantom)
+    BEGIN
+      profile_id_uuid := jwt_profile_id::uuid;
+      RETURN profile_id_uuid;
+    EXCEPTION WHEN invalid_text_representation THEN
+      -- Handle cases where the claim is not a valid UUID
+      RETURN NULL;
+    END;
+  ELSE
+    -- No authentication found or JWT claim missing/invalid
+    RETURN NULL;
+  END IF;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_current_user_profile_id"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."handle_new_user"() RETURNS "trigger"
@@ -109,9 +95,59 @@ $$;
 
 ALTER FUNCTION "public"."handle_new_user"() OWNER TO "postgres";
 
+
+CREATE OR REPLACE FUNCTION "public"."update_updated_at_column"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."update_updated_at_column"() OWNER TO "postgres";
+
 SET default_tablespace = '';
 
 SET default_table_access_method = "heap";
+
+
+CREATE TABLE IF NOT EXISTS "public"."custodial_stakes" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "user_profile_id" "uuid" NOT NULL,
+    "amount_staked" numeric NOT NULL,
+    "usdc_mint_address" "text" DEFAULT 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'::"text" NOT NULL,
+    "deposit_transaction_signature" "text" NOT NULL,
+    "deposit_timestamp" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "status" "text" NOT NULL,
+    "unstake_request_timestamp" timestamp with time zone,
+    "unstake_transaction_signature" "text",
+    "unstake_timestamp" timestamp with time zone,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "custodial_stakes_amount_staked_check" CHECK (("amount_staked" > (0)::numeric)),
+    CONSTRAINT "custodial_stakes_status_check" CHECK (("status" = ANY (ARRAY['staked'::"text", 'unstaking_requested'::"text", 'unstaked'::"text"])))
+);
+
+
+ALTER TABLE "public"."custodial_stakes" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."custodial_stakes" IS 'Tracks user USDC deposits treated as custodial stakes.';
+
+
+
+COMMENT ON COLUMN "public"."custodial_stakes"."usdc_mint_address" IS 'The mint address of the USDC token being tracked (e.g., EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v for mainnet).';
+
+
+
+COMMENT ON COLUMN "public"."custodial_stakes"."deposit_transaction_signature" IS 'Solana transaction signature of the deposit.';
+
+
+
+COMMENT ON COLUMN "public"."custodial_stakes"."status" IS 'Current status: staked, unstaking_requested, unstaked.';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."membership_cards" (
@@ -223,6 +259,21 @@ COMMENT ON COLUMN "public"."venues"."glownet_event_id" IS 'Corresponding Event I
 
 
 
+ALTER TABLE ONLY "public"."custodial_stakes"
+    ADD CONSTRAINT "custodial_stakes_deposit_transaction_signature_key" UNIQUE ("deposit_transaction_signature");
+
+
+
+ALTER TABLE ONLY "public"."custodial_stakes"
+    ADD CONSTRAINT "custodial_stakes_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."custodial_stakes"
+    ADD CONSTRAINT "custodial_stakes_unstake_transaction_signature_key" UNIQUE ("unstake_transaction_signature");
+
+
+
 ALTER TABLE ONLY "public"."membership_cards"
     ADD CONSTRAINT "membership_cards_card_identifier_key" UNIQUE ("card_identifier");
 
@@ -282,6 +333,22 @@ ALTER TABLE ONLY "public"."venues"
 
 
 
+CREATE INDEX "idx_custodial_stakes_deposit_tx_sig" ON "public"."custodial_stakes" USING "btree" ("deposit_transaction_signature");
+
+
+
+CREATE INDEX "idx_custodial_stakes_status" ON "public"."custodial_stakes" USING "btree" ("status");
+
+
+
+CREATE INDEX "idx_custodial_stakes_unstake_tx_sig" ON "public"."custodial_stakes" USING "btree" ("unstake_transaction_signature");
+
+
+
+CREATE INDEX "idx_custodial_stakes_user_profile_id" ON "public"."custodial_stakes" USING "btree" ("user_profile_id");
+
+
+
 CREATE INDEX "idx_membership_cards_card_identifier" ON "public"."membership_cards" USING "btree" ("card_identifier");
 
 
@@ -303,6 +370,15 @@ CREATE INDEX "idx_profiles_wallet_address" ON "public"."profiles" USING "btree" 
 
 
 CREATE INDEX "idx_venues_glownet_event_id" ON "public"."venues" USING "btree" ("glownet_event_id");
+
+
+
+CREATE OR REPLACE TRIGGER "update_custodial_stakes_updated_at" BEFORE UPDATE ON "public"."custodial_stakes" FOR EACH ROW EXECUTE FUNCTION "public"."update_updated_at_column"();
+
+
+
+ALTER TABLE ONLY "public"."custodial_stakes"
+    ADD CONSTRAINT "custodial_stakes_user_profile_id_fkey" FOREIGN KEY ("user_profile_id") REFERENCES "public"."profiles"("id") ON DELETE CASCADE;
 
 
 
@@ -331,9 +407,11 @@ ALTER TABLE ONLY "public"."memberships"
 
 
 
+CREATE POLICY "Allow users to view their own stakes" ON "public"."custodial_stakes" FOR SELECT USING (("public"."get_current_user_profile_id"() = "user_profile_id"));
 
 
-ALTER PUBLICATION "supabase_realtime" OWNER TO "postgres";
+
+ALTER TABLE "public"."custodial_stakes" ENABLE ROW LEVEL SECURITY;
 
 
 GRANT USAGE ON SCHEMA "public" TO "postgres";
@@ -343,180 +421,9 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+GRANT ALL ON FUNCTION "public"."get_current_user_profile_id"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_current_user_profile_id"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_current_user_profile_id"() TO "service_role";
 
 
 
@@ -526,27 +433,15 @@ GRANT ALL ON FUNCTION "public"."handle_new_user"() TO "service_role";
 
 
 
+GRANT ALL ON FUNCTION "public"."update_updated_at_column"() TO "anon";
+GRANT ALL ON FUNCTION "public"."update_updated_at_column"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_updated_at_column"() TO "service_role";
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+GRANT ALL ON TABLE "public"."custodial_stakes" TO "anon";
+GRANT ALL ON TABLE "public"."custodial_stakes" TO "authenticated";
+GRANT ALL ON TABLE "public"."custodial_stakes" TO "service_role";
 
 
 
@@ -574,12 +469,6 @@ GRANT ALL ON TABLE "public"."venues" TO "service_role";
 
 
 
-
-
-
-
-
-
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES  TO "postgres";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES  TO "anon";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES  TO "authenticated";
@@ -604,30 +493,6 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES  TO "anon";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES  TO "authenticated";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES  TO "service_role";
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
