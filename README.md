@@ -48,6 +48,13 @@ We\'ve built Samachi on a modern, scalable, and robust tech stack:
 1.  **Clone:** `git clone <your-repo-url> && cd samachi-app`
 2.  **Install:** `pnpm install`
 3.  **Environment:** Copy `.env.local.example` to `.env.local` and fill in your Supabase keys (public and service role). Add Smart PoS keys if testing that integration.
+
+*Note:*
+
+*You can find the values for the `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` environment variables by clicking the* **"Connect"** *button at the top of the Supabase dashboard page.*
+
+*You can find your Supabase `service_role` key by starting at the Project Dashboard in Supabase, then clicking `Project Settings` in the left-hand menu. Once Supabase displays the `Settings` screen, select `Data API` from the new left-hand menu; it's under `CONFIGURATION`. Now you should see a section titled `Project API Keys`* on the screen, which should include a `service_role` secret. This is the value to use for the `SUPABASE_SERVICE_ROLE` key in your `env.local` file.
+
     ```ini
     # .env.local
     NEXT_PUBLIC_SUPABASE_URL=...
@@ -56,7 +63,7 @@ We\'ve built Samachi on a modern, scalable, and robust tech stack:
     GLOWNET_API_BASE_URL=https://opera.glownet.com/organization
     GLOWNET_API_KEY=... # Optional for judges
     ```
-4.  **Database:** Ensure Supabase tables are set up (use `supabase/migrations` and `supabase db push` if available, or set up manually).
+1.  **Database:** Ensure Supabase tables are set up (use `supabase/migrations` and `supabase db push` if available, or set up manually).
 
 ### Running Locally
 
