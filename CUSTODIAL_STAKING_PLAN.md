@@ -13,10 +13,6 @@ This document outlines the plan to implement a simplified, custodial staking mec
 
     keypair file itself, which is stored as insecure plain text
 
-Wrote new keypair to /Users/adamnoonan/.config/solana/samachi-treasury-devnet.json
-==============================================================================
-pubkey: 3SCwZqi4BWWaLGgW861UUgCUbhnJoschA4AiYbHzbr7C
-
 
 
 2.  **Database (`custodial_stakes` Table):**
@@ -192,9 +188,31 @@ Follow these steps to configure the Helius webhook needed to listen for USDC dep
 *   **Backend Validation:** The most critical step is **securely validating** the incoming webhook requests in your `/api/staking/helius-webhook` route using either the Helius signature or your custom Authorization header secret.
 *   **Idempotency:** Design your webhook handler to be idempotent. If Helius sends the same event twice (rare, but possible), your handler shouldn't create duplicate stake entries. Check if a stake with the same `deposit_transaction_signature` already exists before inserting.
 
+## Current Status & Next Steps (as of <timestamp>)
+
+*   **Environment:** Switched configuration back to **Devnet**.
+*   **Treasury Wallet:** Generated new **Devnet** treasury keypair (`samachi-treasury-devnet.json`). Public/secret keys updated in `.env.local`. Devnet wallet funded with SOL.
+*   **Frontend Providers:** Updated `app/providers.tsx` to correctly use the `NEXT_PUBLIC_SOLANA_NETWORK` environment variable for the Solana connection endpoint (set to `devnet`).
+*   **Helius Webhook:** Created webhook in Helius targeting the Devnet treasury address (`7VLgkREFKHZbqjALoz9V8yaPBvZHeJVSa9LnL8iGQiBu`) and Devnet USDC mint address. URL updated to current ngrok tunnel (`https://539a-79-127-160-204.ngrok-free.app/api/staking/helius-webhook`).
+*   **ngrok:** Tunnel active (`https://539a-79-127-160-204.ngrok-free.app -> http://localhost:3000`).
+*   **Middleware:** Updated to skip `/api` routes by checking `pathname.startsWith('/api')` at the beginning of the function, `config.matcher` removed.
+*   **API Handler (`/api/staking/helius-webhook`):** Temporarily simplified to return immediate `200 OK` to rule out processing timeouts.
+*   **Webhook Test Result (Helius Button):** Helius logs showed "Webhook post timed out" previously. Currently, sending test payload from Helius does not show any logs in `ngrok` or `pnpm dev`.
+*   **Webhook Test Result (`curl`):** `curl` POST requests to the ngrok URL *successfully* reach the simplified Next.js API handler and return `200 OK`.
+
+**Immediate Next Step:**
+
+1.  **Perform REAL Devnet Transfer:** Since the Helius "Send Test" button seems unreliable or blocked, trigger a real event:
+    *   Ensure `ngrok` and `pnpm dev` are running.
+    *   Use a Phantom wallet (or any wallet) connected to **Devnet**.
+    *   Send a small amount (e.g., 0.01) of **Devnet USDC** (`Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr`) to the monitored **Treasury Wallet address** (`7VLgkREFKHZbqjALoz9V8yaPBvZHeJVSa9LnL8iGQiBu`).
+    *   Wait 10-30 seconds and watch the `ngrok` and `pnpm dev` terminals closely for the incoming webhook `POST` request.
+    *   If the webhook appears: The core Helius->Webhook connection works. The issue was likely the Helius test button or temporary network conditions.
+    *   If the webhook does NOT appear: There might still be a deeper issue with Helius event detection/delivery or network path for *real* events.
+
 ## 4. Comprehensive Testing Plan
 
-Execute these tests **after** setting up the treasury wallet, environment variables, and Helius webhook. Use Phantom wallet connected to Devnet and funded with Devnet SOL and Devnet USDC.
+Execute these tests **after** the Helius webhook is successfully receiving test payloads (Step 3 is resolved). Use Phantom wallet connected to Devnet and funded with Devnet SOL and Devnet USDC.
 
 **A. Deposit Flow (Webhook Triggered)**
 

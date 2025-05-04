@@ -39,8 +39,10 @@ interface HeliusTransferPayload {
 }
 
 export async function POST(req: NextRequest) {
-    console.log('Received POST request on /api/staking/helius-webhook');
+    console.log('Received POST request on /api/staking/helius-webhook (Simplified Handler)');
 
+    // --- TEMPORARILY COMMENTED OUT FOR TIMEOUT TESTING --- 
+/*
     // 1. Verify Helius Signature/Secret
     // Helius includes a signature in the `Authorization` header: "Signature <signature>"
     // You need to verify this signature against the payload and your HELIUS_WEBHOOK_SECRET
@@ -189,6 +191,12 @@ export async function POST(req: NextRequest) {
 
     console.log('Webhook processed successfully.');
     return NextResponse.json({ message: 'Webhook processed successfully', processed: processedSignatures }, { status: 200 });
+*/
+    // --- END OF TEMPORARILY COMMENTED OUT SECTION ---
+
+    // Immediately return success to prevent timeout
+    console.log('Simplified handler returning 200 OK immediately.');
+    return NextResponse.json({ message: 'Webhook received by simplified handler' }, { status: 200 });
 }
 
 // Optional: Add GET handler for simple verification or health check if needed

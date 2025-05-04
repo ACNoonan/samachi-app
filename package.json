@@ -61,7 +61,7 @@
     "@tailwindcss/postcss": "^4",
     "@types/chai": "^5.2.1",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^20.17.30",
+    "@types/node": "^20.17.31",
     "@types/react": "^18.3.20",
     "@types/react-dom": "^18.3.6",
     "chai": "^5.2.0",

@@ -55,6 +55,12 @@ function isStaticPath(pathname: string) {
 }
 
 export async function middleware(request: NextRequest) {
+  // --- Skip API routes --- 
+  if (request.nextUrl.pathname.startsWith('/api')) {
+    // console.log('[Middleware] Skipping API route:', request.nextUrl.pathname);
+    return NextResponse.next();
+  }
+
   // Skip middleware for static files (but NOT API routes)
   if (isStaticPath(request.nextUrl.pathname)) {
     // console.log('[Middleware] Skipping static path:', request.nextUrl.pathname);
@@ -150,13 +156,4 @@ export async function middleware(request: NextRequest) {
   // --- Default: Allow the request ---
   // console.log('[Middleware] Allowing request for path:', pathname);
   return response;
-}
-
-export const config = {
-  matcher: [
-    // Match all routes except static files and specific assets
-    // Exclude paths starting with /_next/ (static files), /api/ (API routes, handled separately), 
-    // and paths containing a dot (.) indicating a file extension.
-    '/((?!api|_next/static|_next/image|favicon.ico|.*\..*).*)',
-  ],
-}; 
+} 
