@@ -160,6 +160,8 @@ export type Database = {
           created_at: string
           glownet_customer_id: number | null
           id: string
+          last_check_in_at: string | null
+          last_funded_amount: number | null
           status: string
           subscription_type: string | null
           updated_at: string
@@ -171,6 +173,8 @@ export type Database = {
           created_at?: string
           glownet_customer_id?: number | null
           id?: string
+          last_check_in_at?: string | null
+          last_funded_amount?: number | null
           status?: string
           subscription_type?: string | null
           updated_at?: string
@@ -182,6 +186,8 @@ export type Database = {
           created_at?: string
           glownet_customer_id?: number | null
           id?: string
+          last_check_in_at?: string | null
+          last_funded_amount?: number | null
           status?: string
           subscription_type?: string | null
           updated_at?: string

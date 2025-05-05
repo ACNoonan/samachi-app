@@ -21,11 +21,9 @@
     │   │   │   └── route.ts
     │   │   ├── helius-webhook
     │   │   │   └── route.ts
-    │   │   ├── process-unstake
+    │   │   ├── stakes
     │   │   │   └── route.ts
-    │   │   ├── request-unstake
-    │   │   │   └── route.ts
-    │   │   └── stakes
+    │   │   └── unstake
     │   │   │   └── route.ts
     │   ├── sync
     │   │   └── cards
