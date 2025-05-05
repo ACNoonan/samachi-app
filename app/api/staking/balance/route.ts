@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
-import { Database } from '@/lib/database.types'; // Adjusted import path
+import { Database } from '@/lib/database.types';
+
+// Define USDC decimals (consider moving to env var or config)
+const USDC_DECIMALS = 6;
 
 export async function GET() {
     const cookieStore = cookies();
-    const supabase = createClient(cookieStore); // Removed <Database> generic
+    const supabase = createClient(cookieStore);
 
-    // 1. Get the authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
@@ -15,51 +17,52 @@ export async function GET() {
         return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
-    // 2. Get the corresponding profile ID
-    // Assuming your profiles table links auth.users.id to profiles.user_id
-    // Adjust the column name if necessary (e.g., if it's profiles.id directly)
     const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('id') // Select the profile ID (which is the FK in custodial_stakes)
-        .eq('id', user.id) // Match the authenticated user's ID
+        .select('id')
+        .eq('id', user.id)
         .single();
 
     if (profileError || !profile) {
         console.error(`GET /api/staking/balance: Profile not found for user ${user.id}`, profileError);
-        // Return 0 balance if profile doesn't exist?
-        // Or return an error? Let's return 0 for now.
-        return NextResponse.json({ balance: 0 });
-        // Alternatively: return NextResponse.json({ message: 'Profile not found' }, { status: 404 });
+        // Return 0 balance if profile doesn't exist, as user has no stakes/withdrawals linked
+        return NextResponse.json({ balance: 0, balanceUnits: 0 });
     }
 
     const userProfileId = profile.id;
 
-    // 3. Query the custodial_stakes table
     try {
-        const { data, error: sumError } = await supabase
+        // Fetch total staked amount
+        const { data: stakeData, error: stakeError } = await supabase
             .from('custodial_stakes')
             .select('amount_staked')
-            .eq('user_profile_id', userProfileId)
-            .eq('status', 'staked'); // Only sum stakes with 'staked' status
+            .eq('user_profile_id', userProfileId);
+            // Removed .eq('status', 'staked'); - Sum all historical deposits
 
-        if (sumError) {
-            console.error(`GET /api/staking/balance: Error querying stakes for profile ${userProfileId}`, sumError);
-            throw sumError;
+        // Fetch total withdrawn amount
+        const { data: withdrawalData, error: withdrawalError } = await supabase
+            .from('custodial_withdrawals')
+            .select('amount_withdrawn')
+            .eq('user_profile_id', userProfileId);
+
+        if (stakeError || withdrawalError) {
+            console.error(`GET /api/staking/balance: Error querying stakes/withdrawals for profile ${userProfileId}`, stakeError, withdrawalError);
+            throw new Error('Failed to fetch staking data.');
         }
 
-        // 4. Calculate the sum
-        const totalStaked = data?.reduce((sum, stake) => {
-            // Ensure amount_staked is treated as a number
-            const amount = typeof stake.amount_staked === 'number' 
-                ? stake.amount_staked 
-                : parseFloat(stake.amount_staked || '0');
-            return sum + (isNaN(amount) ? 0 : amount);
-        }, 0) || 0;
+        // Calculate sums (handle potential null/undefined data)
+        // These amounts are already standard units (e.g., 100 USDC, not 100_000_000)
+        const totalStakedStandard = stakeData?.reduce((sum, stake) => sum + (stake.amount_staked ?? 0), 0) ?? 0;
+        const totalWithdrawnStandard = withdrawalData?.reduce((sum, withdrawal) => sum + (withdrawal.amount_withdrawn ?? 0), 0) ?? 0;
 
-        console.log(`GET /api/staking/balance: User ${user.id} (Profile ${userProfileId}) balance: ${totalStaked}`);
+        // Calculate final balance in standard units
+        const balanceStandard = totalStakedStandard - totalWithdrawnStandard;
 
-        // 5. Return the balance
-        return NextResponse.json({ balance: totalStaked });
+        console.log(`GET /api/staking/balance: User ${user.id} (Profile ${userProfileId}) balance: ${balanceStandard}`);
+
+        // Return balance in standard units. Optionally return raw units if needed elsewhere, but calculate correctly.
+        // For now, only return the standard balance as 'balance'.
+        return NextResponse.json({ balance: balanceStandard /* , balanceUnits: balanceUnits * (10 ** USDC_DECIMALS) */ });
 
     } catch (error: any) {
         console.error(`GET /api/staking/balance: Unexpected error for profile ${userProfileId}`, error);

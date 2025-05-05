@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useState, useContext, ReactNode, useMemo, useEffect } from 'react';
+import React, { createContext, useState, useContext, ReactNode, useMemo, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 // Import Supabase client and types
 import { createClient } from '@/lib/supabase/client'; // Assuming you have a client helper
@@ -41,35 +41,49 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true); // Auth loading state
   const [isProfileLoading, setIsProfileLoading] = useState(true); // Profile loading state
 
-  // Fetch profile data based on user ID
-  const fetchProfile = async (userId: string) => {
-    console.log("AuthContext: Fetching profile for user:", userId);
-    setIsProfileLoading(true); // Start profile loading
+  // Function to fetch profile data
+  const fetchProfile = useCallback(async (userId: string) => {
+    if (!userId) {
+      console.log("AuthContext: fetchProfile - No userId provided, setting profile null.");
+      setProfile(null);
+      setIsProfileLoading(false); // Ensure loading is false
+      return;
+    }
+    console.log(`AuthContext: fetchProfile - Attempting to fetch profile for user: ${userId}`);
+    setIsProfileLoading(true);
+    let errorOccurred = false;
     try {
       const { data, error, status } = await supabase
         .from('profiles')
-        .select('*') // Select all profile fields
+        .select('*') // Select all profile fields needed
         .eq('id', userId)
         .single();
 
-      if (error && status !== 406) { // 406 No Content is expected if profile doesn't exist yet
-        console.error("AuthContext: Error fetching profile:", error);
-        setProfile(null); // Clear profile on error
+      if (error) {
+        errorOccurred = true;
+        // Log specific Supabase error
+        console.error(`AuthContext: fetchProfile - Supabase error fetching profile (Status: ${status}):`, error);
+        setProfile(null);
+        // Consider a toast, but maybe not here to avoid noise if profile is optional initially
+        // toast.error("Failed to load profile", { description: error.message });
       } else if (data) {
-        console.log("AuthContext: Profile data received:", data);
-        setProfile(data as Profile); // Set profile data
+        console.log("AuthContext: fetchProfile - Profile data fetched successfully:", data);
+        setProfile(data);
       } else {
-        console.log("AuthContext: No profile found for user:", userId);
-        setProfile(null); // No profile exists
+          errorOccurred = true;
+          console.warn(`AuthContext: fetchProfile - No profile data returned for user ${userId}, but no explicit Supabase error.`);
+          setProfile(null);
       }
-    } catch (error) {
-      console.error("AuthContext: Exception fetching profile:", error);
+    } catch (err) {
+      errorOccurred = true;
+      console.error("AuthContext: fetchProfile - Unexpected JS error fetching profile:", err);
       setProfile(null);
+      // toast.error("An unexpected error occurred loading your profile.");
     } finally {
-      console.log("AuthContext: fetchProfile finally block. Setting isProfileLoading to false.");
-      setIsProfileLoading(false); // End profile loading
+      console.log(`AuthContext: fetchProfile - Setting profileLoading to false. Error occurred: ${errorOccurred}`);
+      setIsProfileLoading(false);
     }
-  };
+  }, [supabase]); // Dependency on supabase client instance
 
   // Initialize auth state and listen for changes
   useEffect(() => {
@@ -165,6 +179,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       authListener?.subscription.unsubscribe();
     };
   }, [supabase]); // Dependency remains supabase
+
+  // Effect to fetch profile when user changes or profile is missing
+  useEffect(() => {
+    console.log("AuthContext: Profile fetch effect triggered.", { userId: user?.id, profileExists: !!profile, isProfileLoading });
+    // Only fetch if we have a user ID, profile isn't already loaded, and not currently loading
+    if (user?.id && !profile && !isProfileLoading) {
+        console.log("AuthContext: Profile fetch effect - Conditions met, calling fetchProfile.");
+      fetchProfile(user.id);
+    } else if (!user) {
+        console.log("AuthContext: Profile fetch effect - No user, ensuring profile is null.");
+      setProfile(null); // Clear profile if user logs out
+    }
+  }, [user, profile, isProfileLoading, fetchProfile]); // Correct dependency: isProfileLoading
 
   const logout = async () => {
     console.log("AuthContext: Signing out...");

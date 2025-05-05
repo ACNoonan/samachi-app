@@ -9,6 +9,94 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      custodial_stakes: {
+        Row: {
+          amount_staked: number
+          created_at: string
+          deposit_timestamp: string
+          deposit_transaction_signature: string
+          id: string
+          status: string
+          unstake_request_timestamp: string | null
+          unstake_timestamp: string | null
+          unstake_transaction_signature: string | null
+          updated_at: string
+          usdc_mint_address: string
+          user_profile_id: string
+        }
+        Insert: {
+          amount_staked: number
+          created_at?: string
+          deposit_timestamp?: string
+          deposit_transaction_signature: string
+          id?: string
+          status: string
+          unstake_request_timestamp?: string | null
+          unstake_timestamp?: string | null
+          unstake_transaction_signature?: string | null
+          updated_at?: string
+          usdc_mint_address?: string
+          user_profile_id: string
+        }
+        Update: {
+          amount_staked?: number
+          created_at?: string
+          deposit_timestamp?: string
+          deposit_transaction_signature?: string
+          id?: string
+          status?: string
+          unstake_request_timestamp?: string | null
+          unstake_timestamp?: string | null
+          unstake_transaction_signature?: string | null
+          updated_at?: string
+          usdc_mint_address?: string
+          user_profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custodial_stakes_user_profile_id_fkey"
+            columns: ["user_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      custodial_withdrawals: {
+        Row: {
+          amount_withdrawn: number
+          created_at: string
+          id: number
+          token_mint_address: string
+          user_profile_id: string
+          withdrawal_transaction_signature: string
+        }
+        Insert: {
+          amount_withdrawn: number
+          created_at?: string
+          id?: never
+          token_mint_address: string
+          user_profile_id: string
+          withdrawal_transaction_signature: string
+        }
+        Update: {
+          amount_withdrawn?: number
+          created_at?: string
+          id?: never
+          token_mint_address?: string
+          user_profile_id?: string
+          withdrawal_transaction_signature?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custodial_withdrawals_user_profile_id_fkey"
+            columns: ["user_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       membership_cards: {
         Row: {
           card_identifier: string
@@ -222,7 +310,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_current_user_profile_id: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
     }
     Enums: {
       sync_status_type: "pending" | "success" | "failed"

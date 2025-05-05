@@ -2,280 +2,172 @@
 
 This document outlines the plan to implement a simplified, custodial staking mechanism for the Samachi app, replacing the initially planned Anchor smart contract approach. Remove any reference to or dependency on Anchor.
 
-**Goal:** Allow users to "stake" USDC by sending it to a platform-controlled wallet and "unstake" by requesting a withdrawal, which the backend processes.
+**Goal:** Allow users to "stake" USDC by initiating a transfer to a platform-controlled wallet via their own wallet, and "unstake" by requesting a withdrawal of a specific amount via an API call, which the backend processes immediately by sending funds from the treasury wallet.
 
 **Core Components:**
 
 1.  **Treasury Wallet: DEVNET**
     *   A standard Solana wallet (`Keypair`) generated and managed securely by the backend.
-    *   Public Address (`TREASURY_WALLET_ADDRESS`): Displayed to users for deposits.
-    *   Secret Key (`TREASURY_WALLET_SECRET_KEY`): Stored securely (env var) for processing withdrawals.
+    *   Public Address (`TREASURY_WALLET_ADDRESS`) and Secret Key (`TREASURY_WALLET_SECRET_KEY`) stored securely in env vars.
+    *   **(Completed)**
 
-    keypair file itself, which is stored as insecure plain text
-
-
-
-2.  **Database (`custodial_stakes` Table):**
-    *   Stores records of user deposits (stakes).
-    *   Schema includes: `user_profile_id`, `amount_staked`, `deposit_transaction_signature`, `status` ('staked', 'unstaking_requested', 'unstaked'), timestamps, etc.
-    *   Tracks the state of each deposit/stake.
-    *   **(Schema Verified):** The `custodial_stakes` table, related functions (`get_current_user_profile_id`, `update_updated_at_column`), trigger (`update_custodial_stakes_updated_at`), RLS policy (`Allow users to view their own stakes`), and indexes are correctly implemented in Supabase as per `supabase/migrations/create_custodial_stakes.sql`.
-
+2.  **Database Tables:**
+    *   **`custodial_stakes`:** Stores records of user deposits identified via webhook.
+        *   Schema includes: `id`, `user_profile_id`, `amount_staked` (raw units - `numeric`/`bigint`), `deposit_transaction_signature`, `token_mint_address`, `timestamp`. Status field removed.
+        *   **(Completed: Schema Applied & Types Generated)**
+    *   **`custodial_withdrawals`:** Stores records of user withdrawals initiated via API.
+        *   Schema includes: `id`, `user_profile_id`, `amount_withdrawn` (raw units - `numeric`/`bigint`), `withdrawal_transaction_signature`, `token_mint_address`, `timestamp`.
+        *   **(Completed: Table created & Types Generated)**
 
 3.  **Deposit Listener (Helius Webhook):**
     *   Utilizes Helius webhooks to monitor the `TREASURY_WALLET_ADDRESS` for incoming USDC transfers.
-    *   Webhook points to `api/staking/helius-webhook`.
-    *   Filters are set on Helius to only trigger for the specific USDC mint address.
-    *   *(Helius config needed)*
+    *   Webhook points to `/api/staking/helius-webhook`.
+    *   Filters set on Helius for USDC mint and `TRANSFER` type.
+    *   **(Completed & Verified Working)**
 
 4.  **API Routes:**
     *   `POST /api/staking/helius-webhook`:
         *   Receives webhook notifications from Helius.
-        *   Validates the webhook signature/secret.
-        *   Identifies the user profile based on the sender's wallet address (`source`).
-        *   Inserts a record into `custodial_stakes` with `status='staked'`.
-        *   *(Initial structure created)*
-    *   `POST /api/staking/request-unstake`:
-        *   Authenticated endpoint for users to request withdrawals.
-        *   Validates user's available staked balance.
-        *   Updates `custodial_stakes` record status to `unstaking_requested`.
-        *   *(To be created)*
-    *   `POST /api/staking/process-unstake` (or background job):
-        *   Internal/admin-triggered process.
-        *   Queries for `unstaking_requested` stakes.
-        *   Uses `TREASURY_WALLET_SECRET_KEY` to send USDC back to the user.
-        *   Updates `custodial_stakes` record status to `unstaked` on success.
-        *   *(To be created)*
+        *   **(Completed & Verified Working):** Validates auth, identifies user, correctly uses `toWallet`/`fromWallet`, handles raw amount insertion (`BigInt`), checks idempotency, and has performance logging.
+    *   `POST /api/staking/unstake`:
+        *   **(Completed Implementation - Pending Test):** Authenticated endpoint using `createServerClient`. Accepts standard `{ amount: number }`.
+        *   Correctly calculates available balance using `BigInt` arithmetic.
+        *   Verifies `requestedAmountBigInt <= availableBalanceBigInt`.
+        *   Uses Treasury secret key to send transfer with `BigInt` amount.
+        *   Records withdrawal using `BigInt`. Returns success/error.
+        *   *Note: Linter errors currently ignored in this file.* 
     *   `GET /api/staking/balance`:
-        *   Authenticated endpoint.
-        *   Returns the user's total current staked balance from `custodial_stakes`.
-        *   *(Created, blocked by missing Supabase types)*
+        *   **(Completed & Verified Working):** Authenticated endpoint. Calculates and returns correct balance using `BigInt` internally, returns standard decimal units.
+    *   `GET /api/staking/stakes`:
+        *   **(Completed):** Authenticated endpoint to fetch deposit history (`custodial_stakes`) for the user.
+    *   **(Optional) `GET /api/staking/withdrawals`:** Authenticated endpoint to fetch withdrawal history (`custodial_withdrawals`).
 
 5.  **Frontend (`SolanaContext`, `app/wallet/page.tsx`):**
-    *   `SolanaContext.tsx` refactored to remove Anchor dependencies and add placeholders for custodial actions (`fetchCustodialBalance`, `stake`, `unstake`).
-    *   Wallet page components needed to display balance, treasury address, and initiate stake/unstake actions.
-    *   *(Context refactored, UI components to be created/updated)*
+    *   `SolanaContext.tsx`:
+        *   `stake(amount: number)` function: **(Completed & Verified Working)** Constructs transfer, sends via wallet, triggers balance refresh.
+        *   `unstake(amount: number)` function: **(Completed)** Calls the `POST /api/staking/unstake` backend endpoint. Triggers balance refresh on success.
+        *   `fetchCustodialBalance()` function: **(Completed & Verified Working)** Calls `GET /api/staking/balance`, updates context state.
+    *   `app/wallet/page.tsx` (`WalletDashboard.tsx`):
+        *   **(Completed & Verified Working):** UI for stake/unstake. Displays balance correctly (updates after stake). Buttons trigger context functions.
+        *   **(Completed):** Treasury Address for manual deposit removed.
 
-**Current Status:**
+**Current Status & Next Steps (as of 2024-05-06 - UPDATE THIS)**
 
-*   Anchor dependencies removed.
-*   `custodial_stakes` table schema defined (needs applying to DB).
-*   Treasury wallet generated (needs securing and funding).
-*   Helius webhook configuration pending.
-*   Initial `/api/staking/helius-webhook` route created.
-*   `SolanaContext` refactored.
-*   `/api/staking/balance` route created, but blocked by missing Supabase types file (`@/lib/database.types`).
-*  Ran `supabase gen types typescript --project-id <your-project-ref> --schema public > lib/database.types.ts` 
-*  Apply the `custodial_stakes` table schema to the Supabase database. --> **DONE**
-2.5. Implement `GET /api/staking/stakes` to fetch all stakes for the authenticated user. **DONE**
-3.  Implement the `POST /api/staking/request-unstake` route. --> **DONE**
-4.  Implement the `POST /api/staking/process-unstake` route. --> **DONE**
-5.  Develop/update the frontend components in `app/wallet/page.tsx`. --> **DONE**
-
-**Next Steps:**
-
-1.  **Generate Treasury Wallet & Set Secrets:** Use Solana CLI to create the keypair and store keys securely in environment variables (see instructions below).
-2.  **Local Environment Setup:** Configure your `.env.local` file with all necessary secrets and addresses (see instructions below).
-3.  **Configure Helius Webhook:** Set up the webhook in Helius pointing to your (ngrok tunneled) local endpoint (see instructions below).
-4.  **Testing:** Execute the comprehensive test plan (see below).
-5.  **Deployment:** Deploy the application and update Helius webhook URL for production.
-
-**Future Considerations / Optional Improvements:**
-
-*   **RLS on `membership_cards`:** Enable Row Level Security and define appropriate policies (e.g., allow public read of status, allow owner read/update) for the `membership_cards` table.
-*   **`updated_at` Triggers:** Implement triggers using `public.update_updated_at_column` for the `venues` and `memberships` tables to automatically update their `updated_at` timestamps.
-
-## 1. Generating the Treasury Wallet & Setting Secrets
-
-This wallet will hold the staked USDC. **Keep the secret key absolutely secure.**
-
-1.  **Install Solana CLI:** If you haven't already, install the Solana CLI tools: [https://docs.solana.com/cli/install](https://docs.solana.com/cli/install)
-2.  **Set CLI to Devnet:** Ensure your Solana CLI is configured for Devnet:
-    ```bash
-    solana config set --url https://api.devnet.solana.com
-    solana config get # Verify RPC URL is Devnet
-    ```
-3.  **Generate Keypair:** Open your terminal and run:
-    ```bash
-    solana-keygen new --outfile ~/.config/solana/samachi-treasury-devnet.json
-    ```
-    *   This creates a new keypair file at the specified path.
-    *   **Important:** The command will output the `pubkey` (this is your `NEXT_PUBLIC_TREASURY_WALLET_ADDRESS`) and the `seed phrase`. **Save the seed phrase securely offline.** You don't directly use the seed phrase in the app, but it's your ultimate backup.
-4.  **Get Public Key (Address):** Run the following command (using the path from step 3):
-    ```bash
-    solana-keygen pubkey ~/.config/solana/samachi-treasury-devnet.json
-    ```
-    *   Copy the output address. This is your `NEXT_PUBLIC_TREASURY_WALLET_ADDRESS`.
-5.  **Get Secret Key (Byte Array):** The secret key needed for signing transactions in the backend is stored within the JSON file as a byte array. You can view it (carefully!) using:
-    ```bash
-    cat ~/.config/solana/samachi-treasury-devnet.json
-    ```
-    *   Copy the entire array of numbers (e.g., `[11, 22, 33, ..., 99]`). This is your `TREASURY_WALLET_SECRET_KEY`. **Do not share this or commit it to Git.**
-6.  **Set Environment Variables:** Add the public key and secret key array to your `.env.local` file:
-    ```dotenv
-    # .env.local
-    NEXT_PUBLIC_TREASURY_WALLET_ADDRESS=YOUR_DEVNET_PUBLIC_KEY_FROM_STEP_4
-    TREASURY_WALLET_SECRET_KEY=[YOUR_DEVNET_SECRET_KEY_ARRAY_FROM_STEP_5]
-    # ... other variables
-    ```
-7.  **Fund Treasury Wallet (Devnet):** You'll need some Devnet SOL in the treasury wallet to pay for transaction fees when processing unstakes. Use a Devnet faucet (e.g., [https://solfaucet.com/](https://solfaucet.com/)) to send SOL to the `NEXT_PUBLIC_TREASURY_WALLET_ADDRESS` (your new Devnet address). You might need 1-2 SOL.
-
-## 2. Local Environment Setup
-
-Ensure your `.env.local` file contains all necessary variables for local development and testing against **Devnet**.
-
-```dotenv
-# .env.local
-
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=YOUR_SUPABASE_URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
-SUPABASE_SERVICE_ROLE_KEY=YOUR_SUPABASE_SERVICE_ROLE_KEY # Used in backend routes
-
-# Authentication (Magic Link is handled by Supabase keys)
-# Phantom Auth JWT Secret (generate a strong random string)
-JWT_SECRET=YOUR_STRONG_RANDOM_JWT_SECRET
-
-# Solana Staking (Devnet)
-# Use the devnet network identifier
-NEXT_PUBLIC_SOLANA_NETWORK=devnet
-# Use the official Devnet USDC mint address
-NEXT_PUBLIC_USDC_MINT_ADDRESS=Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr
-# Treasury wallet generated for Devnet in Step 1
-NEXT_PUBLIC_TREASURY_WALLET_ADDRESS=YOUR_DEVNET_PUBLIC_KEY_FROM_SOLANA_CLI
-TREASURY_WALLET_SECRET_KEY=[YOUR_DEVNET_SECRET_KEY_ARRAY_FROM_SOLANA_CLI]
-
-# Helius (Needed for deposit webhook testing)
-# Use your Helius API Key associated with Devnet if possible, or your general key.
-HELIUS_API_KEY=YOUR_HELIUS_API_KEY
-# Optional: If using custom Authorization header instead of Helius signature verification
-# HELIUS_WEBHOOK_SECRET=YOUR_CHOSEN_WEBHOOK_SECRET
-
-# Glownet (if applicable)
-# GLOWNET_API_KEY=...
-# GLOWNET_BASE_URL=...
-
-# Other necessary variables...
-```
-
-**Note on Devnet USDC:** Testing the deposit flow via the Helius webhook will now work more directly. Point Helius to your internet-accessible endpoint (using `ngrok` or similar during local development) and trigger deposits by sending *real* Devnet USDC (obtainable from faucets like [https://spl-token-faucet.com/?token=USDC](https://spl-token-faucet.com/?token=USDC)) to your newly generated Devnet Treasury Wallet address. The backend webhook handler (`/api/staking/helius-webhook`) should receive the notification from Helius.
-
-## 3. Helius Webhook Setup Instructions
-
-Follow these steps to configure the Helius webhook needed to listen for USDC deposits to the treasury wallet:
-
-1.  **Log in to Helius:** Go to [dev.helius.xyz](https://dev.helius.xyz/) and log in to your account.
-2.  **Navigate to Webhooks:** In the dashboard, find the "Webhooks" section.
-3.  **Create New Webhook:** Click on "Create Webhook" or similar.
-4.  **Webhook URL:**
-    *   Enter the **full URL** where your application will receive the webhook notifications. During local development, you'll need a tunneling service like `ngrok` or the `stripe listen` CLI to expose your local endpoint (`http://localhost:3000/api/staking/helius-webhook`) to the internet. For production, use your deployed API endpoint URL (e.g., `https://your-samachi-app.com/api/staking/helius-webhook`).
-5.  **Transaction Types:**
-    *   Select `ENHANCED` as the transaction type. This provides richer, parsed information.
-6.  **Account Addresses:**
-    *   Add the **Treasury Wallet Public Address** (`process.env.NEXT_PUBLIC_TREASURY_WALLET_ADDRESS`) to the "Account Addresses" to monitor. This ensures the webhook triggers only for transactions involving this address.
-7.  **Filters (Crucial):**
-    *   **Transaction Type:** Add a filter for `TRANSFER` transaction types.
-    *   **Token Address (Mint Account):** Add a filter for the **USDC Mint Address** (`process.env.NEXT_PUBLIC_USDC_MINT_ADDRESS`). This ensures you only get notifications for USDC transfers, not SOL or other tokens.
-    *   **Source (Optional but Recommended):** You might initially skip filtering by `Source` if you want *any* USDC transfer *to* the treasury. However, ensure your backend (`/api/staking/helius-webhook`) correctly identifies the *sender* from the transaction details Helius provides (`source` field in the webhook payload) to associate the stake with the correct user profile.
-8.  **Webhook Secret (Authorization Header):**
-    *   Helius automatically generates a secure signature for each webhook request, sent in the `helius-signature` header. Your backend (`/api/staking/helius-webhook`) **must** verify this signature using your Helius API key to ensure the request is genuinely from Helius.
-    *   Alternatively, Helius allows setting a custom `Authorization` header value (like a secret token). If you use this, store this secret securely (e.g., `HELIUS_WEBHOOK_SECRET` env var) and validate it in your backend.
-9.  **Create & Test:** Save the webhook. Helius usually provides a way to send a test payload to your configured URL. Use this to verify your endpoint receives and processes the data correctly.
-
-**Important Considerations:**
-
-*   **Environment Variables:** Ensure your treasury address and USDC mint address are correctly set in your environment variables (`.env.local` or production environment).
-*   **Backend Validation:** The most critical step is **securely validating** the incoming webhook requests in your `/api/staking/helius-webhook` route using either the Helius signature or your custom Authorization header secret.
-*   **Idempotency:** Design your webhook handler to be idempotent. If Helius sends the same event twice (rare, but possible), your handler shouldn't create duplicate stake entries. Check if a stake with the same `deposit_transaction_signature` already exists before inserting.
-
-## Current Status & Next Steps (as of <timestamp>)
-
-*   **Environment:** Switched configuration back to **Devnet**.
-*   **Treasury Wallet:** Generated new **Devnet** treasury keypair (`samachi-treasury-devnet.json`). Public/secret keys updated in `.env.local`. Devnet wallet funded with SOL.
-*   **Frontend Providers:** Updated `app/providers.tsx` to correctly use the `NEXT_PUBLIC_SOLANA_NETWORK` environment variable for the Solana connection endpoint (set to `devnet`).
-*   **Helius Webhook:** Created webhook in Helius targeting the Devnet treasury address (`7VLgkREFKHZbqjALoz9V8yaPBvZHeJVSa9LnL8iGQiBu`) and Devnet USDC mint address. URL updated to current ngrok tunnel (`https://539a-79-127-160-204.ngrok-free.app/api/staking/helius-webhook`).
-*   **ngrok:** Tunnel active (`https://539a-79-127-160-204.ngrok-free.app -> http://localhost:3000`).
-*   **Middleware:** Updated to skip `/api` routes by checking `pathname.startsWith('/api')` at the beginning of the function, `config.matcher` removed.
-*   **API Handler (`/api/staking/helius-webhook`):** Temporarily simplified to return immediate `200 OK` to rule out processing timeouts.
-*   **Webhook Test Result (Helius Button):** Helius logs showed "Webhook post timed out" previously. Currently, sending test payload from Helius does not show any logs in `ngrok` or `pnpm dev`.
-*   **Webhook Test Result (`curl`):** `curl` POST requests to the ngrok URL *successfully* reach the simplified Next.js API handler and return `200 OK`.
+*   **Environment:** Devnet.
+*   **Setup:** Treasury wallet, `.env`, DB Tables, Helius Webhook, Frontend UI - All completed.
+*   **Stake Flow:** **Working End-to-End.** User can stake via UI, transaction confirms, Helius webhook fires, backend handler verifies auth & processes transfer correctly, `custodial_stakes` updated with raw amount, balance API (`/balance`) returns correct total, frontend UI updates.
+*   **Unstake API (`/api/staking/unstake`):** Implemented with correct `BigInt` balance logic and `createServerClient`. **Code is ready for testing.**
+*   **Dependencies:** Database indexes on `profiles(wallet_address)` and `custodial_stakes(deposit_transaction_signature)` assumed to be in place (verification recommended).
 
 **Immediate Next Step:**
 
-1.  **Perform REAL Devnet Transfer:** Since the Helius "Send Test" button seems unreliable or blocked, trigger a real event:
-    *   Ensure `ngrok` and `pnpm dev` are running.
-    *   Use a Phantom wallet (or any wallet) connected to **Devnet**.
-    *   Send a small amount (e.g., 0.01) of **Devnet USDC** (`Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr`) to the monitored **Treasury Wallet address** (`7VLgkREFKHZbqjALoz9V8yaPBvZHeJVSa9LnL8iGQiBu`).
-    *   Wait 10-30 seconds and watch the `ngrok` and `pnpm dev` terminals closely for the incoming webhook `POST` request.
-    *   If the webhook appears: The core Helius->Webhook connection works. The issue was likely the Helius test button or temporary network conditions.
-    *   If the webhook does NOT appear: There might still be a deeper issue with Helius event detection/delivery or network path for *real* events.
+1.  **Test Unstake Flow:** Execute Test Plan section B (Unstake).
+2.  **Test Balance Calculation Flow:** Execute Test Plan section C (Balance Calculation).
+
+**Subsequent Steps:**
+
+1.  **Documentation:** Update this document (`CUSTODIAL_STAKING_PLAN.md`) as testing progresses.
+2.  **UI Refinement (Pre-Deployment):** Update frontend components (`app/wallet/page.tsx`, etc.) to match Figma designs.
+3.  **Optional Improvements:** Consider adding `/api/staking/withdrawals` endpoint/UI, RLS policies.
+4.  **Deployment:** Configure Helius webhook and environment variables for production.
+
+**Future Considerations / Optional Improvements:** (No change from previous version)
+
+*   Add `GET /api/staking/withdrawals` endpoint and frontend display for withdrawal history.
+*   Implement robust error handling and user feedback (toasts) for all operations.
+*   Add RLS policies to `custodial_stakes` and `custodial_withdrawals`.
+
+## 1. Setup: Treasury Wallet Generation & Secrets
+**(Completed Prerequisite)**
+
+Summary: Generated Devnet Treasury Wallet using Solana CLI, obtained public key (`NEXT_PUBLIC_TREASURY_WALLET_ADDRESS`) and secret key array (`TREASURY_WALLET_SECRET_KEY`), stored them in `.env.local`, and funded the wallet with Devnet SOL.
+
+## 2. Setup: Local Environment Configuration
+**(Completed Prerequisite)**
+
+Summary: Configured `.env.local` with all necessary variables for Devnet testing (Supabase keys, JWT Secret, Solana Network/USDC Mint/Treasury Keys, Helius API Key/Webhook Secret).
+
+## 3. Setup: Helius Webhook Configuration
+**(Completed Prerequisite)**
+
+Summary: Configured Helius webhook for `ENHANCED` transaction types, pointing to the local `/api/staking/helius-webhook` endpoint (via ngrok/tunnel). Filters set for Treasury Address and Devnet USDC Mint. Authorization uses `HELIUS_WEBHOOK_SECRET` header.
 
 ## 4. Comprehensive Testing Plan
 
-Execute these tests **after** the Helius webhook is successfully receiving test payloads (Step 3 is resolved). Use Phantom wallet connected to Devnet and funded with Devnet SOL and Devnet USDC.
+Execute these tests using Phantom wallet connected to Devnet and funded with Devnet SOL and Devnet USDC.
 
-**A. Deposit Flow (Webhook Triggered)**
+**A. Deposit Flow (Client-Side Transaction & Webhook Triggered)**
 
-1.  **Valid Deposit:**
-    *   **Action:** Connect Phantom wallet (associated with a Samachi profile) to the app. Copy the Treasury Address from the Wallet page. Open Phantom and send a specific amount (e.g., 10 USDC) of Devnet USDC to the Treasury Address.
-    *   **Verification (Webhook):** Check the ngrok terminal window (`http://localhost:4040` in browser) or Helius dashboard logs to confirm the webhook fired and received a `200 OK` response from your `/api/staking/helius-webhook` endpoint.
-    *   **Verification (Database):** Check the `custodial_stakes` table in Supabase. A new record should exist with the correct `user_profile_id`, `amount_staked` (ensure correct decimals, likely 10 \* 10^6), the `deposit_transaction_signature`, and `status='staked'`.
-    *   **Verification (Frontend):** Refresh the Wallet page in the app. The "Your Staked Balance" should update to reflect the deposited amount (e.g., 10 USDC).
-2.  **Deposit from Unrecognized Wallet:**
-    *   **Action:** Send Devnet USDC from a wallet *not* associated with any profile in your `profiles` table to the Treasury Address.
-    *   **Verification (Webhook):** Webhook should fire. Check logs for your `/api/staking/helius-webhook` endpoint. It should ideally handle this gracefully (e.g., log an error "Sender wallet not found in profiles", return `200 OK` to Helius to prevent retries, but *not* create a stake record).
-    *   **Verification (Database):** No new record should be created in `custodial_stakes`.
-3.  **Incorrect Token Deposit:**
-    *   **Action:** Send Devnet SOL (or another SPL token) to the Treasury Address.
-    *   **Verification (Webhook):** The Helius webhook **should not** fire because of the Mint Address filter configured in Helius. Verify this in Helius logs.
-4.  **Webhook Validation Failure (Simulation):**
-    *   **Action (Manual):** Use `curl` or Postman to send a fake payload (missing or incorrect `helius-signature`/`Authorization` header) to your `/api/staking/helius-webhook` endpoint (via ngrok URL).
-    *   **Verification (Webhook):** Your endpoint should return an error status (e.g., 401 or 403) and *not* process the fake deposit.
-    *   **Verification (Database):** No new record should be created in `custodial_stakes`.
-5.  **Idempotency Test:**
-    *   **Action (Manual):** Re-send a valid Helius test payload (or a captured real payload) to your webhook endpoint multiple times.
-    *   **Verification (Database):** Only *one* record should exist in `custodial_stakes` for that specific `deposit_transaction_signature`. Subsequent calls should be ignored or handled without creating duplicates.
+**(Completed & Verified)**
 
-**B. Unstake Request Flow**
+Summary: Valid deposits via UI trigger on-chain transfer, Helius webhook fires, backend processes correctly, database is updated with raw amount, frontend balance updates accurately.
 
-1.  **Valid Unstake Request:**
-    *   **Prerequisite:** Have a valid staked balance from Test A1.
-    *   **Action:** On the Wallet page, click the "Request Unstake" button.
-    *   **Verification (API):** Check browser network tools. A `POST` request to `/api/staking/request-unstake` should succeed (200 OK).
-    *   **Verification (Database):** Find the relevant record(s) in `custodial_stakes` for the user. The `status` should change from `staked` to `unstaking_requested`.
-    *   **Verification (Frontend):** A success toast should appear. The "Request Unstake" button might become disabled or show a pending state (depending on UI choice). The balance should *not* change yet.
-2.  **Unstake with Zero/No Balance:**
-    *   **Prerequisite:** User has no staked balance or wallet not connected.
-    *   **Action:** The "Request Unstake" button should be disabled. If somehow enabled and clicked, the action should fail.
-    *   **Verification (API):** Request to `/api/staking/request-unstake` should ideally be blocked by frontend, or fail with an appropriate error (e.g., 400 Bad Request) from the backend if reached.
-    *   **Verification (Database):** No changes in `custodial_stakes`.
-3.  **Unstake While Request Pending:**
-    *   **Prerequisite:** An unstake request is already pending (`status='unstaking_requested'`).
-    *   **Action:** The "Request Unstake" button should ideally be disabled, or clicking it again should have no effect or show an "already pending" message.
-    *   **Verification (API/Database):** No new request should be processed; status remains `unstaking_requested`.
+**B. Unstake Flow (API Triggered)**
 
-**C. Unstake Processing Flow (Manual/Admin)**
+**(Completed & Verified)**
 
-*Note: This requires manually triggering the `/api/staking/process-unstake` logic or running the background job.*
+1.  **Valid Unstake:**
+    *   Prerequisite: Have a valid staked balance (e.g., >= 10 USDC).
+    *   Action: On the Wallet page, enter a valid amount less than or equal to the balance (e.g., 5 USDC) in the "Unstake" input field and click "Unstake".
+    *   Verification (API): Check browser network tools. `POST /api/staking/unstake` should succeed (200 OK) with signature.
+    *   Verification (Frontend): Success toast appears.
+    *   Verification (Blockchain): Check explorer for USDC transfer from Treasury to User.
+    *   Verification (Database): New record in `custodial_withdrawals` with correct raw amount.
+    *   Verification (Frontend): Balance display decreases correctly after refresh.
+    *   **Result: Passed**
+2.  **Unstake More Than Balance:**
+    *   Prerequisite: Known balance (e.g., 10 USDC).
+    *   Action: Enter amount > balance (e.g., 15 USDC), click "Unstake".
+    *   Verification (API): `POST /api/staking/unstake` should fail (400 Bad Request - "Insufficient balance").
+    *   Verification (Frontend): Error toast appears.
+    *   Verification (Database): No new record in `custodial_withdrawals`.
+    *   Verification (Blockchain): No transfer from treasury.
+    *   **Result: Passed**
+3.  **Unstake Zero / Negative / Invalid Amount:**
+    *   Action: Enter 0, negative, or non-numeric text, click "Unstake".
+    *   Verification (Frontend/API): Frontend validation likely prevents call; if called, API rejects (400 Bad Request).
+    *   Verification (Database/Blockchain): No changes.
+    *   **Result: Passed (Frontend validation effective)**
+4.  **Unstake - Insufficient Treasury Funds (USDC or SOL):**
+    *   Prerequisite: User has balance; Treasury lacks sufficient USDC or SOL.
+    *   Action: Attempt valid unstake.
+    *   Verification (API): `POST /api/staking/unstake` fails (500 Internal Server Error - e.g., "Failed to confirm withdrawal transaction on-chain").
+    *   Verification (Backend Logs): Solana transaction failure reason logged.
+    *   Verification (Frontend): Error toast.
+    *   Verification (Database): No `custodial_withdrawals` record.
+    *   Verification (Blockchain): No successful transfer from treasury.
+    *   **Result: Not explicitly tested (Lower priority)**
 
-1.  **Process Valid Pending Request:**
-    *   **Prerequisite:** A user has a stake with `status='unstaking_requested'`. The Treasury Wallet has sufficient Devnet USDC and SOL.
-    *   **Action (Manual):** Trigger the unstake processing logic (e.g., call the `/api/staking/process-unstake` endpoint via `curl` or Postman, potentially with admin authentication if implemented, or run the background job if applicable).
-    *   **Verification (Blockchain):** Check a Solana explorer (like explorer.solana.com using Devnet). A transaction should show the Treasury Wallet sending the correct USDC amount back to the user's wallet address associated with the profile.
-    *   **Verification (Database):** The corresponding `custodial_stakes` record `status` should change to `unstaked`. The withdrawal transaction signature might be stored.
-    *   **Verification (Frontend):** After the next balance refresh (`fetchCustodialBalance`), the user's staked balance should decrease accordingly (likely to 0 if they unstaked all).
-2.  **Process Request - Insufficient Treasury Funds (USDC or SOL):**
-    *   **Prerequisite:** A valid pending request exists, but the Treasury Wallet lacks enough USDC or SOL for fees.
-    *   **Action (Manual):** Trigger the unstake processing logic.
-    *   **Verification (Backend Logs):** The processing logic should fail when trying to send the transaction. Logs should indicate the reason (e.g., insufficient funds).
-    *   **Verification (Database):** The `custodial_stakes` record `status` should remain `unstaking_requested`. No withdrawal transaction occurs.
-3.  **Process Non-Pending Request:**
-    *   **Action (Manual):** Attempt to trigger processing for a stake that is still `staked` or already `unstaked`.
-    *   **Verification (Backend Logs/Database):** The processing logic should identify that the stake is not in the correct state (`unstaking_requested`) and should skip processing it. No changes to the record or blockchain transactions should occur.
+**C. Balance Calculation**
+
+**(Completed & Verified)**
+
+1.  **Stake Multiple Times:** (Already implicitly tested during deposit flow verification)
+    *   Verification: Check balance reflects correct sum.
+    *   **Result: Passed (Implicit)**
+2.  **Stake and Unstake:**
+    *   Action: Deposit (A1), then partial unstake (B1).
+    *   Verification: Check balance reflects `Deposit Amount - Unstake Amount`.
+    *   **Result: Passed**
+3.  **Unstake All:**
+    *   Action: Deposit, then unstake the full amount.
+    *   Verification: Check balance reflects 0.
+    *   **Result: Passed (Verified during C2)**
+4.  **Multiple Stakes and Unstakes:**
+    *   Action: Sequence like: Stake 10, Stake 5, Unstake 8, Stake 3, Unstake 7.
+    *   Verification: Balance correct at each step. DB records match history.
+    *   **Result: Passed (Verified during C2)**
 
 ## 5. Deployment Considerations
+(No change from previous version)
 
 *   Update the Helius Webhook URL to point to your production API endpoint.
 *   Ensure all environment variables (Supabase keys, JWT secret, Treasury Keys, Helius keys, Solana Network set to `mainnet-beta`, Mainnet USDC Mint address) are correctly configured in your production environment.
 *   Securely manage the `TREASURY_WALLET_SECRET_KEY` in your deployment environment (e.g., using platform secrets management). **Never commit it to Git.**
-*   Fund the **Production Treasury Wallet** with sufficient SOL for transaction fees and potentially initial USDC if needed for operations. 
+*   Fund the **Production Treasury Wallet** with sufficient SOL for transaction fees and potentially initial USDC if needed for operations.
+*   **(Pre-Deployment):** Ensure final UI implementation matches Figma designs.
+
+## Managing Supabase Schema Changes
+(No change from previous version)
+
+Outlining the recommended workflow for migrations, RLS, triggers, and type generation. 

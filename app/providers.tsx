@@ -76,7 +76,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     >
       <AuthProvider>
         <ConnectionProvider endpoint={endpoint}>
-          <WalletProvider wallets={wallets} autoConnect={false}>
+          <WalletProvider wallets={wallets} autoConnect={true}>
             <WalletModalProvider>
               <SolanaProvider>
                 {children}

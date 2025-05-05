@@ -1,17 +1,22 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { useConnection, useWallet, useAnchorWallet } from '@solana/wallet-adapter-react';
-import { PublicKey, SystemProgram, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress } from '@solana/spl-token';
-import { useToast } from '@/app/components/ui/use-toast';
+import { PublicKey, SystemProgram, TransactionMessage, VersionedTransaction, Transaction } from '@solana/web3.js';
+import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress, createTransferInstruction } from '@solana/spl-token';
+import { toast } from 'sonner';
+import type { Database } from '@/lib/database.types'; // Import Database type if not already present
+
+// Assuming CustodialStake type is defined in database.types.ts
+type CustodialStake = Database['public']['Tables']['custodial_stakes']['Row'];
 
 // Define the program ID from environment variable - Keep for now, maybe needed for PDA calculation if reused? Or remove later.
 const PROGRAM_ID_PLACEHOLDER = new PublicKey(process.env.NEXT_PUBLIC_SOLANA_PROGRAM_ID || "8VtCsstcdNp1vCoUA1epHXgar9tsKurPZ9eQhrieVrCX");
 
-// USDC mint address (devnet) - Keep, useful for transfers
-const USDC_MINT = new PublicKey(process.env.NEXT_PUBLIC_USDC_MINT_ADDRESS || "Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr"); // Using Devnet USDC
+// USDC mint address
+const USDC_MINT_ADDRESS = process.env.NEXT_PUBLIC_USDC_MINT_ADDRESS;
+const USDC_MINT = USDC_MINT_ADDRESS ? new PublicKey(USDC_MINT_ADDRESS) : null;
 
-// Admin treasury wallet address (devnet) - Keep, useful for target address
-const TREASURY_WALLET = new PublicKey(process.env.NEXT_PUBLIC_TREASURY_WALLET_ADDRESS || "DeXCrxjtX39N2BJ2tAVX4ECNtpYpMM1C1LZgnDiKtS1z"); // Using Devnet Treasury
+// Admin treasury wallet address
+const TREASURY_WALLET_ADDRESS = process.env.NEXT_PUBLIC_TREASURY_WALLET_ADDRESS;
 
 // Define the UserState type based on your IDL/program - Removed
 // interface UserStateInfo {
@@ -22,32 +27,30 @@ const TREASURY_WALLET = new PublicKey(process.env.NEXT_PUBLIC_TREASURY_WALLET_AD
 
 // --- Refactor SolanaContextType for Custodial Model ---
 interface SolanaContextType {
-  // program: Program<SamachiStaking> | null; // <-- Removed program
-  // userState: UserStateInfo | null; // <-- Removed userState
   custodialStakeBalance: number | null; // <-- New state for custodial balance
+  custodialStakes: CustodialStake[]; // <-- NEW: Add state for the list of stakes
   treasuryAddress: PublicKey | null; // <-- Expose treasury address
   loading: boolean;
   error: string | null;
-  stake: (amount: number) => Promise<void>; // Signature kept, implementation needs change
-  unstake: () => Promise<void>; // Signature updated, amount not needed for request
-  // refreshUserState: () => Promise<void>; // <-- Removed state refresh
+  stake: (amount: number) => Promise<void>; // Stake function updated
+  unstake: (amount: number) => Promise<void>; // Unstake function updated
   fetchCustodialBalance: () => Promise<void>; // <-- New function to get balance from API
+  fetchCustodialStakes: () => Promise<void>; // <-- NEW: Add function to fetch stakes
   isWalletConnected: boolean;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => Promise<void>;
 }
 
 const SolanaContext = createContext<SolanaContextType>({
-  // program: null, // <-- Removed
-  // userState: null, // <-- Removed
-  custodialStakeBalance: null, // <-- New default
-  treasuryAddress: null, // <-- New default
+  custodialStakeBalance: null,
+  custodialStakes: [],
+  treasuryAddress: null,
   loading: false,
   error: null,
-  stake: async () => { console.warn("Stake function not implemented for custodial model."); },
-  unstake: async () => { console.warn("Unstake function not implemented for custodial model."); },
-  // refreshUserState: async () => {}, // <-- Removed
+  stake: async () => { console.warn("Stake function not implemented."); },
+  unstake: async (amount: number) => { console.warn("Unstake function not implemented."); },
   fetchCustodialBalance: async () => { console.warn("fetchCustodialBalance not implemented."); },
+  fetchCustodialStakes: async () => { console.warn("fetchCustodialStakes not implemented."); },
   isWalletConnected: false,
   connectWallet: async () => {},
   disconnectWallet: async () => {},
@@ -55,263 +58,289 @@ const SolanaContext = createContext<SolanaContextType>({
 
 export function SolanaProvider({ children }: { children: React.ReactNode }) {
   const { connection } = useConnection();
-  const { connected, connect, disconnect, publicKey } = useWallet();
-  const anchorWallet = useAnchorWallet();
-  // const [program, setProgram] = useState<Program<SamachiStaking> | null>(null); // <-- Removed program state
-  // const [userState, setUserState] = useState<UserStateInfo | null>(null); // <-- Removed user state
-  const [custodialStakeBalance, setCustodialStakeBalance] = useState<number | null>(null); // <-- New balance state
-  const [treasuryAddress, setTreasuryAddress] = useState<PublicKey | null>(null); // <-- New treasury address state
+  const { connected, connect, disconnect, publicKey, sendTransaction } = useWallet(); // Added sendTransaction
+  const anchorWallet = useAnchorWallet(); // Still potentially useful for signing, though sendTransaction is preferred
+
+  const [custodialStakeBalance, setCustodialStakeBalance] = useState<number | null>(null);
+  const [custodialStakes, setCustodialStakes] = useState<CustodialStake[]>([]);
+  const [treasuryAddress, setTreasuryAddress] = useState<PublicKey | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { toast } = useToast();
+  // const { toast } = useToast(); // Using sonner
 
-  // --- Remove Anchor Program Initialization Effect --- 
-  // useEffect(() => {
-  //   if (!connection || !connected || !anchorWallet) {
-  //     console.log('Program initialization dependencies not ready:', {
-  //       connection: !!connection,
-  //       connected,
-  //       anchorWallet: !!anchorWallet,
-  //     });
-  //     // setProgram(null);
-  //     // setUserState(null);
-  //     return;
-  //   }
-  // 
-  //   try {
-  //     console.log('Starting program initialization with anchor wallet:', anchorWallet.publicKey.toString());
-  //     console.log('Connection status:', connection ? 'Connected' : 'Not connected');
-  //     console.log('Anchor Wallet connected status:', !!anchorWallet);
-  // 
-  //     const provider = new AnchorProvider(
-  //       connection,
-  //       anchorWallet,
-  //       { commitment: 'confirmed' }
-  //     );
-  // 
-  //     console.log("Initializing Program with loaded IDL JSON...");
-  //     if (anchorWallet && provider) {
-  //       try {
-  //         console.log('Raw IDL JSON:', JSON.stringify(idlJson, null, 2));
-  // 
-  //         const cleanIdlObject = JSON.parse(JSON.stringify(idlJson));
-  // 
-  //         const samachiProgram = new Program<SamachiStaking>(
-  //           cleanIdlObject as Idl,
-  //           PROGRAM_ID_PLACEHOLDER, // Use placeholder
-  //           provider
-  //         );
-  //         // setProgram(samachiProgram);
-  //         console.log('Program initialized successfully:', samachiProgram.programId.toString());
-  //       } catch (error) {
-  //         console.error('Error initializing program:', error);
-  //         setError(`Program Initialization Error: ${error instanceof Error ? error.message : String(error)}`);
-  //         // setProgram(null);
-  //       }
-  //     } else {
-  //       console.log('Program initialization failed: anchorWallet or provider is null');
-  //       // setProgram(null);
-  //     }
-  //   } catch (err) {
-  //     console.error("Unhandled error during program initialization:", err);
-  //     setError(`Initialization Error: ${err instanceof Error ? err.message : String(err)}`);
-  //     toast({
-  //       title: "Error",
-  //       description: "Failed to initialize Solana program connection",
-  //       variant: "destructive",
-  //     });
-  //   }
-  // }, [connection, connected, anchorWallet, toast]);
+  // --- Error Handling Helper ---
+  const handleError = (message: string, error?: any) => {
+    console.error(message, error);
+    const displayMessage = error instanceof Error ? `${message}: ${error.message}` : message;
+    setError(displayMessage);
+    toast.error(message, { description: error instanceof Error ? error.message : undefined });
+    setLoading(false);
+  };
 
-  // --- Remove PDA Derivations --- 
-  // const findUserStatePDA = async (): Promise<PublicKey | null> => {
-  //   if (!publicKey) return null;
-  //   const [pda] = await PublicKey.findProgramAddress(
-  //     [Buffer.from("user_state"), publicKey.toBuffer()],
-  //     PROGRAM_ID_PLACEHOLDER
-  //   );
-  //   return pda;
-  // };
-  // 
-  // const findVaultTokenAccountPDA = async (): Promise<PublicKey | null> => {
-  //   const [pda] = await PublicKey.findProgramAddress(
-  //     [Buffer.from("vault_tokens"), USDC_MINT.toBuffer()],
-  //     PROGRAM_ID_PLACEHOLDER
-  //   );
-  //   return pda;
-  // };
-  // 
-  // const findVaultAuthorityPDA = async (): Promise<PublicKey | null> => {
-  //   const [pda] = await PublicKey.findProgramAddress(
-  //     [Buffer.from("vault_authority"), USDC_MINT.toBuffer()],
-  //     PROGRAM_ID_PLACEHOLDER
-  //   );
-  //   return pda;
-  // };
+  // --- Fetch Custodial Stakes --- 
+  const fetchCustodialStakes = useCallback(async () => {
+    if (!connected || !publicKey) {
+      setCustodialStakes([]);
+      return;
+    }
+    try {
+      const response = await fetch('/api/staking/stakes');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      setCustodialStakes(Array.isArray(data) ? data : []);
+      console.log("SolanaContext: Fetched stakes:", data);
+    } catch (err) {
+      // Don't show toast here, let balance fetching handle combined errors
+      console.error("Error fetching custodial stakes:", err);
+      setError((prev) => prev ? `${prev}\nFailed to fetch stakes.` : "Failed to fetch stakes.");
+      setCustodialStakes([]);
+    }
+  }, [connected, publicKey]);
 
-  // --- Remove User State Fetching --- 
-  // const refreshUserState = async () => {
-  //   // ... (implementation removed) ...
-  // };
-  // 
-  // useEffect(() => {
-  //   // ... (effect removed) ...
-  // }, [/* dependencies removed */]);
-
-  // --- New function to fetch custodial balance --- 
-  const fetchCustodialBalance = async () => {
+  // --- Fetch Custodial Balance (and Stakes) --- 
+  const fetchCustodialBalance = useCallback(async () => {
     if (!connected || !publicKey) {
       setCustodialStakeBalance(null);
+      setCustodialStakes([]);
       setError(null);
       return;
     }
 
     setLoading(true);
-    setError(null);
+    setError(null); // Clear previous errors before fetching
     try {
-      // Assume API requires authentication (middleware handles this)
-      const response = await fetch('/api/staking/balance');
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      // Fetch balance
+      const balanceResponse = await fetch('/api/staking/balance');
+      if (!balanceResponse.ok) {
+        const errorData = await balanceResponse.json().catch(() => ({}));
+        throw new Error(`Balance fetch error: ${errorData.message || balanceResponse.statusText}`);
       }
-      const data = await response.json();
-      setCustodialStakeBalance(data.balance || 0);
-    } catch (err: any) {
-      console.error("Error fetching custodial stake balance:", err);
-      setError("Failed to fetch staking balance.");
+      const balanceData = await balanceResponse.json();
+      // Revert: Use the 'balance' field directly from the API response
+      setCustodialStakeBalance(balanceData.balance ?? 0);
+      // Log the balance received from the API
+      console.log("SolanaContext: Fetched balance from API:", balanceData.balance);
+
+      // Fetch stakes
+      await fetchCustodialStakes();
+
+    } catch (err) {
+      handleError("Could not fetch staking data", err);
       setCustodialStakeBalance(null);
-      toast({
-        title: "Error",
-        description: err.message || "Could not fetch your staking balance.",
-        variant: "destructive",
-      });
+      setCustodialStakes([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [connected, publicKey, fetchCustodialStakes]); // Added fetchCustodialStakes dep
 
-  // Fetch balance when wallet connects
+  // --- Effect to Fetch Balance on Connect --- 
   useEffect(() => {
     if (connected && publicKey) {
-      console.log("Wallet connected, fetching custodial balance...");
+      console.log("Wallet connected, fetching custodial balance & stakes...");
       fetchCustodialBalance();
     } else {
-      setCustodialStakeBalance(null); // Clear balance if wallet disconnects
+      setCustodialStakeBalance(null);
+      setCustodialStakes([]);
+      setError(null);
     }
-  }, [connected, publicKey]);
+  }, [connected, publicKey, fetchCustodialBalance]);
 
-  // --- Update Stake function ---
-  // Stake is now purely informational - user sends funds manually.
-  const stake = async (amount: number) => {
-    console.info(`Please send ${amount} USDC to the treasury address: ${TREASURY_WALLET.toString()}`);
-    toast({
-        title: "Stake Instruction",
-        description: `To stake, please send USDC to the treasury address: ${TREASURY_WALLET.toString()}. Your balance will update after the transaction is confirmed and processed. You may need to refresh manually.`,
-        duration: 10000 // Show for 10 seconds
-    });
-  };
+  // --- Stake Function (Client-Side SPL Transfer) --- 
+  const stake = useCallback(async (amount: number) => {
+    if (!connected || !publicKey || !connection || !treasuryAddress || !USDC_MINT || !sendTransaction) {
+      handleError("Cannot stake: Wallet not connected, config missing, or cannot send transactions.");
+      return;
+    }
+    if (amount <= 0) {
+      toast.error("Invalid Amount", { description: "Stake amount must be positive." });
+      return;
+    }
 
-  // --- Update Unstake function ---
-  // Calls the backend API to request unstaking. Amount is not needed as API likely processes all 'staked' records for the user.
-  const unstake = async () => {
+    setLoading(true);
+    setError(null);
+    let signature = '';
+    try {
+      toast.info("Preparing Stake Transaction...", { description: `Amount: ${amount} USDC` });
+
+      const userTokenAccount = await getAssociatedTokenAddress(USDC_MINT, publicKey);
+      const treasuryTokenAccount = await getAssociatedTokenAddress(USDC_MINT, treasuryAddress);
+      console.log("User ATA:", userTokenAccount.toString());
+      console.log("Treasury ATA:", treasuryTokenAccount.toString());
+
+      const userTokenAccountInfo = await connection.getAccountInfo(userTokenAccount);
+      if (!userTokenAccountInfo) {
+        throw new Error("Your USDC token account not found. Ensure you hold USDC.");
+      }
+      const treasuryTokenAccountInfo = await connection.getAccountInfo(treasuryTokenAccount);
+       if (!treasuryTokenAccountInfo) {
+           throw new Error("Staking destination account is not initialized. Please contact support.");
+       }
+
+      const decimals = 6; // TODO: Get dynamically?
+      const amountRaw = BigInt(Math.round(amount * (10 ** decimals)));
+
+      const transferInstruction = createTransferInstruction(
+        userTokenAccount,
+        treasuryTokenAccount,
+        publicKey,
+        amountRaw,
+        [],
+        TOKEN_PROGRAM_ID
+      );
+
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+      const transaction = new Transaction({
+        recentBlockhash: blockhash,
+        feePayer: publicKey,
+      }).add(transferInstruction);
+
+      toast.loading("Action Required: Approve Transaction", { description: "Please approve the stake transaction in your wallet." });
+      signature = await sendTransaction(transaction, connection);
+      toast.dismiss(); // Dismiss loading toast
+      toast.info("Transaction Sent", { description: `Signature: ${signature.substring(0, 10)}... Waiting for confirmation.` });
+      console.log("Stake Transaction Signature:", signature);
+
+      const confirmation = await connection.confirmTransaction({
+        signature,
+        blockhash,
+        lastValidBlockHeight
+      }, 'confirmed');
+
+      if (confirmation.value.err) {
+        throw new Error(`Stake transaction failed to confirm: ${confirmation.value.err}`);
+      }
+
+      toast.success("Stake Successful!", {
+        description: `Successfully staked ${amount} USDC. Balance will update shortly after processing.`,
+        duration: 8000
+      });
+
+      setTimeout(() => {
+        console.log("Triggering balance refresh after stake...");
+        fetchCustodialBalance();
+      }, 15000); // Adjust delay as needed
+
+    } catch (err) {
+      toast.dismiss(); // Ensure loading toast is dismissed on error
+      handleError(`Stake failed${signature ? ` (Tx: ${signature.substring(0,10)}...)` : ''}`, err);
+    } finally {
+        // setLoading handled by handleError or end of try block
+    }
+  }, [connected, publicKey, connection, treasuryAddress, sendTransaction, fetchCustodialBalance]); // Dependencies
+
+  // --- Unstake Function (Calls Backend API) --- 
+  const unstake = useCallback(async (amount: number) => {
     if (!connected) {
-      toast({ title: "Error", description: "Wallet not connected.", variant: "destructive" });
+      toast.error("Cannot Unstake", { description: "Wallet not connected." });
+      return;
+    }
+    if (typeof amount !== 'number' || amount <= 0) {
+      toast.error("Invalid Amount", { description: "Unstake amount must be positive." });
       return;
     }
 
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/staking/request-unstake', {
+      toast.info("Requesting Unstake...", { description: `Amount: ${amount} USDC` });
+
+      const response = await fetch('/api/staking/unstake', { // Correct endpoint
         method: 'POST',
-        // No body needed as the API identifies user via session/token
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: amount }), // Send amount in standard units
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({})); // Try to parse error, default to empty object
-        throw new Error(errorData.message || `Failed to request unstake: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to unstake: ${response.statusText}`);
       }
 
       const result = await response.json();
-      toast({
-        title: "Unstake Requested",
-        description: result.message || "Your unstake request has been submitted. Processing may take some time.",
+      toast.success("Unstake Successful", {
+        description: result.message || `Successfully unstaked ${amount} USDC. Tx: ${result.signature?.substring(0, 10)}...`,
+        duration: 8000
       });
-      // Optionally: Refresh balance after a delay, though it won't change until processed
-      // setTimeout(fetchCustodialBalance, 5000);
 
-    } catch (err: any) {
-      console.error("Error requesting unstake:", err);
-      setError(err.message || "Failed to request unstake.");
-      toast({
-        title: "Unstake Error",
-        description: err.message || "An error occurred while requesting unstake.",
-        variant: "destructive",
-      });
+      // Refresh data immediately
+      await fetchCustodialBalance();
+
+    } catch (err) {
+      handleError("Unstake failed", err);
     } finally {
-      setLoading(false);
+        // setLoading handled by handleError or end of try block
     }
-  };
+  }, [connected, fetchCustodialBalance]); // Dependencies
 
-  // Wallet connect/disconnect handlers (from useWallet)
-  const connectWallet = async () => {
+  // --- Wallet Connect/Disconnect Handlers --- 
+  const connectWallet = useCallback(async () => {
     if (connected) return;
     try {
       await connect();
-    } catch (error: any) {
-      console.error("Failed to connect wallet:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to connect wallet.",
-        variant: "destructive",
-      });
+    } catch (error) {
+      handleError("Failed to connect wallet", error);
     }
-  };
+  }, [connected, connect]);
 
-  const disconnectWallet = async () => {
+  const disconnectWallet = useCallback(async () => {
     if (!connected) return;
     try {
       await disconnect();
-      setCustodialStakeBalance(null); // Clear balance on disconnect
-    } catch (error: any) {
-      console.error("Failed to disconnect wallet:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to disconnect wallet.",
-        variant: "destructive",
-      });
+      setCustodialStakeBalance(null);
+      setCustodialStakes([]);
+      setError(null);
+    } catch (error) {
+      handleError("Failed to disconnect wallet", error);
     }
-  };
+  }, [connected, disconnect]);
 
-  // Memoize the context value
+  // --- Initialize Treasury Address --- 
+  useEffect(() => {
+    if (TREASURY_WALLET_ADDRESS) {
+      try {
+        setTreasuryAddress(new PublicKey(TREASURY_WALLET_ADDRESS));
+      } catch (e) {
+        handleError("Invalid Treasury Address Configuration", e);
+        setTreasuryAddress(null);
+      }
+    } else {
+        handleError("Missing Treasury Address Configuration");
+        setTreasuryAddress(null);
+    }
+    if (!USDC_MINT) {
+        handleError("Missing USDC Mint Address Configuration");
+    }
+  }, []); // Run once on mount
+
+  // --- Memoize Context Value --- 
   const value = useMemo(() => ({
-    // program, // <-- Removed
-    // userState, // <-- Removed
     custodialStakeBalance,
-    treasuryAddress: TREASURY_WALLET, // <-- Expose treasury address
+    custodialStakes,
+    treasuryAddress,
     loading,
     error,
     stake,
     unstake,
-    // refreshUserState, // <-- Removed
     fetchCustodialBalance,
+    fetchCustodialStakes,
     isWalletConnected: connected,
     connectWallet,
     disconnectWallet,
   }), [
-    // program, // <-- Removed
-    // userState, // <-- Removed
     custodialStakeBalance,
+    custodialStakes,
+    treasuryAddress,
     loading,
     error,
+    stake, // useCallback dep
+    unstake, // useCallback dep
+    fetchCustodialBalance, // useCallback dep
+    fetchCustodialStakes, // useCallback dep
     connected,
-    // refreshUserState, // <-- Removed
-    fetchCustodialBalance,
-    connectWallet,
-    disconnectWallet,
-    stake,
-    unstake
+    connectWallet, // useCallback dep
+    disconnectWallet, // useCallback dep
   ]);
 
   return <SolanaContext.Provider value={value}>{children}</SolanaContext.Provider>;
