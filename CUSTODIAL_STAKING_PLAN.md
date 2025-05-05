@@ -40,7 +40,7 @@ This document outlines the plan to implement a simplified, custodial staking mec
         *   **(Completed & Verified Working):** Authenticated endpoint. Calculates and returns correct balance using `BigInt` internally, returns standard decimal units.
     *   `GET /api/staking/stakes`:
         *   **(Completed):** Authenticated endpoint to fetch deposit history (`custodial_stakes`) for the user.
-    *   **(Optional) `GET /api/staking/withdrawals`:** Authenticated endpoint to fetch withdrawal history (`custodial_withdrawals`).
+    *   **(TODO) `GET /api/staking/transactions`:** Authenticated endpoint to fetch tx history (`custodial_transactions`).
 
 5.  **Frontend (`SolanaContext`, `app/wallet/page.tsx`):**
     *   `SolanaContext.tsx`:
