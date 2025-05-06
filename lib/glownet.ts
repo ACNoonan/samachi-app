@@ -223,13 +223,11 @@ async function createGlownetCustomer(
     }
   }
   
-  // If no username or no space in username, derive from email
   if (!firstName) {
     firstName = userProfile.email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '') || 'User';
   }
-  // Ensure lastName has a value if Glownet requires it, even if it's a placeholder
   if (!determinedLastName) {
-    determinedLastName = '-'; // Placeholder if last name is mandatory and not derived
+    determinedLastName = '-'; 
   }
 
   const payload = {
@@ -238,23 +236,36 @@ async function createGlownetCustomer(
       first_name: firstName,
       last_name: determinedLastName, 
       send_welcome_email: false,
-      // Add any other fields required by Glownet, e.g., consent fields
-      // "consent_marketing": true,
-      // "consent_analytics": true
     },
   };
   console.log(`[Glownet] Creating customer in Event ${glownetEventId} with payload:`, JSON.stringify(payload));
 
   try {
     const newCustomer = await makeGlownetRequest<GlownetAPICustomer>(endpoint, 'POST', payload);
+
+    // If creation returned a 201 with an empty body, newCustomer might be {} (truthy) but newCustomer.id would be undefined.
+    // In this case, try to immediately fetch the customer by email as they should now exist.
+    if (newCustomer && !newCustomer.id) {
+      console.log(`[Glownet] Customer creation POST returned 201 but no ID in response body. Attempting to re-fetch by email: ${userProfile.email}`);
+      const fetchedCustomer = await searchGlownetCustomerByEmail(glownetEventId, userProfile.email);
+      if (fetchedCustomer && fetchedCustomer.id) {
+        console.log(`[Glownet] Successfully re-fetched customer by email after creation:`, fetchedCustomer);
+        return fetchedCustomer;
+      } else {
+        console.error(`[Glownet] Failed to re-fetch customer by email after 201 creation. This is unexpected if creation was truly successful.`);
+        return null; // Or handle as a more critical error if necessary
+      }
+    }
+
     if (newCustomer && newCustomer.id) {
-      console.log(`[Glownet] Customer created successfully in Event ${glownetEventId}:`, newCustomer);
+      console.log(`[Glownet] Customer created successfully (ID from POST response) in Event ${glownetEventId}:`, newCustomer);
       return newCustomer;
     }
-    console.error(`[Glownet] Failed to create customer (or invalid response) in Event ${glownetEventId}. Response:`, newCustomer);
+    
+    console.log(`[Glownet] Failed to create customer (or response invalid/no ID) in Event ${glownetEventId}. Response:`, newCustomer);
     return null;
   } catch (error) {
-    console.error(`[Glownet] Error creating customer in Event ${glownetEventId}:`, error);
+    console.error(`[Glownet] Error during createGlownetCustomer for ${userProfile.email} in Event ${glownetEventId}:`, error);
     return null;
   }
 }

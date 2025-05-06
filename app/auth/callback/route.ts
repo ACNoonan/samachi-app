@@ -241,7 +241,6 @@ export async function GET(request: NextRequest) {
         venue_id: venueId,
         card_id: cardData.id, // Use the UUID of the membership_cards record
         glownet_customer_id: glownetCustomerId,
-        glownet_event_id: glownetEventId, // Store the glownet_event_id on the membership
         status: 'active',
       });
 

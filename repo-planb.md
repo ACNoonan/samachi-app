@@ -4,18 +4,27 @@
 ├── README.md
 ├── app
     ├── api
+    │   ├── auth
+    │   │   └── otp
+    │   │   │   └── register-and-claim
+    │   │   │       └── route.ts
     │   ├── card-status
     │   │   └── route.ts
     │   ├── cards
     │   │   └── sync-glownet
     │   │   │   └── route.ts
-    │   ├── create-profile-and-claim
-    │   │   └── route.ts
     │   ├── memberships
     │   │   ├── [membershipId]
     │   │   │   └── check-in-status
     │   │   │   │   └── route.ts
+    │   │   ├── check-in
+    │   │   │   └── route.ts
+    │   │   ├── check-out
+    │   │   │   └── route.ts
     │   │   └── route.ts
+    │   ├── profile
+    │   │   └── link-wallet
+    │   │   │   └── route.ts
     │   ├── staking
     │   │   ├── balance
     │   │   │   └── route.ts
@@ -37,13 +46,15 @@
     │   └── wallet
     │   │   └── glownet-details
     │   │       └── route.ts
+    ├── auth
+    │   └── callback
+    │   │   └── route.ts
     ├── card
-    │   └── [card_id]
+    │   ├── [card_id]
+    │   │   └── page.tsx
+    │   └── claim-error
     │   │   └── page.tsx
     ├── components
-    │   ├── auth
-    │   │   ├── ConnectWallet.tsx
-    │   │   └── CreateProfileForm.tsx
     │   ├── debug
     │   │   └── AuthDebug.tsx
     │   ├── discover
@@ -122,8 +133,6 @@
     ├── context
     │   ├── AuthContext.tsx
     │   └── SolanaContext.tsx
-    ├── create-profile
-    │   └── page.tsx
     ├── dashboard
     │   ├── loading.tsx
     │   └── page.tsx
@@ -148,18 +157,20 @@
     └── wallet
     │   ├── loading.tsx
     │   └── page.tsx
+├── glownet_api_docs.json
 ├── lib
     ├── auth.ts
+    ├── constants.ts
     ├── database.types.ts
     ├── glownet.ts
     ├── supabase
     │   ├── client.ts
     │   ├── middleware.ts
     │   └── server.ts
+    ├── tweetnacl.d.ts
     └── utils.ts
 ├── middleware.ts
 ├── next.config.mjs
-├── package-lock.json
 ├── package.json
 ├── pnpm-lock.yaml
 ├── pnpm-workspace.yaml
@@ -199,7 +210,6 @@
     ├── sync_venues.py
     └── venue_images.json
 ├── repo-planb.md
-├── repo.md
 ├── schema.sql
 ├── scripts
     ├── sync-cards.ts
