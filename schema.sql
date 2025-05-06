@@ -635,3 +635,38 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 
 
 RESET ALL;
+
+-- Enable Row Level Security for memberships
+ALTER TABLE public.memberships ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Allow authenticated users to read their own memberships
+CREATE POLICY "Allow authenticated users to read their own memberships"
+ON public.memberships
+FOR SELECT
+TO authenticated
+USING (auth.uid() = user_id);
+
+-- Policy: Allow service_role to bypass RLS for memberships (optional, but common for admin tasks)
+CREATE POLICY "Allow service_role to access all memberships"
+ON public.memberships
+FOR ALL
+TO service_role
+USING (true);
+
+
+-- Enable Row Level Security for venues
+ALTER TABLE public.venues ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Allow authenticated users to read all venues
+CREATE POLICY "Allow authenticated users to read all venues"
+ON public.venues
+FOR SELECT
+TO authenticated
+USING (true);
+
+-- Policy: Allow service_role to bypass RLS for venues (optional)
+CREATE POLICY "Allow service_role to access all venues"
+ON public.venues
+FOR ALL
+TO service_role
+USING (true);

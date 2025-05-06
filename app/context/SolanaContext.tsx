@@ -3,7 +3,8 @@ import { useConnection, useWallet, useAnchorWallet } from '@solana/wallet-adapte
 import { PublicKey, SystemProgram, TransactionMessage, VersionedTransaction, Transaction } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress, createTransferInstruction } from '@solana/spl-token';
 import { toast } from 'sonner';
-import type { Database } from '@/lib/database.types'; // Import Database type if not already present
+import type { Database } from '@/lib/database.types';
+import { useAuth } from './AuthContext'; // <-- Import useAuth
 
 // Assuming CustodialStake type is defined in database.types.ts
 type CustodialStake = Database['public']['Tables']['custodial_stakes']['Row'];
@@ -57,9 +58,10 @@ const SolanaContext = createContext<SolanaContextType>({
 });
 
 export function SolanaProvider({ children }: { children: React.ReactNode }) {
+  const { user: authUser, isLoading: isAuthLoading } = useAuth(); // <-- Use AuthContext
   const { connection } = useConnection();
-  const { connected, connect, disconnect, publicKey, sendTransaction } = useWallet(); // Added sendTransaction
-  const anchorWallet = useAnchorWallet(); // Still potentially useful for signing, though sendTransaction is preferred
+  const { connected, connect, disconnect, publicKey, sendTransaction, signMessage } = useWallet(); // Added sendTransaction & signMessage
+  const anchorWallet = useAnchorWallet();
 
   const [custodialStakeBalance, setCustodialStakeBalance] = useState<number | null>(null);
   const [custodialStakes, setCustodialStakes] = useState<CustodialStake[]>([]);
@@ -79,10 +81,16 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
 
   // --- Fetch Custodial Stakes --- 
   const fetchCustodialStakes = useCallback(async () => {
+    if (isAuthLoading || !authUser) {
+      console.log("SolanaContext: Auth not ready, skipping fetchCustodialStakes.");
+      setCustodialStakes([]);
+      return;
+    }
     if (!connected || !publicKey) {
       setCustodialStakes([]);
       return;
     }
+    // setLoading(true); // Managed by fetchCustodialBalance
     try {
       const response = await fetch('/api/staking/stakes');
       if (!response.ok) {
@@ -93,39 +101,45 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
       setCustodialStakes(Array.isArray(data) ? data : []);
       console.log("SolanaContext: Fetched stakes:", data);
     } catch (err) {
-      // Don't show toast here, let balance fetching handle combined errors
       console.error("Error fetching custodial stakes:", err);
       setError((prev) => prev ? `${prev}\nFailed to fetch stakes.` : "Failed to fetch stakes.");
       setCustodialStakes([]);
+    } finally {
+      // setLoading(false); // Managed by fetchCustodialBalance
     }
-  }, [connected, publicKey]);
+  }, [isAuthLoading, authUser, connected, publicKey]);
 
   // --- Fetch Custodial Balance (and Stakes) --- 
   const fetchCustodialBalance = useCallback(async () => {
+    if (isAuthLoading || !authUser) {
+      console.log("SolanaContext: Auth not ready, skipping fetchCustodialBalance.");
+      setCustodialStakeBalance(null);
+      setCustodialStakes([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     if (!connected || !publicKey) {
       setCustodialStakeBalance(null);
       setCustodialStakes([]);
       setError(null);
+      setLoading(false); // Also ensure loading is false if wallet not connected
       return;
     }
 
     setLoading(true);
-    setError(null); // Clear previous errors before fetching
+    setError(null);
     try {
-      // Fetch balance
       const balanceResponse = await fetch('/api/staking/balance');
       if (!balanceResponse.ok) {
         const errorData = await balanceResponse.json().catch(() => ({}));
         throw new Error(`Balance fetch error: ${errorData.message || balanceResponse.statusText}`);
       }
       const balanceData = await balanceResponse.json();
-      // Revert: Use the 'balance' field directly from the API response
       setCustodialStakeBalance(balanceData.balance ?? 0);
-      // Log the balance received from the API
       console.log("SolanaContext: Fetched balance from API:", balanceData.balance);
 
-      // Fetch stakes
-      await fetchCustodialStakes();
+      await fetchCustodialStakes(); // Fetch stakes after balance
 
     } catch (err) {
       handleError("Could not fetch staking data", err);
@@ -134,22 +148,27 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [connected, publicKey, fetchCustodialStakes]); // Added fetchCustodialStakes dep
+  }, [isAuthLoading, authUser, connected, publicKey, fetchCustodialStakes]);
 
   // --- Effect to Fetch Balance on Connect --- 
   useEffect(() => {
-    if (connected && publicKey) {
-      console.log("Wallet connected, fetching custodial balance & stakes...");
+    if (!isAuthLoading && authUser && connected && publicKey) {
+      console.log("SolanaContext: Auth ready, Wallet connected, fetching custodial balance & stakes...");
       fetchCustodialBalance();
     } else {
+      console.log("SolanaContext: Conditions not met for initial balance fetch.", { isAuthLoading, hasAuthUser: !!authUser, connected, hasPublicKey: !!publicKey });
       setCustodialStakeBalance(null);
       setCustodialStakes([]);
-      setError(null);
+      setError(null); // Clear error if conditions are not met
     }
-  }, [connected, publicKey, fetchCustodialBalance]);
+  }, [isAuthLoading, authUser, connected, publicKey, fetchCustodialBalance]);
 
   // --- Stake Function (Client-Side SPL Transfer) --- 
   const stake = useCallback(async (amount: number) => {
+    if (isAuthLoading || !authUser) {
+      handleError("Cannot stake: User not authenticated.");
+      return;
+    }
     if (!connected || !publicKey || !connection || !treasuryAddress || !USDC_MINT || !sendTransaction) {
       handleError("Cannot stake: Wallet not connected, config missing, or cannot send transactions.");
       return;
@@ -229,11 +248,15 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
     } finally {
         // setLoading handled by handleError or end of try block
     }
-  }, [connected, publicKey, connection, treasuryAddress, sendTransaction, fetchCustodialBalance]); // Dependencies
+  }, [isAuthLoading, authUser, connected, publicKey, connection, treasuryAddress, sendTransaction, fetchCustodialBalance]); // Dependencies
 
   // --- Unstake Function (Calls Backend API) --- 
   const unstake = useCallback(async (amount: number) => {
-    if (!connected) {
+    if (isAuthLoading || !authUser) {
+      handleError("Cannot unstake: User not authenticated.");
+      return;
+    }
+    if (!connected) { // Wallet check still relevant for user experience, even if API auth is primary
       toast.error("Cannot Unstake", { description: "Wallet not connected." });
       return;
     }
@@ -247,32 +270,36 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
     try {
       toast.info("Requesting Unstake...", { description: `Amount: ${amount} USDC` });
 
-      const response = await fetch('/api/staking/unstake', { // Correct endpoint
+      const response = await fetch('/api/staking/unstake', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: amount }), // Send amount in standard units
+        body: JSON.stringify({ amount }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to unstake: ${response.statusText}`);
+        throw new Error(errorData.message || `Unstake failed: ${response.statusText}`);
       }
 
       const result = await response.json();
-      toast.success("Unstake Successful", {
-        description: result.message || `Successfully unstaked ${amount} USDC. Tx: ${result.signature?.substring(0, 10)}...`,
+      toast.success("Unstake Request Successful!", {
+        description: result.message || `Successfully initiated unstake of ${amount} USDC. Balance will update shortly.`,
         duration: 8000
       });
 
-      // Refresh data immediately
-      await fetchCustodialBalance();
+      // Refresh balance after a short delay to allow backend processing
+      setTimeout(() => {
+        console.log("Triggering balance refresh after unstake...");
+        fetchCustodialBalance();
+      }, 5000); // Shorter delay for unstake as it might be faster
 
     } catch (err) {
+      toast.dismiss(); // Dismiss loading toast if any
       handleError("Unstake failed", err);
     } finally {
-        // setLoading handled by handleError or end of try block
+      setLoading(false);
     }
-  }, [connected, fetchCustodialBalance]); // Dependencies
+  }, [isAuthLoading, authUser, connected, fetchCustodialBalance]);
 
   // --- Wallet Connect/Disconnect Handlers --- 
   const connectWallet = useCallback(async () => {

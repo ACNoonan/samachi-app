@@ -11,10 +11,9 @@ interface Profile {
     id: string;
     username?: string;
     email?: string;
-    name?: string;
-    walletAddress?: string;
-    twitter?: string;
-    telegram?: string;
+    wallet_address?: string;
+    twitter_handle?: string;
+    telegram_handle?: string;
     // Add other relevant profile fields from your 'profiles' table
 }
 
@@ -26,6 +25,7 @@ interface AuthContextType {
   isLoading: boolean; // Loading state for initial auth check
   isProfileLoading: boolean; // Loading state specifically for profile data
   logout: () => Promise<void>;
+  fetchProfile: (userId: string) => Promise<void>;
   // Add specific sign-in methods if needed, or components can use supabase.auth directly
 }
 
@@ -230,8 +230,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     profile,
     isLoading,
     isProfileLoading, // Add new state
-    logout
-  }), [supabase, session, user, profile, isLoading, isProfileLoading]); // Update dependencies
+    logout,
+    fetchProfile // <-- Expose fetchProfile here
+  }), [supabase, session, user, profile, isLoading, isProfileLoading, fetchProfile]); // Update dependencies
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

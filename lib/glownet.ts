@@ -22,7 +22,7 @@ async function makeGlownetRequest<T = any>(
   body?: Record<string, any>
 ): Promise<T> {
   if (!GLOWNET_API_KEY) {
-    console.error('CRITICAL: Glownet API key (GLOWNET_API_KEY) is not configured in environment variables.');
+    console.error('[Glownet] CRITICAL: Glownet API key (GLOWNET_API_KEY) is not configured.');
     throw new Error('Glownet API key is not configured.');
   }
 
@@ -42,53 +42,44 @@ async function makeGlownetRequest<T = any>(
     options.body = JSON.stringify(body);
   }
 
+  console.log(`[Glownet] Request: ${method} ${url}`, body ? `Body: ${JSON.stringify(body)}` : '');
   try {
-    console.log(`Making Glownet Request: ${method} ${url}`, body ? `with body: ${JSON.stringify(body)}` : '');
     const response = await fetch(url, options);
+    let responseText = await response.text(); // Read text early for all responses
 
     if (!response.ok) {
       let errorData: GlownetErrorResponse = {};
-      let responseText = '';
       try {
-        // Try to read response text first for better debugging
-        responseText = await response.text();
         errorData = JSON.parse(responseText);
       } catch (parseError) {
-        // Ignore if response body is not JSON, use the text
-        console.warn(`Glownet API response for ${method} ${url} was not valid JSON:`, responseText);
+        console.warn(`[Glownet] API response for ${method} ${url} (Status: ${response.status}) was not valid JSON:`, responseText);
       }
       
       const errorMessage = 
         errorData.error || 
         errorData.message || 
         (errorData.errors ? JSON.stringify(errorData.errors) : null) || 
-        responseText || // Use raw text if no specific error field found
+        responseText || 
         `Glownet API request failed with status ${response.status}`;
         
-      console.error(`Glownet API Error (${method} ${url}): Status ${response.status}, Message: ${errorMessage}`, errorData);
-      // Throw a new error with the specific message
+      console.error(`[Glownet] API Error: ${method} ${url} (Status: ${response.status}) Message: ${errorMessage}`, errorData);
       throw new Error(`Glownet API Error: ${errorMessage}`);
     }
 
-    // Handle potential empty response for success codes like 201/204
-    if (response.status === 201 || response.status === 204 || response.headers.get('Content-Length') === '0') {
-        console.log(`Glownet Response (${method} ${url}): Status ${response.status} (No Content or Created)`);
-        return {} as T; // Return an empty object or appropriate type
+    if (response.status === 201 || response.status === 204 || responseText.length === 0) {
+        console.log(`[Glownet] Response: ${method} ${url} (Status: ${response.status}, No/Empty Content)`);
+        return {} as T;
     }
     
-    // Try parsing JSON only if there's content
-    const responseData = await response.json();
-    console.log(`Glownet Response (${method} ${url}):`, responseData);
+    const responseData = JSON.parse(responseText); // Already have text, parse it
+    console.log(`[Glownet] Response: ${method} ${url} (Status: ${response.status}) Data:`, responseData);
     return responseData as T;
 
   } catch (error: any) {
-    // Log the specific error encountered during fetch or processing
-    console.error(`Error during Glownet API call to ${method} ${url}:`, error);
-    // Re-throw the specific error message if it was already processed, otherwise create a generic one
+    console.error(`[Glownet] Network/Fetch Error: ${method} ${url}:`, error);
     if (error.message.startsWith('Glownet API Error:')) {
-        throw error; // Re-throw the specific API error
+        throw error;
     }
-    // Throw a more generic error for network issues etc.
     throw new Error(`Failed to communicate with Glownet API: ${error.message}`); 
   }
 }
@@ -109,8 +100,7 @@ export async function glownetVirtualTopup(
   const amountInCents = Math.round(amountStandardUnits * GLOWNET_UNIT_MULTIPLIER);
   
   if (amountInCents <= 0) {
-    console.warn(`glownetVirtualTopup: Attempted top-up with zero or negative amount (${amountStandardUnits}), skipping API call.`);
-    // Consider if throwing an error is more appropriate for negative amounts
+    console.warn(`[Glownet] glownetVirtualTopup: Attempted top-up with zero/negative amount (${amountStandardUnits}), skipping.`);
     return; 
   }
 
@@ -124,61 +114,245 @@ export async function glownetVirtualTopup(
 
   try {
     await makeGlownetRequest<void>(endpoint, 'POST', payload);
-    console.log(`Glownet virtual top-up successful for customer ${customerId}, event ${eventId}, amount ${amountStandardUnits} (Sent as ${amountInCents} credits)`);
+    console.log(`[Glownet] Virtual top-up success: Customer ${customerId}, Event ${eventId}, Amount ${amountStandardUnits}`);
   } catch (error) {
-      console.error(`Failed Glownet virtual top-up for customer ${customerId}, event ${eventId}, amount ${amountStandardUnits}. Error:`, error);
-      // Re-throw to allow calling function to handle failure (e.g., prevent DB update)
+      console.error(`[Glownet] Virtual top-up failed: Customer ${customerId}, Event ${eventId}, Amount ${amountStandardUnits}. Error:`, error);
       throw error; 
   }
 }
 
 // Interface for the relevant parts of the Glownet Customer response
-interface GlownetCustomerResponse {
+export interface GlownetCustomer {
     id: number;
-    virtual_money: number | null; // Can be null according to some API responses? Handle null.
+    virtual_money: number | null; 
     money?: number | null; 
+    balances?: any; // Add balances, define more strictly if structure is known
     // Add other fields if needed (e.g., first_name, last_name for logging)
 }
 
 /**
- * Gets the virtual balance for a customer from Glownet.
+ * Gets customer details from Glownet.
  * @param eventId Glownet event ID or slug.
  * @param customerId Glownet customer ID.
- * @returns Promise<number> The customer's virtual balance in standard currency units (e.g., 1.50).
- * @throws Error if API call fails or virtual_money is missing/unexpected.
+ * @returns Promise<GlownetCustomer> The customer's details.
+ * @throws Error if API call fails.
  */
-export async function getGlownetCustomerVirtualBalance(
+export async function getGlownetCustomerDetails(
     eventId: number | string,
     customerId: number
-): Promise<number> {
+): Promise<GlownetCustomer> {
     const endpoint = `/events/${eventId}/customers/${customerId}`;
-    
+    console.log(`[Glownet] getGlownetCustomerDetails: Fetching for Event ${eventId}, Customer ${customerId}`);
     try {
-        const customerData = await makeGlownetRequest<GlownetCustomerResponse>(endpoint, 'GET');
-
-        // Explicitly check for null or undefined
-        if (customerData.virtual_money === undefined || customerData.virtual_money === null) {
-            console.error(`Glownet customer ${customerId} response for event ${eventId} is missing or has null 'virtual_money' field.`);
-            // Decide on behavior: throw error or return 0? Throwing is safer to indicate data issue.
-            throw new Error(`Could not retrieve valid virtual balance for Glownet customer ${customerId}.`); 
+        const customerData = await makeGlownetRequest<GlownetCustomer>(endpoint, 'GET');
+        if (!customerData || !customerData.id) { // Added check for id
+            console.error(`[Glownet] No valid data (or ID missing) from Glownet for customer ${customerId}, event ${eventId}. Response:`, customerData);
+            throw new Error(`No valid data received from Glownet for customer ${customerId}, event ${eventId}.`);
         }
-
-        const balanceInCents = customerData.virtual_money;
-        // Ensure it's a valid number before division
-        if (typeof balanceInCents !== 'number') {
-            throw new Error(`Invalid virtual balance type received from Glownet for customer ${customerId}: ${typeof balanceInCents}`);
-        }
-        
-        const balanceStandardUnits = balanceInCents / GLOWNET_UNIT_MULTIPLIER;
-
-        console.log(`Glownet virtual balance fetched for customer ${customerId}, event ${eventId}: ${balanceStandardUnits} (Received as ${balanceInCents})`);
-        return balanceStandardUnits;
-
+        console.log(`[Glownet] Customer details fetched: Event ${eventId}, Customer ${customerId}:`, customerData);
+        return customerData;
     } catch (error) {
-        console.error(`Failed to get Glownet virtual balance for customer ${customerId}, event ${eventId}. Error:`, error);
-        // Re-throw to allow calling function to handle failure
+        console.error(`[Glownet] Failed to get customer details: Event ${eventId}, Customer ${customerId}. Error:`, error);
         throw error; 
     }
 }
 
 // Add other Glownet helper functions as needed 
+
+// Interface for Glownet API Customer (Subset of fields)
+interface GlownetAPICustomer {
+  id: number; // Actually a string in API docs, but example shows integer. Assuming number based on existing GlownetCustomer.id
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  // Add other fields if needed from Glownet API documentation
+}
+
+/**
+ * Searches for a Glownet customer by email within a specific event.
+ * @param glownetEventId Glownet event ID or slug.
+ * @param email Email of the customer to search for.
+ * @returns Promise<GlownetAPICustomer | null> The customer object if found, otherwise null.
+ */
+async function searchGlownetCustomerByEmail(
+  glownetEventId: number | string,
+  email: string
+): Promise<GlownetAPICustomer | null> {
+  const endpoint = `/events/${glownetEventId}/customers/search`;
+  const payload = { email };
+  console.log(`[Glownet] searchGlownetCustomerByEmail: Searching for email ${email} in Event ${glownetEventId}`);
+  try {
+    const customer = await makeGlownetRequest<GlownetAPICustomer>(endpoint, 'POST', payload);
+    if (customer && customer.id) {
+      console.log(`[Glownet] Customer found by email ${email} in Event ${glownetEventId}:`, customer);
+      return customer;
+    }
+    console.log(`[Glownet] Customer with email ${email} NOT FOUND (or response invalid) in Event ${glownetEventId}. Response:`, customer);
+    return null;
+  } catch (error: any) {
+    if (error.message && (error.message.includes('Status 404') || error.message.toLowerCase().includes('couldn\'t find resource') || error.message.toLowerCase().includes('not found'))) {
+      console.log(`[Glownet] Customer with email ${email} not found in Event ${glownetEventId} (API 404).`);
+      return null;
+    }
+    console.error(`[Glownet] Error searching customer by email ${email} in Event ${glownetEventId}:`, error);
+    return null; 
+  }
+}
+
+/**
+ * Creates a new customer in Glownet for a specific event.
+ * @param glownetEventId Glownet event ID or slug.
+ * @param userProfile Object containing user details (email, username).
+ * @returns Promise<GlownetAPICustomer | null> The created customer object, or null on failure.
+ */
+async function createGlownetCustomer(
+  glownetEventId: number | string,
+  userProfile: { email: string; username?: string }
+): Promise<GlownetAPICustomer | null> {
+  const endpoint = `/events/${glownetEventId}/customers`;
+  console.log(`[Glownet] createGlownetCustomer: Attempting to create customer for email ${userProfile.email} in Event ${glownetEventId}`, userProfile);
+  
+  let firstName = '';
+  let determinedLastName = '';
+
+  if (userProfile.username && userProfile.username.trim()) {
+    const nameParts = userProfile.username.trim().split(' ');
+    firstName = nameParts[0];
+    if (nameParts.length > 1) {
+      determinedLastName = nameParts.slice(1).join(' ');
+    }
+  }
+  
+  // If no username or no space in username, derive from email
+  if (!firstName) {
+    firstName = userProfile.email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '') || 'User';
+  }
+  // Ensure lastName has a value if Glownet requires it, even if it's a placeholder
+  if (!determinedLastName) {
+    determinedLastName = '-'; // Placeholder if last name is mandatory and not derived
+  }
+
+  const payload = {
+    customer: {
+      email: userProfile.email,
+      first_name: firstName,
+      last_name: determinedLastName, 
+      send_welcome_email: false,
+      // Add any other fields required by Glownet, e.g., consent fields
+      // "consent_marketing": true,
+      // "consent_analytics": true
+    },
+  };
+  console.log(`[Glownet] Creating customer in Event ${glownetEventId} with payload:`, JSON.stringify(payload));
+
+  try {
+    const newCustomer = await makeGlownetRequest<GlownetAPICustomer>(endpoint, 'POST', payload);
+    if (newCustomer && newCustomer.id) {
+      console.log(`[Glownet] Customer created successfully in Event ${glownetEventId}:`, newCustomer);
+      return newCustomer;
+    }
+    console.error(`[Glownet] Failed to create customer (or invalid response) in Event ${glownetEventId}. Response:`, newCustomer);
+    return null;
+  } catch (error) {
+    console.error(`[Glownet] Error creating customer in Event ${glownetEventId}:`, error);
+    return null;
+  }
+}
+
+
+/**
+ * Gets an existing Glownet customer ID or creates a new one for the user.
+ * @param glownetEventId Glownet event ID or slug (number or string).
+ * @param userProfile Object containing user details like email and username.
+ *                  `email` is required. `username` is used for first/last name if creating.
+ * @returns Promise<number | null> The Glownet customer ID, or null if operation failed.
+ */
+export async function getOrCreateGlownetCustomer(
+  glownetEventId: number | string,
+  userProfile: { email?: string; username?: string }
+): Promise<number | null> {
+  console.log('[Glownet] getOrCreateGlownetCustomer called with:', { glownetEventId, userProfile });
+
+  if (!userProfile.email || userProfile.email.trim() === '') {
+    console.error('[Glownet] CRITICAL: getOrCreateGlownetCustomer called without a valid email.');
+    return null;
+  }
+  const email = userProfile.email.trim();
+
+  try {
+    console.log(`[Glownet] Attempting to find existing customer by email: ${email} in Event: ${glownetEventId}`);
+    let customer = await searchGlownetCustomerByEmail(glownetEventId, email);
+
+    if (customer && customer.id) {
+      console.log(`[Glownet] Found existing customer ID: ${customer.id} for email: ${email}`);
+      return customer.id;
+    }
+
+    console.log(`[Glownet] No existing customer found for email: ${email}. Attempting to create new customer in Event: ${glownetEventId}`);
+    const newCustomer = await createGlownetCustomer(glownetEventId, { ...userProfile, email }); // Pass full userProfile along with trimmed email
+
+    if (newCustomer && newCustomer.id) {
+      console.log(`[Glownet] Successfully created new customer ID: ${newCustomer.id} for email: ${email}`);
+      return newCustomer.id;
+    }
+    
+    console.error(`[Glownet] Failed to create new customer for email: ${email} after search also failed.`);
+    return null;
+
+  } catch (error) {
+    console.error(`[Glownet] Unhandled error in getOrCreateGlownetCustomer for email ${email}, Event ${glownetEventId}:`, error);
+    return null;
+  }
+} 
+
+/**
+ * Fetches the summary of Glownet events, customers, and cards.
+ * This is an example and might need adjustment based on actual Glownet API capabilities.
+ */
+export async function getGlownetSummary(): Promise<any> {
+  console.log('[Glownet] Attempting to fetch Glownet summary data...');
+  try {
+    // Example: Fetch list of events (if such an endpoint exists)
+    // const events = await makeGlownetRequest<any[]>('/events', 'GET');
+    // console.log('[Glownet] Fetched events:', events);
+
+    // This function would need to be more specific based on what summary data is needed
+    // and what the Glownet API offers. For now, it's a placeholder.
+    console.warn('[Glownet] getGlownetSummary is a placeholder and does not fetch real summary data yet.');
+    return {
+      message: "Glownet summary data is not yet implemented.",
+      // eventsCount: events?.length || 0,
+      // Placeholder data
+      activeCustomers: 0,
+      totalNFCChips: 0,
+    };
+  } catch (error) {
+    console.error('[Glownet] Error fetching Glownet summary:', error);
+    throw error; // Re-throw the error to be handled by the caller
+  }
+}
+
+/**
+ * Resets a customer's tag in Glownet (zeroes out balance and optionally clears products).
+ * @param eventId Glownet event ID or slug.
+ * @param customerId Glownet customer ID.
+ * @returns Promise<void>
+ * @throws Error if API call fails.
+ */
+export async function resetGlownetCustomerTag(
+  eventId: number | string,
+  customerId: number
+): Promise<void> {
+  const endpoint = `/events/${eventId}/customers/${customerId}/reset_tag`;
+  console.log(`[Glownet] resetGlownetCustomerTag: Resetting tag for Event ${eventId}, Customer ${customerId}`);
+  try {
+    // According to some Glownet API docs, reset_tag might be a POST request
+    // It might not have a request body or could have options like { clear_products: true }
+    // Assuming no body for a simple reset here.
+    await makeGlownetRequest<void>(endpoint, 'POST', {}); // Sending empty body as POST might require it
+    console.log(`[Glownet] Customer tag reset successfully: Event ${eventId}, Customer ${customerId}`);
+  } catch (error) {
+    console.error(`[Glownet] Failed to reset customer tag: Event ${eventId}, Customer ${customerId}. Error:`, error);
+    throw error;
+  }
+} 

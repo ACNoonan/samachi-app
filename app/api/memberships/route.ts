@@ -43,8 +43,8 @@ export async function GET(request: NextRequest) {
         id,
         status,
         created_at,
-        user_id, // Keep user_id for potential validation
-        venue_id, // Fetch venue_id for client-side confirmation if needed
+        user_id,
+        venue_id,
         venues (
           id,
           name,

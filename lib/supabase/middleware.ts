@@ -16,7 +16,8 @@ const SECURE_COOKIE_OPTIONS: CookieOptions = {
 const PUBLIC_PATHS = [
   '/login',
   '/card/',
-  '/create-profile'
+  '/create-profile',
+  '/auth/callback'
 ];
 
 // Define static file patterns to ignore

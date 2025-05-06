@@ -76,7 +76,7 @@ After this backend functionality is working, we'll implement the UI changes, cop
 
 1.  **Backend API (`POST /api/memberships/check-in`):**
     *   **Input:** `{ venueId: string }`.
-    *   **Auth:** Verify Supabase/JWT auth.
+    *   **Auth:** Verify Supabase session (user authenticated via OTP).
     *   **Validation:** Check if user has sufficient staked balance (> 0) and an active (`status='active'`) membership for the `venueId`.
     *   **Fetch Data:** Get user profile, membership (`glownet_customer_id`, `glownet_event_id`), current available staked balance.
     *   **Glownet Call:** Fund the user's Glownet tag with the available staked balance. **(Requires specific Glownet API details)**.
@@ -99,7 +99,7 @@ After this backend functionality is working, we'll implement the UI changes, cop
 
 1.  **Backend API (`POST /api/memberships/check-out`):**
     *   **Input:** `{ venueId: string }`.
-    *   **Auth:** Verify Supabase/JWT auth.
+    *   **Auth:** Verify Supabase session (user authenticated via OTP).
     *   **Validation:** Check if user has a membership for `venueId` with `status='checked-in'`.
     *   **Fetch Data:** Get user profile, membership (`glownet_customer_id`, `glownet_event_id`, `last_funded_amount`).
     *   **Glownet Call:** Get the amount spent or current balance for the user's tag since check-in. **(Requires specific Glownet API details)**.
@@ -121,26 +121,83 @@ After this backend functionality is working, we'll implement the UI changes, cop
     *   **Failure:** Glownet API call fails (get balance/spent) -> API returns 500/error, DB *not* updated.
     *   **Failure:** DB insert into `custodial_withdrawals` fails -> API returns 500/error, *potentially* need manual reconciliation (Glownet interaction might have succeeded). Log details.
 
-**Phase D: UI Refinement**
-*   Implement frontend UI based on Figma designs after backend logic is verified.
+**Phase D: User Onboarding & Card Registration Refinement**
 
-**Phase E: Deployment**
-*   Configure Helius webhook, environment variables (including Glownet keys) for production.
-*   Ensure Production Treasury Wallet is funded (SOL & potentially USDC).
+**Goal:** Implement a robust user onboarding flow where a user scans a membership card's QR code, lands on `/card/[card_identifier]`, and can register for Samachi via Email OTP. This process must also claim the specific card for the user, provision a Glownet customer identity for them at the associated venue, and correctly populate all necessary database fields (notably `memberships.glownet_customer_id` and `membership_cards.user_id`).
 
----
+**Prequisite for:** Full end-to-end testing of Phase B (Check-in) and Phase C (Check-out).
 
-## Original Testing Plan Sections (Archive - Completed)
+**Step 1: Audit Existing Registration & Onboarding Code - Summary of Findings**
 
-**(Original sections A, B, C for core staking/unstaking are archived here for reference but considered complete)**
+*   **Objective:** Understand current (potentially outdated or unused) registration mechanisms, identify reusable components/logic, and pinpoint areas for refactoring or replacement to support the new OTP flow and Glownet provisioning.
+*   **Audit Conclusions:**
+    *   **API Routes:**
+        *   `app/api/card-status/route.ts`: **Reusable.** Effectively checks card registration status.
+        *   `app/api/create-profile-and-claim/route.ts`: **Reference for Logic, Not Reusable Directly.** Contains useful patterns for database interactions (card validation, profile creation, membership record creation, card updates) and conceptual Glownet provisioning. However, its core email/password authentication mechanism is outdated for the OTP flow. Logic for deriving venue ID and Glownet interaction needs careful adaptation. (This file has since been deleted).
+        *   `app/api/auth/magic-link/send/route.ts`: **Non-Existent.** Confirms OTP sending will be client-initiated, and backend logic for post-OTP verification and claiming needs to be built (likely in an auth callback handler). (Note: `app/api/auth/otp/register-and-claim/route.ts` now serves this purpose for new user registration).
+    *   **Frontend Components:**
+        *   `app/card/[card_id]/page.tsx`: **Reusable.** Serves as a simple server-side wrapper for `CardLanding.tsx`.
+        *   `app/components/onboarding/CardLanding.tsx`: **Good Foundation, Needs Major Adaptation.** Handles card status display well. Needs significant changes to:
+            *   Embed an inline OTP registration form (Email, optional Username) when a card is 'unregistered'.
+            *   Call the new `POST /api/auth/otp/register-and-claim` API from this form.
+            *   Remove navigation to the old `/create-profile` page for unregistered cards.
+        *   `app/components/auth/CreateProfileForm.tsx`: **Example Form Structure.** Provides a good `react-hook-form` example but is tied to the old email/password flow via `/api/create-profile-and-claim`. Its structure can inform the new inline OTP form.
+    *   **Libraries & Utilities:**
+        *   `lib/auth.ts`: **Placeholder.** Currently minimal; can house future shared auth utilities.
+        *   `lib/glownet.ts`: **Needs Enhancement.** Contains `glownetVirtualTopup` and `getGlownetCustomerDetails`. Critically requires the new `async function getOrCreateGlownetCustomer(...)` as defined in the development plan below.
+    *   **Database Schema (`schema.sql`, `lib/database.types.ts`):** **Adequate.** The tables (`profiles`, `membership_cards`, `venues`, `memberships`) and their defined relationships (especially `membership_cards.glownet_event_id` linking to `venues.glownet_event_id`) support the planned onboarding flow. The `handle_new_user` trigger is crucial for initial profile creation via OTP metadata.
 
----
+**Step 2: Development Plan for OTP-Based Card Registration & Glownet Provisioning**
 
-**Future Considerations / Optional Improvements:** (No change from previous version)
+*   **(COMPLETED) Develop Glownet Utility (`lib/glownet.ts`):**
+    *   Task: Implemented `async function getOrCreateGlownetCustomer(glownetEventId: number | string, userProfile: { email?: string, username?: string }): Promise<number | null>`.
+    *   Details: This function searches for an existing Glownet customer by email for the given event or creates a new one, returning the `glownet_customer_id`.
+    *   Update: Modified to provide a placeholder for `last_name` during customer creation to satisfy Glownet API requirements.
 
-*   Add `GET /api/staking/withdrawals` endpoint and frontend display for withdrawal history.
-*   Implement robust error handling and user feedback (toasts) for all operations.
-*   Add RLS policies to `custodial_stakes` and `custodial_withdrawals`.
-*   GDPR Compliance
-*   Anchor smart contract development and integration (Superseded by custodial approach)
-*   Wallet creation & Credit card funding 
+*   **A. Frontend Flow (`/card/[card_identifier]` page & `CardLanding.tsx` component): (IN PROGRESS)**
+    1.  Fetches card status using `GET /api/card-status?card_id=[card_identifier]`.
+    2.  **If Card Unregistered:**
+        *   Displays an inline OTP registration form (Email only; username field removed) using `react-hook-form` and `zod`.
+        *   On submit, calls `POST /api/auth/otp/register-and-claim`.
+        *   Provides user feedback via toasts.
+    3.  **If Card Registered:**
+        *   Prompts for login.
+    *   Update: Optional username field removed from form and schema. Detailed logging added to `CardLanding.tsx` to diagnose a persistent "Loading..." issue.
+
+*   **B. Backend API Route (`POST /api/auth/otp/register-and-claim`): (COMPLETED)**
+    *   **File:** `app/api/auth/otp/register-and-claim/route.ts`
+    *   **Input:** `{ email: string, cardIdentifier: string }` (username removed).
+    *   **Processing:**
+        1.  **Send OTP:** Calls Supabase `supabase.auth.signInWithOtp({ email, options: { data: { card_identifier: cardIdentifier }, shouldCreateUser: true, emailRedirectTo: '/auth/callback' } })`. (Username removed from `options.data`).
+        2.  Returns a success message to the client.
+    *   Update: Username removed from schema, request handling, and OTP options. Ensured `NEXT_PUBLIC_SITE_URL` is correctly used for `emailRedirectTo`.
+
+*   **C. Backend Logic (Auth Callback Route Handler): (COMPLETED)**
+    *   **File:** `app/auth/callback/route.ts` (Handles `GET` requests)
+    *   This logic executes after the user clicks the OTP link and is redirected.
+    *   **Processing:**
+        1.  **Session Verification & User Retrieval:** Exchanges auth code for a session, retrieves the Supabase user.
+        2.  **Metadata Retrieval:** Extracts `card_identifier` from `user.user_metadata` (username no longer present).
+        3.  **Fetch/Update User Profile:** (Username update step skipped as username is not collected).
+        4.  **Validate Card.**
+        5.  **Determine Venue Association.**
+        6.  **Provision Glownet Customer ID.**
+        7.  **Database Updates.**
+        8.  **Redirects User.**
+    *   Update: Logic confirmed to handle missing username in metadata gracefully. Middleware (`lib/supabase/middleware.ts`) updated to make `/auth/callback` a public route.
+
+*   **(COMPLETED) Error Page (`/card/claim-error`):**
+    *   A simple page to display error messages passed via query parameters from the auth callback.
+
+**Current Status & Next Steps for Phase D (as of last interaction):**
+1.  **Issue:** The `/card/[card_id]` page (`CardLanding.tsx`) gets stuck on "Loading..." after a previous failed OTP attempt or when navigating to any card URL directly.
+2.  **Recent Actions:**
+    *   Removed optional username from OTP flow (frontend, backend API, callback).
+    *   Resolved initial OTP errors (missing `NEXT_PUBLIC_SITE_URL`, middleware block for `/auth/callback`, Glownet `last_name` requirement).
+    *   Added detailed logging to `CardLanding.tsx` to diagnose the "Loading..." state.
+3.  **Immediate Next Step:**
+    *   **Analyze console logs from `CardLanding.tsx`** (after user attempts to load a card page) to understand the state of `authLoading`, `user`, and `cardStatus`, and to check the behavior of the `/api/card-status` fetch call.
+4.  Address the linter error concerning `@supabase/ssr` imports in the local development environment.
+5.  Consider refactoring the database updates in `app/auth/callback/route.ts` into a Supabase Database Function for atomicity.
+
+Once these are done, Phase D will be fully complete, unblocking Phase B and C.
