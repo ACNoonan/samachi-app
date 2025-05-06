@@ -24,22 +24,26 @@ export async function GET(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
+        getAll() {
+          return cookieStore.getAll();
         },
-        set(name: string, value: string, options: CookieOptions) {
-          console.log('[AuthCallback] supabase.cookies.set CALLED', 
-            { 
-              name,
-              value, // Log the raw value from Supabase
-              options_from_supabase: { ...options } // Log options from Supabase
-            }
-          );
-          cookieStore.set({ name, value, ...options });
-        },
-        remove(name: string, options: CookieOptions) {
-          cookieStore.delete({ name, ...options });
-        },
+        setAll(cookiesToSet: Array<{ name: string; value: string; options: CookieOptions }>) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              console.log('[AuthCallback] supabase.cookies.setAll CALLED for:', 
+                { 
+                  name,
+                  value, // Log the raw value from Supabase
+                  options_from_supabase: { ...options } // Log options from Supabase
+                }
+              );
+              cookieStore.set(name, value, options);
+            });
+          } catch (error) {
+            // Handle potential errors during cookie setting
+            console.error('[AuthCallback] Error in setAll cookies:', error);
+          }
+        }
       },
     }
   );

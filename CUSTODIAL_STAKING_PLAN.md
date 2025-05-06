@@ -53,7 +53,6 @@ After this backend functionality is working, we'll implement the UI changes, cop
         *   **(Completed):** Authenticated endpoint to fetch deposit history (`custodial_stakes`) for the user.
     *   **(NEW) `POST /api/memberships/check-in`:** Handles venue check-in and Glownet funding.
     *   **(NEW) `POST /api/memberships/check-out`:** Handles venue check-out and settlement against staked balance.
-    *   **(Optional) `GET /api/staking/withdrawals`:** Fetch withdrawal/settlement history.
 
 5.  **Frontend (`SolanaContext`, `app/wallet/page.tsx`, Venue Pages):**
     *   `SolanaContext.tsx`:
@@ -134,7 +133,7 @@ Due to issues with the OTP flow (specifically, getting stuck on "Loading..." scr
 *   **Overall Goal of Emergency Plan:** Fix the Supabase OTP email login flow, making it stable.
 *   **Phase 0: Preparation & Clean Slate (Status: COMPLETED by user)**
     *   Tasks: Commit to Git, new branch (`emergency-auth-refactor`), clear browser data, verify environment variables (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SITE_URL`).
-*   **Phase 1: Strip Down to Core OTP Login - Isolate Supabase & Middleware (Status: IN PROGRESS)**
+*   **Phase 1: Strip Down to Core OTP Login - Isolate Supabase & Middleware (Status: COMPLETED & VERIFIED)**
     *   **Objective:** Verify basic Supabase OTP login and session management works independently of card registration.
     *   **Tasks & Current Status:**
         *   **Minimal Login Page (`app/login/page.tsx`):**
@@ -144,13 +143,13 @@ Due to issues with the OTP flow (specifically, getting stuck on "Loading..." scr
         *   **Minimal Protected Page (`app/dashboard/page.tsx`):**
             *   Intended to be used as the protected route for this test.
             *   Requires server-side authentication logic (e.g., using `createServerComponentClient` from `@supabase/ssr` or equivalent) to fetch user and redirect if unauthenticated.
-            *   **Status: Awaiting review of page contents to confirm server-side auth logic.**
+            *   **Status: CORRECTED (Switched from `@supabase/auth-helpers-nextjs` to `@supabase/ssr` for `createServerClient`). VERIFIED WORKING.**
         *   **Middleware (`lib/supabase/middleware.ts` and root `middleware.ts`):**
-            *   `lib/supabase/middleware.ts`: Revised to correctly refresh sessions for pages AND API routes, and to apply redirection logic appropriately.
+            *   `lib/supabase/middleware.ts`: Revised to correctly refresh sessions for pages AND API routes, and to apply redirection logic appropriately. Cookie handling updated to `getAll`/`setAll`.
             *   Root `middleware.ts`: Corrected to include the necessary `config` object with the `matcher`.
             *   **Status: UPDATED & CORRECTED.**
         *   **Auth Callback (`app/auth/callback/route.ts`):**
-            *   Modified to handle OTP callbacks *without* `card_identifier` in `user.user_metadata`.
+            *   Modified to handle OTP callbacks *without* `card_identifier` in `user.user_metadata`. Cookie handling updated to `getAll`/`setAll`.
             *   If `card_identifier` is absent, redirects to `/dashboard?login=success`.
             *   If `card_identifier` is present, existing card claim logic proceeds.
             *   **Status: UPDATED.**
@@ -164,7 +163,7 @@ Due to issues with the OTP flow (specifically, getting stuck on "Loading..." scr
             4. User is redirected to `/auth/callback`.
             5. Callback exchanges code, finds no `card_identifier` in metadata, redirects to `/dashboard`.
             6. User lands on `/dashboard` and is successfully logged in.
-        *   **Overall Phase 1 Status: PENDING TEST** (Primarily blocked by verification of `app/dashboard/page.tsx` server-side auth logic).
+        *   **Overall Phase 1 Status: COMPLETED & VERIFIED.** (Core OTP login stable after fixing Supabase client initialization in `app/dashboard/page.tsx` and cookie handling in middleware/callback).
 *   **Phase 2: Re-integrate Card Registration OTP Flow (Status: PENDING)**
     *   Once Phase 1 (core OTP login) is confirmed working, this phase will re-introduce the card registration specifics.
     *   Key Files & Tasks: `app/components/onboarding/CardLanding.tsx`, `app/api/auth/otp/register-and-claim/route.ts`, and further adjustments to `app/auth/callback/route.ts` for the card claim logic.

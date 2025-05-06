@@ -71,23 +71,33 @@ export async function middleware(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get: (name: string) => request.cookies.get(name)?.value,
-        set: (name: string, value: string, options: CookieOptions) => {
-          console.log('[Middleware] supabase.cookies.set CALLED', 
-            { 
-              name,
-              value, // Log the raw value from Supabase
-              options_from_supabase: { ...options }, // Log options from Supabase
-              secure_cookie_options_applied: { ...SECURE_COOKIE_OPTIONS }
+        getAll() {
+          const cookies = request.cookies.getAll();
+          return cookies;
+        },
+        setAll(cookiesToSet: Array<{ name: string; value: string; options: CookieOptions }>) {
+          try {
+            // Update request cookies for the current Supabase instance's context
+            cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+            // Re-assign response to ensure it's the one Supabase will modify with set-cookie headers
+            response = NextResponse.next({
+              request, // Pass the modified request
+            });
+            // Apply cookies to the outgoing response, including secure options
+            cookiesToSet.forEach(({ name, value, options }) => {
+              response.cookies.set(name, value, { ...SECURE_COOKIE_OPTIONS, ...options });
+            });
+          } catch (error) {
+            console.error('[Middleware] Error in setAll cookies:', error);
+            // If an error occurs, ensure we still have a valid response object to return
+            // (though it might not have the intended cookies set if error happened mid-way)
+            if (!response) {
+                response = NextResponse.next({
+                    request,
+                });
             }
-          );
-          request.cookies.set({ name, value, ...options });
-          response.cookies.set({ name, value, ...SECURE_COOKIE_OPTIONS, ...options });
-        },
-        remove: (name: string, options: CookieOptions) => {
-          request.cookies.set({ name, value: '', ...options });
-          response.cookies.set({ name, value: '', ...SECURE_COOKIE_OPTIONS, ...options });
-        },
+          }
+        }
       },
     }
   );
