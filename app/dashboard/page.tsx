@@ -1,42 +1,26 @@
-'use client';
-
-import { useEffect } from 'react';
-import { useAuth } from '@/app/context/AuthContext';
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { Dashboard } from '@/app/components/home/Dashboard';
-import DashboardLoading from './loading';
+import DashboardLoading from './loading'; // Can be used by Dashboard or as a fallback
 import { PageLayout } from '@/app/components/layout/PageLayout';
 
-export default function DashboardPage() {
-  const { user, isLoading, logout } = useAuth();
+export default async function DashboardPage() {
+  const supabase = createServerComponentClient({ cookies });
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
 
-  useEffect(() => {
-    if (!isLoading && !user) {
-      console.log('DashboardPage: No authenticated user found after loading. Forcing logout and redirect.');
-      logout().catch(error => {
-        console.error("DashboardPage: Error during forced logout:", error);
-      });
-    }
-  }, [isLoading, user, logout]);
-
-  if (isLoading) {
-    return (
-      <PageLayout>
-        <DashboardLoading />
-      </PageLayout>
-    );
+  if (!session) {
+    redirect('/login'); // Or your preferred login page
   }
 
-  if (user) {
-    return (
-      <PageLayout>
-        <Dashboard />
-      </PageLayout>
-    );
-  }
-
+  // The Dashboard component will now be responsible for any client-side
+  // logic that was previously in DashboardPage, including using useAuth if needed.
+  // It should be a 'use client' component.
   return (
     <PageLayout>
-      <DashboardLoading />
+      <Dashboard />
     </PageLayout>
   );
 } 

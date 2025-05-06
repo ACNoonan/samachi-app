@@ -28,6 +28,13 @@ export async function GET(request: NextRequest) {
           return cookieStore.get(name)?.value;
         },
         set(name: string, value: string, options: CookieOptions) {
+          console.log('[AuthCallback] supabase.cookies.set CALLED', 
+            { 
+              name,
+              value, // Log the raw value from Supabase
+              options_from_supabase: { ...options } // Log options from Supabase
+            }
+          );
           cookieStore.set({ name, value, ...options });
         },
         remove(name: string, options: CookieOptions) {
@@ -70,11 +77,13 @@ export async function GET(request: NextRequest) {
     // let username = user.user_metadata?.username as string | undefined; // REMOVED
 
     if (!cardIdentifierFromMetadata) {
-      console.error('[AuthCallback] Error: card_identifier not found in user_metadata.');
-      // cardIdentifierForRedirect is undefined here, so redirect to a general page or root
-      return NextResponse.redirect(`${siteUrl}/?error_message=${encodeURIComponent("Registration error: Missing card identifier in session. Please try again.")}`);
+      // This handles the minimal login flow (no card involved)
+      // or any generic login not tied to a card registration.
+      console.log('[AuthCallback] No card_identifier in user_metadata. Redirecting to dashboard (minimal login flow).');
+      return NextResponse.redirect(`${siteUrl}/dashboard?login=success`); 
     }
 
+    // If cardIdentifierFromMetadata IS present, proceed with the existing card claim logic:
     console.log('[AuthCallback] Retrieved from user_metadata:', { cardIdentifier: cardIdentifierFromMetadata });
 
     // REMOVE block for updating username from metadata
@@ -171,6 +180,43 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${siteUrl}/card/${cardIdentifierForRedirect}?error_message=${encodeURIComponent("Failed to set up your venue account. Please contact support. (Code: GLOWNET_CID_FAIL)")}`);
     }
     console.log('[AuthCallback] Glownet Customer ID provisioned:', glownetCustomerId);
+
+    // ---BEGIN MODIFICATION: Add retry logic for profile existence ---
+    let profileExists = false;
+    const MAX_PROFILE_FETCH_RETRIES = 5; // Increased retries slightly
+    const PROFILE_FETCH_RETRY_DELAY_MS = 1200; // Increased delay slightly
+
+    for (let i = 0; i < MAX_PROFILE_FETCH_RETRIES; i++) {
+      const { data: existingProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id') // Only need to check for existence
+        .eq('id', user.id)
+        .maybeSingle(); // Use maybeSingle to handle 0 or 1 row without erroring on 0
+
+      if (existingProfile) {
+        profileExists = true;
+        console.log(`[AuthCallback] Profile found for user ${user.id} in 'profiles' table on attempt ${i + 1}.`);
+        break;
+      }
+
+      if (profileError) {
+          // Log unexpected errors, but continue retrying for "not found" scenarios
+          console.error(`[AuthCallback] Error fetching profile (attempt ${i + 1}/${MAX_PROFILE_FETCH_RETRIES}):`, profileError.message);
+          // If it's a critical error other than not found, might consider breaking early
+          // For now, we'll let it retry up to MAX_PROFILE_FETCH_RETRIES
+      }
+      
+      if (i < MAX_PROFILE_FETCH_RETRIES - 1) {
+        console.log(`[AuthCallback] Profile not yet found for user ${user.id} in 'profiles' table (attempt ${i + 1}/${MAX_PROFILE_FETCH_RETRIES}). Retrying in ${PROFILE_FETCH_RETRY_DELAY_MS}ms...`);
+        await new Promise(resolve => setTimeout(resolve, PROFILE_FETCH_RETRY_DELAY_MS));
+      }
+    }
+
+    if (!profileExists) {
+      console.error(`[AuthCallback] CRITICAL: Profile not found for user ${user.id} in 'profiles' table after ${MAX_PROFILE_FETCH_RETRIES} retries. The handle_new_user trigger likely failed or is severely delayed. Aborting card claim.`);
+      return NextResponse.redirect(`${siteUrl}/card/${cardIdentifierForRedirect}?error_message=${encodeURIComponent("Profile creation failed. Your account setup is incomplete. Please contact support. (Code: PROFILE_TRIGGER_FAIL)")}`);
+    }
+    // ---END MODIFICATION ---
 
     const { error: updateCardError } = await supabase
       .from('membership_cards')

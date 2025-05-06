@@ -127,6 +127,53 @@ After this backend functionality is working, we'll implement the UI changes, cop
 
 **Prequisite for:** Full end-to-end testing of Phase B (Check-in) and Phase C (Check-out).
 
+**CURRENT FOCUS: Emergency Auth Simplification & Troubleshooting Plan (Sub-Phase of Phase D)**
+
+Due to issues with the OTP flow (specifically, getting stuck on "Loading..." screens), an emergency plan is currently active to simplify, isolate, and verify each step of the core Supabase OTP authentication before re-integrating card-specific logic.
+
+*   **Overall Goal of Emergency Plan:** Fix the Supabase OTP email login flow, making it stable.
+*   **Phase 0: Preparation & Clean Slate (Status: COMPLETED by user)**
+    *   Tasks: Commit to Git, new branch (`emergency-auth-refactor`), clear browser data, verify environment variables (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SITE_URL`).
+*   **Phase 1: Strip Down to Core OTP Login - Isolate Supabase & Middleware (Status: IN PROGRESS)**
+    *   **Objective:** Verify basic Supabase OTP login and session management works independently of card registration.
+    *   **Tasks & Current Status:**
+        *   **Minimal Login Page (`app/login/page.tsx`):**
+            *   Adapted from existing login page to implement OTP (Magic Link) flow.
+            *   Uses `supabase.auth.signInWithOtp` with `emailRedirectTo` pointing to `/auth/callback`. No `card_identifier` is sent for this generic login test.
+            *   **Status: Code Updated. Awaiting user test.**
+        *   **Minimal Protected Page (`app/dashboard/page.tsx`):**
+            *   Intended to be used as the protected route for this test.
+            *   Requires server-side authentication logic (e.g., using `createServerComponentClient` from `@supabase/ssr` or equivalent) to fetch user and redirect if unauthenticated.
+            *   **Status: Awaiting review of page contents to confirm server-side auth logic.**
+        *   **Middleware (`lib/supabase/middleware.ts` and root `middleware.ts`):**
+            *   `lib/supabase/middleware.ts`: Revised to correctly refresh sessions for pages AND API routes, and to apply redirection logic appropriately.
+            *   Root `middleware.ts`: Corrected to include the necessary `config` object with the `matcher`.
+            *   **Status: UPDATED & CORRECTED.**
+        *   **Auth Callback (`app/auth/callback/route.ts`):**
+            *   Modified to handle OTP callbacks *without* `card_identifier` in `user.user_metadata`.
+            *   If `card_identifier` is absent, redirects to `/dashboard?login=success`.
+            *   If `card_identifier` is present, existing card claim logic proceeds.
+            *   **Status: UPDATED.**
+        *   **AuthContext (`app/context/AuthContext.tsx`):**
+            *   Minor simplification applied (commented out a potentially redundant `useEffect` for profile fetching) to reduce complexity.
+            *   **Status: UPDATED.**
+        *   **Overall Phase 1 Test Flow:**
+            1. User navigates to `/login`.
+            2. Enters email, submits form (`signInWithOtp` is called).
+            3. User receives OTP email, clicks the link.
+            4. User is redirected to `/auth/callback`.
+            5. Callback exchanges code, finds no `card_identifier` in metadata, redirects to `/dashboard`.
+            6. User lands on `/dashboard` and is successfully logged in.
+        *   **Overall Phase 1 Status: PENDING TEST** (Primarily blocked by verification of `app/dashboard/page.tsx` server-side auth logic).
+*   **Phase 2: Re-integrate Card Registration OTP Flow (Status: PENDING)**
+    *   Once Phase 1 (core OTP login) is confirmed working, this phase will re-introduce the card registration specifics.
+    *   Key Files & Tasks: `app/components/onboarding/CardLanding.tsx`, `app/api/auth/otp/register-and-claim/route.ts`, and further adjustments to `app/auth/callback/route.ts` for the card claim logic.
+*   **Phase 3: Test & Iterate (Status: PENDING)**
+    *   Full end-to-end testing of the `/card/[CARD_ID]` OTP registration flow.
+
+---
+**Original Phase D Plan (Details below will be resumed after Emergency Auth Plan is complete)**
+
 **Step 1: Audit Existing Registration & Onboarding Code - Summary of Findings**
 
 *   **Objective:** Understand current (potentially outdated or unused) registration mechanisms, identify reusable components/logic, and pinpoint areas for refactoring or replacement to support the new OTP flow and Glownet provisioning.
@@ -154,7 +201,7 @@ After this backend functionality is working, we'll implement the UI changes, cop
     *   Details: This function searches for an existing Glownet customer by email for the given event or creates a new one, returning the `glownet_customer_id`.
     *   Update: Modified to provide a placeholder for `last_name` during customer creation to satisfy Glownet API requirements.
 
-*   **A. Frontend Flow (`/card/[card_identifier]` page & `CardLanding.tsx` component): (IN PROGRESS)**
+*   **A. Frontend Flow (`/card/[card_identifier]` page & `CardLanding.tsx` component): (Status: PAUSED - Blocked by core auth issues)**
     1.  Fetches card status using `GET /api/card-status?card_id=[card_identifier]`.
     2.  **If Card Unregistered:**
         *   Displays an inline OTP registration form (Email only; username field removed) using `react-hook-form` and `zod`.
@@ -164,7 +211,7 @@ After this backend functionality is working, we'll implement the UI changes, cop
         *   Prompts for login.
     *   Update: Optional username field removed from form and schema. Detailed logging added to `CardLanding.tsx` to diagnose a persistent "Loading..." issue.
 
-*   **B. Backend API Route (`POST /api/auth/otp/register-and-claim`): (COMPLETED)**
+*   **B. Backend API Route (`POST /api/auth/otp/register-and-claim`): (Status: COMPLETED - Awaiting full flow test)**
     *   **File:** `app/api/auth/otp/register-and-claim/route.ts`
     *   **Input:** `{ email: string, cardIdentifier: string }` (username removed).
     *   **Processing:**
@@ -172,7 +219,7 @@ After this backend functionality is working, we'll implement the UI changes, cop
         2.  Returns a success message to the client.
     *   Update: Username removed from schema, request handling, and OTP options. Ensured `NEXT_PUBLIC_SITE_URL` is correctly used for `emailRedirectTo`.
 
-*   **C. Backend Logic (Auth Callback Route Handler): (COMPLETED)**
+*   **C. Backend Logic (Auth Callback Route Handler): (Status: PARTIALLY UPDATED - Core logic for card claim exists, adapted for minimal OTP flow. Full card claim flow testing pending)**
     *   **File:** `app/auth/callback/route.ts` (Handles `GET` requests)
     *   This logic executes after the user clicks the OTP link and is redirected.
     *   **Processing:**
@@ -189,15 +236,14 @@ After this backend functionality is working, we'll implement the UI changes, cop
 *   **(COMPLETED) Error Page (`/card/claim-error`):**
     *   A simple page to display error messages passed via query parameters from the auth callback.
 
-**Current Status & Next Steps for Phase D (as of last interaction):**
-1.  **Issue:** The `/card/[card_id]` page (`CardLanding.tsx`) gets stuck on "Loading..." after a previous failed OTP attempt or when navigating to any card URL directly.
-2.  **Recent Actions:**
+**Current Status & Next Steps for Phase D (as of last interaction before emergency plan):**
+1.  **Issue:** The `/card/[card_id]` page (`CardLanding.tsx`) gets stuck on "Loading..." after a previous failed OTP attempt or when navigating to any card URL directly. **(This is the primary issue the "Emergency Auth Simplification Plan" aims to unblock by first stabilizing core OTP.)**
+2.  **Recent Actions (before emergency plan):**
     *   Removed optional username from OTP flow (frontend, backend API, callback).
     *   Resolved initial OTP errors (missing `NEXT_PUBLIC_SITE_URL`, middleware block for `/auth/callback`, Glownet `last_name` requirement).
     *   Added detailed logging to `CardLanding.tsx` to diagnose the "Loading..." state.
-3.  **Immediate Next Step:**
-    *   **Analyze console logs from `CardLanding.tsx`** (after user attempts to load a card page) to understand the state of `authLoading`, `user`, and `cardStatus`, and to check the behavior of the `/api/card-status` fetch call.
-4.  Address the linter error concerning `@supabase/ssr` imports in the local development environment.
-5.  Consider refactoring the database updates in `app/auth/callback/route.ts` into a Supabase Database Function for atomicity.
+3.  **Immediate Next Step (after Emergency Auth Plan completion):**
+    *   Return to diagnosing `CardLanding.tsx` using the insights gained from the simplified OTP flow.
+    *   Analyze console logs from `CardLanding.tsx`.
 
 Once these are done, Phase D will be fully complete, unblocking Phase B and C.
