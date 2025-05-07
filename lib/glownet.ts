@@ -134,7 +134,7 @@ export interface GlownetCustomer {
  * Gets customer details from Glownet.
  * @param eventId Glownet event ID or slug.
  * @param customerId Glownet customer ID.
- * @returns Promise<GlownetCustomer> The customer's details.
+ * @returns Promise<GlownetCustomer> The customer\'s details.
  * @throws Error if API call fails.
  */
 export async function getGlownetCustomerDetails(
@@ -145,7 +145,7 @@ export async function getGlownetCustomerDetails(
     console.log(`[Glownet] getGlownetCustomerDetails: Fetching for Event ${eventId}, Customer ${customerId}`);
     try {
         const customerData = await makeGlownetRequest<GlownetCustomer>(endpoint, 'GET');
-        if (!customerData || !customerData.id) { // Added check for id
+        if (!customerData || typeof customerData.id === 'undefined') { // Check if id is undefined, as it should always be present
             console.error(`[Glownet] No valid data (or ID missing) from Glownet for customer ${customerId}, event ${eventId}. Response:`, customerData);
             throw new Error(`No valid data received from Glownet for customer ${customerId}, event ${eventId}.`);
         }
@@ -155,6 +155,39 @@ export async function getGlownetCustomerDetails(
         console.error(`[Glownet] Failed to get customer details: Event ${eventId}, Customer ${customerId}. Error:`, error);
         throw error; 
     }
+}
+
+/**
+ * Retrieves the virtual balance for a customer from Glownet and converts it to standard units.
+ * Assumes virtual_money is returned in cents from Glownet.
+ * @param eventId Glownet event ID or slug.
+ * @param customerId Glownet customer ID.
+ * @returns Promise<number> The customer\'s virtual balance in standard currency units.
+ * @throws Error if API call fails or balance cannot be determined.
+ */
+export async function getGlownetCustomerVirtualBalance(
+  eventId: number | string,
+  customerId: number
+): Promise<number> {
+  console.log(`[Glownet] getGlownetCustomerVirtualBalance: Getting balance for Event ${eventId}, Customer ${customerId}`);
+  try {
+    const customerDetails = await getGlownetCustomerDetails(eventId, customerId);
+    
+    if (customerDetails.virtual_money === null || typeof customerDetails.virtual_money === 'undefined') {
+      console.warn(`[Glownet] Virtual money is null or undefined for customer ${customerId}, event ${eventId}. Assuming 0 balance.`);
+      return 0; // Or throw an error if this case is unexpected
+    }
+
+    // Assuming virtual_money from Glownet is in cents
+    const balanceInStandardUnits = customerDetails.virtual_money / GLOWNET_UNIT_MULTIPLIER;
+    console.log(`[Glownet] Retrieved virtual_money: ${customerDetails.virtual_money} (cents), Converted to standard units: ${balanceInStandardUnits}`);
+    return balanceInStandardUnits;
+
+  } catch (error) {
+    console.error(`[Glownet] Failed to get virtual balance: Event ${eventId}, Customer ${customerId}. Error:`, error);
+    // Re-throw the error to be handled by the calling route
+    throw error; 
+  }
 }
 
 // Add other Glownet helper functions as needed 
