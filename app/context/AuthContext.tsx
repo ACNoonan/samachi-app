@@ -66,38 +66,41 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setIsProfileLoading(false); // Ensure loading is false
       return;
     }
-    console.log(`AuthContext: fetchProfile - Attempting to fetch profile for user: ${userId}`);
+    console.log(`AuthContext: fetchProfile ( useCallback ID: some_unique_id_for_this_instance ) - Attempting to fetch profile for user: ${userId}`);
     setIsProfileLoading(true);
     let errorOccurred = false;
     try {
+      console.log(`AuthContext: fetchProfile - Inside TRY block for user: ${userId}. About to query Supabase.`);
       const { data, error, status } = await supabase
         .from('profiles')
         .select('*') // Select all profile fields needed
         .eq('id', userId)
         .single();
 
+      console.log(`AuthContext: fetchProfile - Supabase call completed for user: ${userId}. Status: ${status}, Error object:`, error, "Data object:", data);
+
       if (error) {
         errorOccurred = true;
         // Log specific Supabase error
-        console.error(`AuthContext: fetchProfile - Supabase error fetching profile (Status: ${status}):`, error);
+        console.error(`AuthContext: fetchProfile - Supabase error explicitly returned for user ${userId} (Status: ${status}):`, error);
         setProfile(null);
         // Consider a toast, but maybe not here to avoid noise if profile is optional initially
         // toast.error("Failed to load profile", { description: error.message });
       } else if (data) {
-        console.log("AuthContext: fetchProfile - Profile data fetched successfully:", data);
+        console.log(`AuthContext: fetchProfile - Profile data fetched successfully for user ${userId}:`, data);
         setProfile(data);
       } else {
           errorOccurred = true;
-          console.warn(`AuthContext: fetchProfile - No profile data returned for user ${userId}, but no explicit Supabase error.`);
+          console.warn(`AuthContext: fetchProfile - No profile data returned for user ${userId}, and no explicit Supabase error object. This usually means the row was not found.`);
           setProfile(null);
       }
-    } catch (err) {
+    } catch (err: any) { // Catch any synchronous or unexpected errors during the try block
       errorOccurred = true;
-      console.error("AuthContext: fetchProfile - Unexpected JS error fetching profile:", err);
+      console.error(`AuthContext: fetchProfile - UNEXPECTED JS ERROR during profile fetch for user ${userId}:`, err.message, err.stack, err);
       setProfile(null);
       // toast.error("An unexpected error occurred loading your profile.");
     } finally {
-      console.log(`AuthContext: fetchProfile - Setting profileLoading to false. Error occurred: ${errorOccurred}`);
+      console.log(`AuthContext: fetchProfile - FINALLY block reached for user ${userId}. Setting isProfileLoading to false. Error occurred during fetch: ${errorOccurred}`);
       setIsProfileLoading(false);
     }
   }, [supabase]); // Dependency on the memoized supabase client

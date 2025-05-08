@@ -5,6 +5,7 @@ import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress, createTransferInstruction 
 import { toast } from 'sonner';
 import type { Database } from '@/lib/database.types';
 import { useAuth } from './AuthContext'; // <-- Import useAuth
+import { Buffer } from 'buffer'; // <-- Import Buffer
 
 // Assuming CustodialStake type is defined in database.types.ts
 type CustodialStake = Database['public']['Tables']['custodial_stakes']['Row'];
@@ -28,15 +29,15 @@ const TREASURY_WALLET_ADDRESS = process.env.NEXT_PUBLIC_TREASURY_WALLET_ADDRESS;
 
 // --- Refactor SolanaContextType for Custodial Model ---
 interface SolanaContextType {
-  custodialStakeBalance: number | null; // <-- New state for custodial balance
-  custodialStakes: CustodialStake[]; // <-- NEW: Add state for the list of stakes
-  treasuryAddress: PublicKey | null; // <-- Expose treasury address
-  loading: boolean;
+  custodialStakeBalance: number | null;
+  custodialStakes: CustodialStake[];
+  treasuryAddress: PublicKey | null;
+  loading: boolean; // Represents loading for balance/stakes fetch, stake/unstake actions
   error: string | null;
-  stake: (amount: number) => Promise<void>; // Stake function updated
-  unstake: (amount: number) => Promise<void>; // Unstake function updated
-  fetchCustodialBalance: () => Promise<void>; // <-- New function to get balance from API
-  fetchCustodialStakes: () => Promise<void>; // <-- NEW: Add function to fetch stakes
+  stake: (amount: number) => Promise<void>;
+  unstake: (amount: number) => Promise<void>;
+  fetchCustodialBalance: () => Promise<void>;
+  fetchCustodialStakes: () => Promise<void>;
   isWalletConnected: boolean;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => Promise<void>;
@@ -58,25 +59,23 @@ const SolanaContext = createContext<SolanaContextType>({
 });
 
 export function SolanaProvider({ children }: { children: React.ReactNode }) {
-  const { user: authUser, isLoading: isAuthLoading } = useAuth(); // <-- Use AuthContext
+  const { user: authUser, profile, isLoading: isAuthLoading, fetchProfile } = useAuth();
   const { connection } = useConnection();
-  const { connected, connect, disconnect, publicKey, sendTransaction, signMessage } = useWallet(); // Added sendTransaction & signMessage
+  const { connected, connect, disconnect, publicKey, sendTransaction, signMessage } = useWallet();
   const anchorWallet = useAnchorWallet();
 
   const [custodialStakeBalance, setCustodialStakeBalance] = useState<number | null>(null);
   const [custodialStakes, setCustodialStakes] = useState<CustodialStake[]>([]);
   const [treasuryAddress, setTreasuryAddress] = useState<PublicKey | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // General loading state
   const [error, setError] = useState<string | null>(null);
-  // const { toast } = useToast(); // Using sonner
 
-  // --- Error Handling Helper ---
   const handleError = (message: string, error?: any) => {
     console.error(message, error);
     const displayMessage = error instanceof Error ? `${message}: ${error.message}` : message;
     setError(displayMessage);
     toast.error(message, { description: error instanceof Error ? error.message : undefined });
-    setLoading(false);
+    setLoading(false); // Ensure general loading is false on error
   };
 
   // --- Fetch Custodial Stakes --- 
@@ -150,29 +149,58 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthLoading, authUser, connected, publicKey, fetchCustodialStakes]);
 
-  // --- Effect to Fetch Balance on Connect --- 
+  // --- Effect to Fetch Balance on Connect (Simplified) ---
   useEffect(() => {
+    // Only fetch balance if authenticated and wallet connected.
+    // Linking status is no longer managed here.
     if (!isAuthLoading && authUser && connected && publicKey) {
       console.log("SolanaContext: Auth ready, Wallet connected, fetching custodial balance & stakes...");
       fetchCustodialBalance();
     } else {
       console.log("SolanaContext: Conditions not met for initial balance fetch.", { isAuthLoading, hasAuthUser: !!authUser, connected, hasPublicKey: !!publicKey });
+      // Clear balance state if conditions aren't met (e.g., wallet disconnects)
       setCustodialStakeBalance(null);
       setCustodialStakes([]);
-      setError(null); // Clear error if conditions are not met
+      setError(null); 
     }
   }, [isAuthLoading, authUser, connected, publicKey, fetchCustodialBalance]);
 
-  // --- Stake Function (Client-Side SPL Transfer) --- 
+  // --- Stake Function (Simplified: Assumes Wallet is Linked) ---
   const stake = useCallback(async (amount: number) => {
-    if (isAuthLoading || !authUser) {
-      handleError("Cannot stake: User not authenticated.");
+    console.log(`SolanaContext stake called. State: isAuthLoading=${isAuthLoading}, authUser=${!!authUser}, profileFromHook=${!!profile}, connected=${connected}, publicKey=${!!publicKey}`);
+    
+    // 1. Initial Checks (Auth, Wallet, Config, Profile)
+    if (isAuthLoading) {
+        handleError("Cannot stake: Authentication still in progress.");
+        return;
+    }
+    if (!authUser) {
+        handleError("Cannot stake: User not authenticated.");
+        return;
+    }
+    if (!profile) { 
+       handleError("Cannot stake: User profile is not available.");
+       return;
+    }
+    if (!connected || !publicKey || !signMessage || !sendTransaction) {
+      handleError("Cannot stake: Wallet not connected or required functions unavailable.");
       return;
     }
-    if (!connected || !publicKey || !connection || !treasuryAddress || !USDC_MINT || !sendTransaction) {
-      handleError("Cannot stake: Wallet not connected, config missing, or cannot send transactions.");
+    if (!connection || !treasuryAddress || !USDC_MINT) {
+      handleError("Cannot stake: Connection or configuration missing.");
       return;
     }
+
+    // **NEW/CRITICAL Check**: Ensure wallet is linked in profile before proceeding
+    const connectedWalletAddress = publicKey.toBase58();
+    if (profile.wallet_address !== connectedWalletAddress) {
+        handleError("Cannot stake: Connected wallet does not match linked wallet in profile.", 
+                    new Error(`Profile: ${profile.wallet_address || 'None'}, Connected: ${connectedWalletAddress}`)
+                   );
+        toast.error("Wallet Mismatch", { description: "Please ensure the correct wallet is connected and linked via the Wallet page before staking." });
+        return;
+    }
+
     if (amount <= 0) {
       toast.error("Invalid Amount", { description: "Stake amount must be positive." });
       return;
@@ -180,7 +208,8 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
 
     setLoading(true);
     setError(null);
-    let signature = '';
+    let stakeSignature = '';
+
     try {
       toast.info("Preparing Stake Transaction...", { description: `Amount: ${amount} USDC` });
 
@@ -217,13 +246,13 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
       }).add(transferInstruction);
 
       toast.loading("Action Required: Approve Transaction", { description: "Please approve the stake transaction in your wallet." });
-      signature = await sendTransaction(transaction, connection);
-      toast.dismiss(); // Dismiss loading toast
-      toast.info("Transaction Sent", { description: `Signature: ${signature.substring(0, 10)}... Waiting for confirmation.` });
-      console.log("Stake Transaction Signature:", signature);
+      stakeSignature = await sendTransaction(transaction, connection);
+      toast.dismiss();
+      toast.info("Transaction Sent", { description: `Signature: ${stakeSignature.substring(0, 10)}... Waiting for confirmation.` });
+      console.log("Stake Transaction Signature:", stakeSignature);
 
       const confirmation = await connection.confirmTransaction({
-        signature,
+        signature: stakeSignature,
         blockhash,
         lastValidBlockHeight
       }, 'confirmed');
@@ -237,18 +266,18 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
         duration: 8000
       });
 
+      setLoading(false);
+
       setTimeout(() => {
         console.log("Triggering balance refresh after stake...");
         fetchCustodialBalance();
-      }, 15000); // Adjust delay as needed
+      }, 15000);
 
     } catch (err) {
-      toast.dismiss(); // Ensure loading toast is dismissed on error
-      handleError(`Stake failed${signature ? ` (Tx: ${signature.substring(0,10)}...)` : ''}`, err);
-    } finally {
-        // setLoading handled by handleError or end of try block
-    }
-  }, [isAuthLoading, authUser, connected, publicKey, connection, treasuryAddress, sendTransaction, fetchCustodialBalance]); // Dependencies
+      toast.dismiss();
+      handleError(`Stake failed${stakeSignature ? ` (TxSig: ${stakeSignature.substring(0,10)}...)` : ''}`, err);
+    } 
+  }, [isAuthLoading, authUser, profile, fetchProfile, connected, publicKey, signMessage, sendTransaction, connection, treasuryAddress, fetchCustodialBalance]);
 
   // --- Unstake Function (Calls Backend API) --- 
   const unstake = useCallback(async (amount: number) => {
@@ -341,7 +370,7 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
     }
   }, []); // Run once on mount
 
-  // --- Memoize Context Value --- 
+  // --- Memoize Context Value (no isLinkingWallet) ---
   const value = useMemo(() => ({
     custodialStakeBalance,
     custodialStakes,
@@ -361,13 +390,13 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
     treasuryAddress,
     loading,
     error,
-    stake, // useCallback dep
-    unstake, // useCallback dep
-    fetchCustodialBalance, // useCallback dep
-    fetchCustodialStakes, // useCallback dep
+    stake,
+    unstake,
+    fetchCustodialBalance,
+    fetchCustodialStakes,
     connected,
-    connectWallet, // useCallback dep
-    disconnectWallet, // useCallback dep
+    connectWallet,
+    disconnectWallet,
   ]);
 
   return <SolanaContext.Provider value={value}>{children}</SolanaContext.Provider>;

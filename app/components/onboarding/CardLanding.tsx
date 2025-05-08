@@ -67,6 +67,8 @@ export const CardLanding = () => {
   });
 
   useEffect(() => {
+    console.log('[CardLanding] useEffect - Current authLoading state:', authLoading, 'User:', user, 'Session:', session);
+
     console.log('[CardLanding] useEffect triggered:', { card_id, authLoading, userExists: !!user, cardStatus, isCheckingCardStatus });
     const isLoggedIn = !!user;
 
@@ -138,7 +140,7 @@ export const CardLanding = () => {
     } else {
         console.log('[CardLanding] useEffect: Conditions not met or status already final, card status:', cardStatus);
     }
-  }, [authLoading, card_id, user, isCheckingCardStatus, cardStatus]); // Added isCheckingCardStatus and cardStatus to deps
+  }, [authLoading, card_id, user, session, isCheckingCardStatus, cardStatus]); // Added session to dependency array because it's used in the new log
 
   const handleOtpFormSubmit = async (values: OtpFormValues) => {
     if (!card_id) {

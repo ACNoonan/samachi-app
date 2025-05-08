@@ -2,11 +2,14 @@
   "name": "samachi-app",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "sync:venues": "ts-node scripts/sync-venues.ts",
+    "sync:cards": "ts-node scripts/sync-cards.ts",
     "gen:types": "supabase gen types typescript --project-id dawrwfmxqcpwbtaihjyu --schema public > lib/database.types.ts",
     "test": "mocha -r ts-node/register tests/**/*.test.ts"
   },
@@ -52,6 +55,7 @@
     "sonner": "^2.0.3",
     "tailwind-merge": "^3.2.0",
     "tiny-secp256k1": "^2.2.3",
+    "tweetnacl": "^1.0.3",
     "usb": "^2.15.0",
     "utf-8-validate": "^6.0.5",
     "ws": "^8.18.0",
@@ -70,6 +74,7 @@
     "node-gyp": "^11.2.0",
     "puppeteer": "^24.7.2",
     "tailwindcss": "^4",
+    "ts-node": "^10.9.2",
     "typescript": "^5"
   }
 }

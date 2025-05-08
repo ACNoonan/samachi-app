@@ -124,8 +124,8 @@ export async function glownetVirtualTopup(
 // Interface for the relevant parts of the Glownet Customer response
 export interface GlownetCustomer {
     id: number;
-    virtual_money: number | null; 
-    money?: number | null; 
+    virtual_money: string | null; // Changed from number to string
+    money?: string | null; // Changed from number to string
     balances?: any; // Add balances, define more strictly if structure is known
     // Add other fields if needed (e.g., first_name, last_name for logging)
 }
@@ -178,9 +178,18 @@ export async function getGlownetCustomerVirtualBalance(
       return 0; // Or throw an error if this case is unexpected
     }
 
+    // Parse virtual_money string to a number
+    const virtualMoneyNumeric = parseFloat(customerDetails.virtual_money);
+
+    if (isNaN(virtualMoneyNumeric)) {
+      console.error(`[Glownet] Failed to parse virtual_money ('${customerDetails.virtual_money}') to a number for customer ${customerId}, event ${eventId}.`);
+      // Decide on behavior: return 0, or throw an error. Throwing error for now as it indicates bad data.
+      throw new Error(`Invalid virtual_money format received from Glownet: ${customerDetails.virtual_money}`);
+    }
+
     // Assuming virtual_money from Glownet is in cents
-    const balanceInStandardUnits = customerDetails.virtual_money / GLOWNET_UNIT_MULTIPLIER;
-    console.log(`[Glownet] Retrieved virtual_money: ${customerDetails.virtual_money} (cents), Converted to standard units: ${balanceInStandardUnits}`);
+    const balanceInStandardUnits = virtualMoneyNumeric / GLOWNET_UNIT_MULTIPLIER;
+    console.log(`[Glownet] Retrieved virtual_money: ${customerDetails.virtual_money} (string), Parsed: ${virtualMoneyNumeric} (numeric, cents), Converted to standard units: ${balanceInStandardUnits}`);
     return balanceInStandardUnits;
 
   } catch (error) {
