@@ -2,16 +2,26 @@ import { NextRequest, NextResponse } from "next/server";
 
 /**
  * @swagger
- * /api/staking/[user_id]: 
+ * /api/org/[org_id]/users: 
  *  get:
- *    summary: Get staked balance by user_id
- *    description: Gets current balance for the user_id specified in the route.
+ *    summary: Get all Users for Org
+ *    description: Gets array of all Users associated with the Org specified by org_id.
+ *    parameters:
+ *      - in: path
+ *        name: org_id
+ *        required: true
+ *        schema:
+ *          type: string
+ *        description: Organization ID
  *    responses:
  *      200:
- *        description: Success response.
+ *        description: List of users
  *        content:
  *          application/json:
- *            type: number
+ *            schema:
+ *              type: array
+ *              items:
+ *                $ref: '#/components/schemas/User'
  */
 export async function GET(
   request: NextRequest,
