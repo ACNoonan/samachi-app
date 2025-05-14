@@ -24,7 +24,7 @@
 .DS_Store
 *.pem
 
-
+CUSTODIAL_STAKING_PLAN.md
 
 # debug
 npm-debug.log*

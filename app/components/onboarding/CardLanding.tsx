@@ -6,95 +6,223 @@ import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/app/components/ui/button';
 // import useAuth from '@/hooks/useAuth'; // Remove old auth hook
 import { useAuth } from '@/app/context/AuthContext'; // Use the refactored context
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Input } from '@/app/components/ui/input';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/app/components/ui/form';
+import { toast } from 'sonner';
+
+// Schema for the OTP registration form
+const otpFormSchema = z.object({
+  email: z.string().email({ message: "Invalid email address." }),
+});
+
+// New schema for the login OTP form (identical for now, but semantically different)
+const otpLoginFormSchema = z.object({
+  email: z.string().email({ message: "Invalid email address." }), 
+});
+
+type OtpFormValues = z.infer<typeof otpFormSchema>;
+type OtpLoginFormValues = z.infer<typeof otpLoginFormSchema>;
 
 export const CardLanding = () => {
   const params = useParams();
   const router = useRouter();
   const card_id = params?.card_id as string | undefined;
-  // Use the refactored hook - user is Supabase user, isLoading covers auth+profile
-  const { user, isLoading: authLoading } = useAuth(); 
+  const { user, isLoading: authLoading, session } = useAuth(); // Added session for logging
+
+  console.log('[CardLanding] Component Render:', { card_id, authLoading, userExists: !!user, sessionExists: !!session });
 
   // State for card status check
-  const [cardStatus, setCardStatus] = useState<'loading' | 'unregistered' | 'registered' | 'not_found' | 'error'>('loading');
+  const [cardStatus, setCardStatus] = useState<'initial' | 'loading' | 'unregistered' | 'registered' | 'not_found' | 'error'>('initial'); // Changed initial state
   const [cardError, setCardError] = useState<string | null>(null);
+  const [isCheckingCardStatus, setIsCheckingCardStatus] = useState(false); // New state to prevent re-entry
+  
+  // State for OTP form submission
+  const [isOtpSubmitting, setIsOtpSubmitting] = useState(false);
+  const [otpMessage, setOtpMessage] = useState<string | null>(null);
+  const [isOtpLoginSubmitting, setIsOtpLoginSubmitting] = useState(false);
+  const [otpLoginMessage, setOtpLoginMessage] = useState<string | null>(null);
+
+  const form = useForm<OtpFormValues>({
+    resolver: zodResolver(otpFormSchema),
+    defaultValues: {
+      email: '',
+    },
+  });
+
+  const loginForm = useForm<OtpLoginFormValues>({
+    resolver: zodResolver(otpLoginFormSchema),
+    defaultValues: {
+      email: '',
+    },
+  });
 
   useEffect(() => {
-    // Determine if user is logged in based on the presence of user data
+    console.log('[CardLanding] useEffect - Current authLoading state:', authLoading, 'User:', user, 'Session:', session);
+
+    console.log('[CardLanding] useEffect triggered:', { card_id, authLoading, userExists: !!user, cardStatus, isCheckingCardStatus });
     const isLoggedIn = !!user;
 
-    // REMOVED: Redundant redirect logic. Middleware handles this.
-    // if (!authLoading && isLoggedIn) {
-    //   console.log('CardLanding: User is logged in, redirecting to /dashboard');
-    //   router.replace('/dashboard');
-    //   return; // Don't proceed if already logged in
-    // }
-
-    // Fetch card status only if not logged in and card_id is present
-    // If auth is still loading, wait.
     if (authLoading) {
-      return; // Wait for auth check to complete
-    }
-    
-    // If logged in, we don't need to check card status here (middleware already redirected or will redirect)
-    if (isLoggedIn) {
+      console.log('[CardLanding] useEffect: authLoading is true, returning.');
       return; 
     }
+    
+    // If user is logged in, and we are on this page, they should be redirected by middleware
+    // or this page should show a message indicating they are logged in.
+    // For now, we assume middleware handles redirection if necessary.
+    // If user is logged in, we don't need to check card status here for registration/initial claim.
+    if (isLoggedIn) {
+      console.log('[CardLanding] useEffect: User is logged in. No card status check needed for registration flow.');
+      // Potentially set cardStatus to 'idle' or some other state if user is logged in
+      // For example, if this page might be revisited by a logged-in user for other reasons.
+      // However, for a pure registration/claim page, this useEffect might not even run its main logic for logged-in users.
+      // Let's assume for now that if a user IS logged in, this page's primary purpose (register/claim card) is bypassed.
+      setCardStatus('initial'); // Or an appropriate state like 'user_logged_in'
+      return;
+    }
 
-    // Proceed with card status check only if auth is done, user is NOT logged in, and card_id exists
-    if (card_id) { // We already know !authLoading and !isLoggedIn from checks above
+    // Only proceed if not logged in, auth is loaded, and card_id is present
+    if (card_id && !isCheckingCardStatus && cardStatus !== 'registered' && cardStatus !== 'unregistered') { // Added more conditions
+      console.log('[CardLanding] useEffect: Conditions met to check card status.');
       const checkCardStatus = async () => {
-        setCardStatus('loading');
+        console.log('[CardLanding] checkCardStatus: Called.', { card_id });
+        setIsCheckingCardStatus(true); // Prevent re-entry
+        setCardStatus('loading');     // Set to loading
         setCardError(null);
+        setOtpMessage(null);
         try {
-          // Fetch card status using the API (expects user_id to be null for unregistered)
+          console.log(`[CardLanding] checkCardStatus: Fetching /api/card-status?card_id=${card_id}`);
           const response = await fetch(`/api/card-status?card_id=${card_id}`);
-          const data = await response.json();
+          console.log('[CardLanding] checkCardStatus: Fetch response received.', { status: response.status, ok: response.ok });
+          
+          const responseCloneForText = response.clone();
+          const responseText = await responseCloneForText.text();
+          console.log('[CardLanding] checkCardStatus: API Response Text:', responseText);
 
-          if (!response.ok) {
-            console.error("Card status API error:", data);
-            setCardError(data.error || 'Failed to check card status.');
+          if (!response.ok) { // Check response.ok first
+            const errorData = responseText ? JSON.parse(responseText) : { error: 'Failed to check card status. No error detail.' };
+            console.error("[CardLanding] checkCardStatus: Card status API error:", errorData);
+            setCardError(errorData.error || `API Error: ${response.status}`);
             setCardStatus(response.status === 404 ? 'not_found' : 'error');
           } else {
-            console.log("Card status API success:", data); // Log the raw API response
-            // Determine registration based on the API response
-            const isRegistered = data.isRegistered; // Assuming API returns { isRegistered: boolean }
-            console.log(`[CardLanding] API says isRegistered: ${isRegistered}`); // Log the determination
+            const data = JSON.parse(responseText); // Parse from the text we already have
+            console.log('[CardLanding] checkCardStatus: API Response JSON Parsed:', data);
+            const isRegistered = data.isRegistered;
+            console.log(`[CardLanding] checkCardStatus: API says isRegistered: ${isRegistered}`);
             setCardStatus(isRegistered ? 'registered' : 'unregistered');
           }
         } catch (error) {
-          console.error("Fetch card status error:", error);
-          setCardError('An unexpected error occurred.');
+          console.error("[CardLanding] checkCardStatus: Fetch card status error caught:", error);
+          setCardError('An unexpected error occurred while checking card status.');
           setCardStatus('error');
+        } finally {
+          setIsCheckingCardStatus(false); // Allow re-entry if dependencies change later
+          console.log('[CardLanding] checkCardStatus: Finished.');
         }
       };
       checkCardStatus();
+    } else if (!card_id) {
+      console.log('[CardLanding] useEffect: No card_id present.');
+      setCardStatus('not_found');
+      setCardError('No card identifier found in the URL.');
+    } else if (isCheckingCardStatus) {
+        console.log('[CardLanding] useEffect: Already checking card status.');
+    } else {
+        console.log('[CardLanding] useEffect: Conditions not met or status already final, card status:', cardStatus);
     }
-    // Dependencies updated: check dependencies are correct
-  }, [authLoading, router, card_id, user]); // Removed isLoggedIn
+  }, [authLoading, card_id, user, session, isCheckingCardStatus, cardStatus]); // Added session to dependency array because it's used in the new log
 
-  const handleCreateProfile = () => {
-    if (!card_id) return;
-    const targetUrl = `/create-profile?cardId=${card_id}`;
-    console.log(`[CardLanding] Navigating to Create Profile: ${targetUrl}`); // Log before navigating
-    router.push(targetUrl);
+  const handleOtpFormSubmit = async (values: OtpFormValues) => {
+    if (!card_id) {
+      toast.error("Card ID is missing. Cannot proceed.");
+      return;
+    }
+    setIsOtpSubmitting(true);
+    setOtpMessage(null);
+
+    try {
+      const response = await fetch('/api/auth/otp/register-and-claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: values.email,
+          cardIdentifier: card_id, 
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        toast.error(result.error || 'Failed to send OTP for registration. Please try again.');
+      } else {
+        toast.success(result.message || 'OTP sent successfully! Check your email to complete registration.');
+        setOtpMessage(result.message || 'OTP sent successfully! Please check your email to complete registration.');
+        form.reset(); 
+      }
+    } catch (error) {
+      console.error('OTP registration submission error:', error);
+      toast.error('An unexpected error occurred while sending OTP for registration.');
+    }
+    setIsOtpSubmitting(false);
   };
 
-  const handleSignIn = () => {
-    const targetUrl = `/login`;
-    console.log(`[CardLanding] Navigating to Sign In: ${targetUrl}`); // Log before navigating
-    router.push(targetUrl);
+  const handleOtpLoginFormSubmit = async (values: OtpLoginFormValues) => {
+    if (!card_id) {
+      toast.error("Card ID is missing. Cannot proceed.");
+      return;
+    }
+    setIsOtpLoginSubmitting(true);
+    setOtpLoginMessage(null);
+
+    try {
+      // We reuse the same endpoint. Supabase signInWithOtp with shouldCreateUser: true 
+      // will sign in an existing user or create one if they don't exist.
+      // The callback will then verify if the logged-in user matches the card owner.
+      const response = await fetch('/api/auth/otp/register-and-claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: values.email,
+          cardIdentifier: card_id, // card_id is still useful for the callback to know context
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        toast.error(result.error || 'Failed to send OTP for login. Please try again.');
+      } else {
+        toast.success(result.message || 'OTP sent successfully! Check your email to sign in.');
+        setOtpLoginMessage(result.message || 'OTP sent successfully! Check your email to sign in.');
+        loginForm.reset();
+      }
+    } catch (error) {
+      console.error('OTP login submission error:', error);
+      toast.error('An unexpected error occurred while sending OTP for login.');
+    }
+    setIsOtpLoginSubmitting(false);
   };
 
-  // Combined Loading State: Show loading if either auth or card status is loading
-  if (authLoading || (!user && cardStatus === 'loading')) {
-    // Display a simple loading indicator while checking auth or card status
-    // Ensure this div takes up space and is visible (e.g., using min-h-screen or similar)
+  console.log('[CardLanding] Before render return:', { authLoading, userExists: !!user, cardStatus });
+  if (authLoading || (cardStatus === 'initial' || cardStatus === 'loading')) {
+    console.log('[CardLanding] Rendering LOADING screen.');
     return (
       <div className="flex items-center justify-center min-h-screen">
         Loading...
       </div>
     );
   }
+  console.log('[CardLanding] Rendering main content or error for cardStatus:', cardStatus);
 
   // At this point, auth is loaded (authLoading is false) and user is null (not logged in)
 
@@ -123,45 +251,86 @@ export const CardLanding = () => {
   // --- Render based on card status ---
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4">
-      <h1 className="text-2xl font-bold mb-4">Welcome!</h1>
-      <p className="mb-6 text-center">
-        {/* Fixed visibility: Added text-black */}
-        Membership Card ID: <span className="font-mono bg-gray-100 p-1 rounded text-black">{card_id}</span>
+      <h1 className="text-2xl font-bold mb-4">Welcome to Samachi!</h1>
+      <p className="mb-6 text-center text-muted-foreground">
+        Card ID: <span className="font-mono bg-gray-200 dark:bg-gray-700 p-1 rounded">{card_id}</span>
       </p>
 
       {cardStatus === 'unregistered' && (
-        <>
-          <p className="text-muted-foreground mb-6 text-center">
-            This card is ready to be claimed. Create a profile to activate your membership.
-          </p>
-          <div className="space-y-4 w-full max-w-xs">
-            {/* Changed button text and action */}
-            <Button onClick={handleCreateProfile} className="w-full">
-              Create Profile & Claim Card
-            </Button>
-            {/* Removed the Sign In button for unregistered cards in MVP */}
-            {/* <Button onClick={handleSignIn} variant="outline" className="w-full">
-              Already have an account? Sign In
-            </Button> */}
-          </div>
-        </>
+        <div className="w-full max-w-sm space-y-6">
+          {!otpMessage ? (
+            <>
+              <p className="text-center text-muted-foreground">
+                This card is unregistered. Create your profile by entering your email below.
+              </p>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(handleOtpFormSubmit)} className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email Address</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="your@email.com" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button type="submit" className="w-full" disabled={isOtpSubmitting}>
+                    {isOtpSubmitting ? 'Sending OTP...' : 'Send OTP & Register'}
+                  </Button>
+                </form>
+              </Form>
+            </>
+          ) : (
+            <div className="text-center p-6 bg-green-50 dark:bg-green-900/20 rounded-md">
+              <p className="text-green-700 dark:text-green-300">{otpMessage}</p>
+              <p className="text-sm text-muted-foreground mt-2">Please follow the instructions in your email to complete registration.</p>
+            </div>
+          )}
+        </div>
       )}
 
       {cardStatus === 'registered' && (
-         <>
-          <p className="text-muted-foreground mb-6 text-center">
-            This card has already been claimed. Please sign in to access your membership.
-          </p>
-          <div className="space-y-4 w-full max-w-xs">
-             {/* Sign In button navigates to /login */}
-            <Button onClick={handleSignIn} className="w-full">
-              Sign In
-            </Button>
-          </div>
-        </>
+         <div className="w-full max-w-sm space-y-6">
+          {!otpLoginMessage ? (
+            <>
+              <p className="text-muted-foreground mb-6 text-center">
+                This card has already been claimed. Please sign in with OTP to access your membership.
+              </p>
+              <Form {...loginForm}>
+                <form onSubmit={loginForm.handleSubmit(handleOtpLoginFormSubmit)} className="space-y-4">
+                  <FormField
+                    control={loginForm.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Your Email Address</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="your.claimed@email.com" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button type="submit" className="w-full" disabled={isOtpLoginSubmitting}>
+                    {isOtpLoginSubmitting ? 'Sending OTP...' : 'Sign In with OTP'}
+                  </Button>
+                </form>
+              </Form>
+            </>
+          ) : (
+            <div className="text-center p-6 bg-green-50 dark:bg-green-900/20 rounded-md">
+              <p className="text-green-700 dark:text-green-300">{otpLoginMessage}</p>
+              <p className="text-sm text-muted-foreground mt-2">Please follow the instructions in your email to complete sign in.</p>
+            </div>
+          )}
+        </div>
       )}
 
-       <p className="mt-4 text-xs text-gray-500">Need help? Contact support.</p>
+       <p className="mt-8 text-xs text-gray-500">Need help? Contact support.</p>
     </div>
   );
 };

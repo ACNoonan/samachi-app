@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Mail, Lock } from "lucide-react";
+import { ChevronLeft, Mail } from "lucide-react";
 import { motion } from "framer-motion";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -29,10 +29,9 @@ import {
   FormMessage,
 } from "@/app/components/ui/form";
 
-// Define Zod Schema
-const formSchema = z.object({
+// Define Zod Schema for OTP login (email only)
+const otpFormSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }),
-  password: z.string().min(1, { message: "Password is required." }),
 });
 
 interface WalletButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -65,55 +64,41 @@ const BottomGradient = () => {
   );
 };
 
-const LabelInputContainer = ({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) => {
-  return (
-    <div className={`flex flex-col space-y-2 w-full ${className}`}>
-      {children}
-    </div>
-  );
-};
-
 const SamachiLoginPage = () => {
   const router = useRouter();
   const { supabase } = useAuth();
   
-  // Initialize react-hook-form
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+  const form = useForm<z.infer<typeof otpFormSchema>>({
+    resolver: zodResolver(otpFormSchema),
     defaultValues: {
       email: "",
-      password: "",
     },
   });
 
-  // Define onSubmit handler using Supabase auth
-  async function onSubmit(values: z.infer<typeof formSchema>) {
-    console.log("Login attempt with:", values.email);
+  async function onSubmit(values: z.infer<typeof otpFormSchema>) {
+    console.log("OTP Login attempt with:", values.email);
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 
     try {
-      // Use Supabase client to sign in
-      const { error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithOtp({
         email: values.email,
-        password: values.password,
+        options: {
+          emailRedirectTo: `${siteUrl}/auth/callback`,
+          // No card_identifier for this generic login flow
+        },
       });
 
       if (error) {
-        throw error; // Throw Supabase error
+        throw error; 
       }
 
-      toast.success("Signed in successfully!");
-      // Refresh the page to trigger middleware and update server components
-      router.refresh(); 
+      toast.success("Check your email!", { description: "We\'ve sent a magic link to your email address."});
+      // Don't redirect here, user needs to click the email link.
+      // router.refresh(); // Not needed here, callback will handle session and redirect
     } catch (error: any) {
-      console.error("Supabase login error:", error);
+      console.error("Supabase OTP login error:", error);
       toast.error(
-        error.message || "Login failed. Please check your credentials."
+        error.message || "Login failed. Please try again."
       );
     }
   }
@@ -142,7 +127,7 @@ const SamachiLoginPage = () => {
             </div>
             <CardTitle className="text-2xl font-bold text-white">Samachi Sign In</CardTitle>
             <CardDescription className="text-gray-400">
-              Access your Samachi membership securely
+              Enter your email to receive a magic link.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -172,41 +157,12 @@ const SamachiLoginPage = () => {
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <div className="flex items-center justify-between">
-                        <Label className="text-gray-300 font-medium">Password</Label>
-                        <Link href="/forgot-password" className="text-sm text-gray-400 hover:text-white hover:underline">
-                          Forgot password?
-                        </Link>
-                      </div>
-                      <FormControl>
-                        <div className="relative">
-                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                          <Input
-                            type="password"
-                            placeholder="••••••••"
-                            autoComplete="current-password"
-                            className="pl-10 bg-gray-900/80 backdrop-blur-sm border-gray-800 focus:border-gray-700 focus:ring focus:ring-gray-700 text-white"
-                            disabled={form.formState.isSubmitting}
-                            {...field}
-                          />
-                        </div>
-                      </FormControl>
-                      <FormMessage className="text-red-400" />
-                    </FormItem>
-                  )}
-                />
-
                 <Button
                   type="submit"
                   className="w-full bg-gray-800 hover:bg-gray-700 text-white py-3 font-medium rounded-lg shadow-md transition-colors"
                   disabled={form.formState.isSubmitting}
                 >
-                  {form.formState.isSubmitting ? "Signing In..." : "Sign In"}
+                  {form.formState.isSubmitting ? "Sending Link..." : "Send Magic Link"}
                 </Button>
               </form>
             </Form>
@@ -217,7 +173,7 @@ const SamachiLoginPage = () => {
               </div>
               <div className="relative flex justify-center text-xs uppercase">
                 <span className="bg-black px-2 text-gray-400">
-                  Or continue with
+                  Or connect with
                 </span>
               </div>
             </div>
@@ -226,7 +182,6 @@ const SamachiLoginPage = () => {
               <WalletButton
                 name="Connect Solana Wallet"
                 onClick={() => {
-                  // Add your wallet connection logic here
                   toast("Solana wallet authentication coming soon!", {
                     style: { 
                       background: 'rgba(30, 30, 30, 0.9)',
@@ -241,13 +196,19 @@ const SamachiLoginPage = () => {
           </CardContent>
           <CardFooter className="flex flex-col space-y-2 pt-0">
             <div className="text-center text-sm">
-              <span className="text-gray-400">Don't have an account?</span>{" "}
+              <span className="text-gray-400">Need an account for a card?</span>{" "}
               <Link 
-                href="/create-profile" 
+                href="/card/SOME_DEFAULT_OR_EXAMPLE_CARD_ID" // Or guide to scan a card
                 className="text-gray-300 hover:text-white hover:underline font-medium"
               >
-                Create an account
+                Register your card
               </Link>
+            </div>
+             <div className="text-center text-sm mt-2">
+                <span className="text-gray-400">No card? Use</span>{" "}
+                <Link href="/minimal-login" className="text-gray-300 hover:text-white hover:underline font-medium">
+                    Demo Login (No Card)
+                </Link>
             </div>
           </CardFooter>
         </Card>

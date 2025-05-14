@@ -57,11 +57,36 @@ We\'ve built Samachi on a modern, scalable, and robust tech stack:
 
     ```ini
     # .env.local
-    NEXT_PUBLIC_SUPABASE_URL=...
+
+    # Supabase
+    NEXT_PUBLIC_SUPABASE_URL=<public_URL_for_your_Supabase_DB>
     NEXT_PUBLIC_SUPABASE_ANON_KEY=...
     SUPABASE_SERVICE_ROLE_KEY=... # Keep Secret!
+
+    # Redirect URL used by Supabase - http://localhost:3000 is the default dev URL
+    NEXT_PUBLIC_SITE_URL=http://localhost:3000
+
+    # Glownet - Development
     GLOWNET_API_BASE_URL=https://opera.glownet.com/organization
     GLOWNET_API_KEY=... # Optional for judges
+
+    # Solana
+    NEXT_PUBLIC_SOLANA_PROGRAM_ID=...
+    NEXT_PUBLIC_MAGIC_LINK_KEY=...
+
+    # Solana Plan B: Localnet
+    NEXT_PUBLIC_SOLANA_RPC_URL=https://api.devnet.solana.com # Or mainnet: https://api.mainnet-beta.solana.com
+    NEXT_PUBLIC_SOLANA_NETWORK=devnet
+    NEXT_PUBLIC_TREASURY_WALLET_ADDRESS=<wallet_address> # Devnet public treasury address
+    NEXT_PUBLIC_USDC_MINT_ADDRESS=<mint_address> # Devnet USDC Mint Address
+
+    TREASURY_WALLET_ADDRESS=<wallet_address> # Devnet public treasury address
+    TREASURY_WALLET_SECRET_KEY=<wallet_secret_key>
+    USDC_MINT_ADDRESS=<token_minting_address> # Devnet USDC Mint Address
+    
+    # Helius
+    HELIUS_API_KEY=... # Add if you plan to use the Helius SDK directly later, not strictly needed for webhook secret verification
+    HELIUS_WEBHOOK_SECRET=...
     ```
 1.  **Database:** Ensure Supabase tables are set up (use `supabase/migrations` and `supabase db push` if available, or set up manually).
 

@@ -93,9 +93,9 @@ async function getEventGtags(eventId: number): Promise<string[]> {
     return gtags;
 }
 
-async function syncCards(cardIds: string[]): Promise<SyncResult | null> {
+async function syncCards(cardIds: string[], eventId: number): Promise<SyncResult | null> {
     if (!cardIds.length) {
-        console.log("No cards to sync.");
+        console.log("No cards to sync for this event batch.");
         return null;
     }
     
@@ -113,6 +113,7 @@ async function syncCards(cardIds: string[]): Promise<SyncResult | null> {
         // Prepare card data
         const cardsData = cardIds.map(cardId => ({
             card_identifier: cardId,
+            glownet_event_id: eventId,
             glownet_status: 'ACTIVE',
             status: 'unregistered'
         }));
@@ -213,9 +214,9 @@ async function processEventGtags(eventId: number, eventName: string, batchSize =
     for (let i = 0; i < gtags.length; i += batchSize) {
         const batch = gtags.slice(i, i + batchSize);
         processed += batch.length;
-        console.log(`\nSyncing batch ${Math.floor(i / batchSize) + 1} (${processed}/${totalGtags} G-Tags)...`);
+        console.log(`\nSyncing batch ${Math.floor(i / batchSize) + 1} (${processed}/${totalGtags} G-Tags) for event ID ${eventId}...`);
         
-        const result = await syncCards(batch);
+        const result = await syncCards(batch, eventId);
         if (result?.results) {
             totalSynced += result.results.synced;
             totalFailed += result.results.failed;
@@ -253,7 +254,7 @@ export async function main() {
                 continue;
             }
 
-            const result = await syncCards(gTag);
+            const result = await syncCards(gTag, event.id);
             console.log(`Sync result for event ${event.id}:`, result);
         }
 

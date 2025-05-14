@@ -19,23 +19,44 @@ import { SolanaProvider } from './context/SolanaContext';
 // Default styles that can be overridden by your app
 require('@solana/wallet-adapter-react-ui/styles.css');
 
-const LOCALNET_ENDPOINT = 'http://127.0.0.1:8899';
+// const LOCALNET_ENDPOINT = 'http://127.0.0.1:8899'; // Remove or comment out hardcoded value
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  // Determine Solana network based on environment
-  const network = process.env.NODE_ENV === 'development' 
-                    ? WalletAdapterNetwork.Devnet // Use Devnet settings even for localnet to avoid type issues, endpoint overrides below
-                    : WalletAdapterNetwork.Devnet; // Or WalletAdapterNetwork.Mainnet for production
-  
-  // Determine the endpoint
+  // Determine Solana network based on environment variable
+  // Use WalletAdapterNetwork type for consistency, but the actual endpoint URL comes from env var
+  const network = (process.env.NEXT_PUBLIC_SOLANA_NETWORK === 'mainnet-beta'
+    ? WalletAdapterNetwork.Mainnet
+    : WalletAdapterNetwork.Devnet);
+
+  // Determine the endpoint from environment variable, fallback to network clusterApiUrl
   const endpoint = useMemo(() => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log("Using localnet endpoint:", LOCALNET_ENDPOINT);
-      return LOCALNET_ENDPOINT;
+    const envEndpoint = process.env.NEXT_PUBLIC_SOLANA_NETWORK;
+    let url: string;
+
+    if (envEndpoint) {
+        // Check if it's a known network name or a URL
+        if (envEndpoint === 'devnet' || envEndpoint === 'testnet' || envEndpoint === 'mainnet-beta') {
+            url = clusterApiUrl(envEndpoint as WalletAdapterNetwork);
+            console.log(`Using ${envEndpoint} endpoint (clusterApiUrl):`, url);
+        } else {
+            // Assume it's a custom URL (like localnet)
+            url = envEndpoint;
+            console.log("Using custom endpoint URL:", url);
+        }
+    } else {
+        // Fallback if env var is not set (defaults to Devnet)
+        url = clusterApiUrl(WalletAdapterNetwork.Devnet);
+        console.log("Warning: NEXT_PUBLIC_SOLANA_NETWORK not set, defaulting to Devnet endpoint:", url);
     }
-    console.log("Using network endpoint:", network);
-    return clusterApiUrl(network);
-  }, [network]);
+    return url;
+    // Original logic commented out:
+    // if (process.env.NODE_ENV === 'development') {
+    //   console.log("Using localnet endpoint:", LOCALNET_ENDPOINT);
+    //   return LOCALNET_ENDPOINT;
+    // }
+    // console.log("Using network endpoint:", network);
+    // return clusterApiUrl(network);
+  }, []); // No dependency needed as env vars don't change during runtime
 
   // Initialize wallet adapters
   const wallets = useMemo(
@@ -55,7 +76,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     >
       <AuthProvider>
         <ConnectionProvider endpoint={endpoint}>
-          <WalletProvider wallets={wallets} autoConnect={false}>
+          <WalletProvider wallets={wallets} autoConnect={true}>
             <WalletModalProvider>
               <SolanaProvider>
                 {children}
