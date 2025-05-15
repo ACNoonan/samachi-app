@@ -42,3 +42,81 @@ This directory contains example API routes for the headless API app.
 
 For more details, see [route.js file convention](https://nextjs.org/docs/app/api-reference/file-conventions/route).
 >>>>>>> f8e25e6 (Initial commit from Create Next App)
+
+## Dev environment setup
+
+### Creating/Running Tests
+
+The project is currently using Jest (specifically, `ts-jest`) as a test-runner.
+
+### Setup
+
+The dependencies have been added to `package.json` under `"devDependencies"`, but in case you need to reconstruct them:
+
+```bash
+npm install --save-dev ts-jest ts-node jest supertest node-mocks-http @types/jest @types/supertest`
+```
+
+The project root also creates a `jest.config.ts` file, with the following configuration:
+
+```ts
+import type { Config } from 'jest';
+
+const config: Config = {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  testMatch: ['**/__tests__/**/*.test.ts'],
+};
+
+export default config;
+```
+
+And it includes the following, added to `tsconfig.json`:
+
+```js
+{
+  "compilerOptions": {
+    "types": ["jest", "node"]
+  }
+}
+```
+
+### Tests Location
+
+Tests are being stored under the `__tests__/` folder, in the project root. The folder structure inside `__tests__` matches the project's code folder structure. So, for example:
+
+**Code Module:** `app/api/org/[org_id]/users/route.ts'`
+
+**Tests Location:** `__tests__/api/org/[org_id]/users/users/users.test.ts`
+
+This way, both code files are kept at the end of identical folder paths, in hopes that this will help us keep straight which tests belong to which file. In addition, the *.test.ts file itself contains an import statement that points to the exact code being tested, In this case:
+
+```ts
+import { GET } from '@/app/api/org/[org_id]/users/route';
+```
+
+(Note that the `@/` has been aliased to the project root with a parameter in `tsconfig.json` like this:
+
+```js
+"paths": { "@/*": ["./*"] },
+```
+
+ This is why it's not necessary to type the include path using `../../../`.
+
+### Debugging
+
+Debugging tests has been enabled for VSCode/VSCode-derivatives (e.g., _Cursor_) with another config in the `.vscode/launch.json` file:
+
+```js
+{
+  "type": "node",
+  "request": "launch",
+  "name": "Debug Jest Tests",
+  "program": "${workspaceFolder}/node_modules/.bin/jest",
+  "args": ["--runInBand"],
+  "console": "integratedTerminal",
+  "internalConsoleOptions": "neverOpen"
+}
+```
+
+To debug through tests, set a breakpoint at the desired spot in code (in either the test or the application code), and then select/run the **Debug Jest Tests** configuration from the VSCode debugger.
