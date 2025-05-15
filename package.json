@@ -41,8 +41,9 @@
     "framer-motion": "^12.7.3",
     "keccak": "^3.0.4",
     "lucide-react": "^0.487.0",
-    "next": "14.2.28",
+    "next": "^14.2.28",
     "next-themes": "^0.4.6",
+    "node-fetch": "^3.3.2",
     "pino-pretty": "^13.0.0",
     "protobufjs": "^7.5.0",
     "react": "^18.3.1",
@@ -51,6 +52,7 @@
     "sonner": "^2.0.3",
     "tailwind-merge": "^3.2.0",
     "tiny-secp256k1": "^2.2.3",
+    "ts-node": "^10.9.2",
     "usb": "^2.15.0",
     "utf-8-validate": "^6.0.5",
     "ws": "^8.18.0",
@@ -61,7 +63,7 @@
     "@tailwindcss/postcss": "^4",
     "@types/chai": "^5.2.1",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^20.17.30",
+    "@types/node": "^20.17.47",
     "@types/react": "^18.3.20",
     "@types/react-dom": "^18.3.6",
     "chai": "^5.2.0",
@@ -69,6 +71,6 @@
     "node-gyp": "^11.2.0",
     "puppeteer": "^24.7.2",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5.8.3"
   }
 }
