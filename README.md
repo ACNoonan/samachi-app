@@ -45,11 +45,99 @@ For more details, see [route.js file convention](https://nextjs.org/docs/app/api
 
 ## Dev environment setup
 
+### Defining/Using Object Schemas
+
+Since this is TypeScript, let's keep our types tight. To that end, API GET routes don't return arrays of generic 'objects', they return one or more *specific types* of object.
+
+For example, `https://<domain>/api/venue/` returns an `Array` of `Venue` objects.
+
+#### Setup - Create Schema Definitions in `models/` Directory
+
+Common data objects are defined in `<root>/models/` using *a single schema file per object*. `Venue`, for example, is described in the file `/models/Venue.ts`, and as of this writing (15 May 2025), it looks like this:
+
+```js
+import { Timestamp } from "next/dist/server/lib/cache-handlers/types";
+
+export interface Venue {
+  id: string;
+  name: string;
+  address: string | null;
+  glownet_venue_id: string | null;
+  primary_contact: string | null;
+  secondary_contact?: string;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+```
+
+#### Building a Single Reference Schema
+
+We've using `typescript-json-schema` ([npm link](https://www.npmjs.com/package/typescript-json-schema)) to generate a single `schemas.json` file (also in `models/`) that compiles all of the object definitions into a single schema. This is useful because it can be read by Swagger and used in the Swagger UI endpoint.
+
+We've provided several options for regenerating the `schemas.json` file: 
+
+1. We have added a build command to the `scripts` section of `package.json` to allow running the following:
+
+```bash
+pnpm run build:schemas
+```
+
+2. Alternatively, running
+
+```bash
+pnpm build
+```
+
+will also recreate the `models/schemas.json` file, because it also runs the command to rebuild the schemas file.
+
+3. Finally you can run the command manually, in case you want to change some of the options. Running:
+
+```bash
+pnpm typescript-json-schema models/tsconfig.schemas.json "*" --required
+```
+
+from the command-line will generate a schema from the files in `models/` and dump it to the terminal (because it's missing the `--output` argument), while
+
+```bash
+pnpm typescript-json-schema models/tsconfig.schemas.json "*" --required --output models/schemas.json
+```
+
+will simply regenerate the `models/schemas.json` file.
+
+#### Using the Schemas with Swagger
+
+Finally, the whole purpose for generating a `schemas.json` file: so that we can include it in Swagger definitions without having to rewrite it for each method that uses it.
+
+Using the route `GET https://\<domain>/api/venue/` as an example: the JSDoc-style comment for this handler (in `api/venue/route.ts`) looks like this:
+
+```js
+/**
+ * @swagger
+ * /api/venue/: 
+ *  get:
+ *    summary: Get all venues
+ *    description: Gets array of Venue objects for all venues represented in the DB.
+ *    responses:
+ *      200:
+ *        description: Array of Venue records
+ *        content:
+ *          application/json:
+ *            schema:
+ *              type: array
+ *              items:
+ *                $ref: '#/components/schemas/Venue'
+ */
+```
+
+Note the `$ref:` property at the bottom: it references the Venue schema definition, which it's getting from the the `models/schemas.json` file. This allows Swagger to produce something like the following:
+
+![SwaggerUI for /api/venue/](https://github.com/ACNoonan/samachi-app/blob/master/readme-assets/swaggerui-example-venue-api-route.png)
+
 ### Creating/Running Tests
 
 The project is currently using Jest (specifically, `ts-jest`) as a test-runner.
 
-### Setup
+#### Setup
 
 The dependencies have been added to `package.json` under `"devDependencies"`, but in case you need to reconstruct them:
 
@@ -81,7 +169,7 @@ And it includes the following, added to `tsconfig.json`:
 }
 ```
 
-### Tests Location
+#### Tests Location
 
 Tests are being stored under the `__tests__/` folder, in the project root. The folder structure inside `__tests__` matches the project's code folder structure. So, for example:
 
@@ -103,7 +191,7 @@ import { GET } from '@/app/api/org/[org_id]/users/route';
 
  This is why it's not necessary to type the include path using `../../../`.
 
-### Debugging
+#### Debugging
 
 Debugging tests has been enabled for VSCode/VSCode-derivatives (e.g., _Cursor_) with another config in the `.vscode/launch.json` file:
 

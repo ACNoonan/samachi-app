@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build",
-    "start": "next start"
+    "build": "pnpm run build:schemas && next build",
+    "start": "next start",
+    "build:schemas": "typescript-json-schema models/tsconfig.schemas.json '*' --required --out models/schemas.json"
   },
   "dependencies": {
     "@stoplight/elements": "^9.0.1",
