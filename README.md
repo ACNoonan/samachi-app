@@ -208,3 +208,96 @@ Debugging tests has been enabled for VSCode/VSCode-derivatives (e.g., _Cursor_) 
 ```
 
 To debug through tests, set a breakpoint at the desired spot in code (in either the test or the application code), and then select/run the **Debug Jest Tests** configuration from the VSCode debugger.
+
+### Working with Supabase
+
+Since we're using Supabase *and* TypeScript, we'll try to generate type-checking for the database, as well. 
+
+> *Most of the following (e.g., the generation of the `models/supabase-types/supabase.ts` file) has already been done and included in the repo.*
+>
+> In case we need to set this up again, however, or if we need to regenerate the `supabase.ts` file, here are the steps to set everything up:
+
+#### Step 1: Install the Supabase CLI
+
+For macOS (assuming you have *brew* installed):
+
+```bash
+brew install supabase/tap/supabase
+```
+
+If not (or if Linux):
+
+```bash
+brew install supabase/tap/supabase npm install -g supabase
+```
+
+#### Step 2: Log in and link Supabase project
+
+```bash
+supabase login
+```
+
+The CLI will prompt you:
+
+```bash
+Hello from Supabase! Press Enter to open browser and login automatically.
+```
+
+Once you're auth'd in the browser, you should receive a verification code to enter on the command line.
+
+Next:
+
+```bash
+supabase link --project-ref your-project-ref
+```
+
+> ***Note***: You can find your `project-ref` in the project's URL or dashboard.
+>
+> E.g., in the URL `https://supabase.com/dashboard/project/abcxyz123`, the `project-ref` is the `abcxyz123` portion.
+
+The CLI will ask for your DB password, which will be the one you created when you created your Supabase account and DB.
+
+#### Step 3: Generate Database Types
+
+Run the following command:
+
+```bash
+supabase gen types typescript --project-id your-project-ref --schema public > types/supabase.ts
+```
+
+#### Step 4: Import and Use the Database type in the Supabase Server Client
+
+In the file `lib/supabase/server.ts`:
+
+```ts
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { cookies, headers } from 'next/headers';
+import { type Database } from '@/types/supabase';
+
+export const createServerSupabaseClient = () => {
+  return createServerComponentClient<Database>({
+    cookies,
+    headers,
+  });
+};
+```
+
+#### Bonus
+
+To facilitate re-generating the types file in the future, we have also added a bash script, `scripts/gen-types.sh`. Since the `--project-id` (the project-ref value) might need to refer your individual development DB, the script reads the `SUPABASE_PROJECT_REF` value from `.env.local` and uses that to call the `supabase gen types ...` command.
+
+We've added a script in `package.json` to call the bash file.
+
+```json
+"scripts": {
+  "types:db": "bash scripts/gen-types.sh"
+}
+```
+
+This means that, assuming you've added the `SUPABASE_PROJECT_REF` key to your `.env.local`, you can run
+
+```bash
+pnpm run types:db
+```
+
+to regenerate the types file.

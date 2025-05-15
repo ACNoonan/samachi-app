@@ -6,10 +6,13 @@
     "dev": "next dev --turbopack",
     "build": "pnpm run build:schemas && next build",
     "start": "next start",
-    "build:schemas": "typescript-json-schema models/tsconfig.schemas.json '*' --required --out models/schemas.json"
+    "build:schemas": "typescript-json-schema models/tsconfig.schemas.json '*' --required --out models/schemas.json",
+    "types:db": "bash scripts/gen-types.sh"
   },
   "dependencies": {
     "@stoplight/elements": "^9.0.1",
+    "@supabase/auth-helpers-nextjs": "^0.10.0",
+    "@supabase/supabase-js": "^2.49.4",
     "next": "15.3.2",
     "next-swagger-doc": "^0.4.1",
     "swagger-ui-react": "^5.21.0"
@@ -20,6 +23,7 @@
     "@types/react": "^19",
     "@types/supertest": "^6.0.3",
     "@types/swagger-ui-react": "^5.18.0",
+    "dotenv": "^16.5.0",
     "jest": "^29.7.0",
     "node-mocks-http": "^1.17.2",
     "supertest": "^7.1.1",

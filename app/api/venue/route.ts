@@ -1,24 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 /**
  * @swagger
- * /api/staking/[user_id]: 
+ * /api/venue/: 
  *  get:
- *    summary: Get staked balance by user_id
- *    description: Gets current balance for the user_id specified in the route.
+ *    summary: Get all venues
+ *    description: Gets array of Venue objects for all venues represented in the DB.
  *    responses:
  *      200:
- *        description: Success response.
+ *        description: Array of Venue records
  *        content:
  *          application/json:
- *            type: number
+ *            schema:
+ *              type: array
+ *              items:
+ *                $ref: '#/components/schemas/Venue'
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ user_id: string }> },
+  { params }: { params: { filter?: string } },
+  supabase = createServerSupabaseClient()
 ) {
-  const { user_id } = await params;
-  return NextResponse.json({ message: `Hello ${user_id}!` });
+  const queryFilter = params.filter;
+
+  const { data, error } = await supabase
+    .from('venues')
+    .select('*');
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json(data);
 }
 
 /**
@@ -32,26 +47,26 @@ export async function GET(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ slug: string }> },
+  { params }: { params: { slug: string } },
 ) {
-  const { slug } = await params;
+  const { slug } = params;
   return NextResponse.json({ message: `Hello ${slug}!` });
 }
 
 // Update stake
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ slug: string }> },
+  { params }: { params: { slug: string } },
 ) {
-  const { slug } = await params;
+  const { slug } = params;
   return NextResponse.json({ message: `Hello ${slug}!` });
 }
 
 // Unstake token
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ slug: string }> },
+  { params }: { params: { slug: string } },
 ) {
-  const { slug } = await params;
+  const { slug } = params;
   return NextResponse.json({ message: `Hello ${slug}!` });
 }
