@@ -5,8 +5,8 @@ export interface Venue {
   name: string;
   address: string | null;
   glownet_venue_id: string | null;
-  primary_contact: string | null;
+  primary_contact?: string | null;
   secondary_contact?: string;
-  created_at: Timestamp;
-  updated_at: Timestamp;
+  created_at: string; // should be an ISO 8601 string
+  updated_at: string; // should be an ISO 8601 string
 }

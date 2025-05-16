@@ -290,7 +290,7 @@ We've added a script in `package.json` to call the bash file.
 
 ```json
 "scripts": {
-  "types:db": "bash scripts/gen-types.sh"
+  "types:db": "bash scripts/type-gen/bash/gen-types.sh"
 }
 ```
 
