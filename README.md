@@ -96,19 +96,19 @@ will also recreate the `models/schema/schemas.json` file, because it also runs t
 pnpm typescript-json-schema models/tsconfig.schemas.json "*" --required
 ```
 
-from the command-line will generate a schema from the files in `models/` and dump it to the terminal (because it's missing the `--output` argument), while
+from the command-line will generate a schema from the files in `models/schema/` and dump it to the terminal (because it's missing the `--output` argument), while
 
 ```bash
-pnpm typescript-json-schema models/tsconfig.schemas.json "*" --required --output models/schemas.json
+pnpm typescript-json-schema models/tsconfig.schemas.json "*" --required --output models/schema/schemas.json
 ```
 
-will simply regenerate the `models/schemas.json` file.
+will simply regenerate the `models/schema/schemas.json` file.
 
 #### Using the Schemas with Swagger
 
 Finally, the whole purpose for generating a `schemas.json` file: so that we can include it in Swagger definitions without having to rewrite it for each method that uses it.
 
-Using the route `GET https://\<domain>/api/venue/` as an example: the JSDoc-style comment for this handler (in `api/venue/route.ts`) looks like this:
+Using the route `GET https://<domain>/api/venue/` as an example: the JSDoc-style comment for this handler (in `api/venue/route.ts`) looks like this:
 
 ```js
 /**
