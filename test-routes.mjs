@@ -27,6 +27,7 @@ const testData = {
   venueIds: ['534d480b-ba71-48fd-9957-9800b2b4acb9', '510dd180-6cbf-4948-95e3-87ab0ed052dd', '00000000-0000-0000-0000-000000000000'],
   userIds: ['1f3cb1be-43b9-4ea0-bf2f-f250b258187a', '00000000-0000-0000-0000-000000000000'],
   orgIds: ['1', 'nonexistent-org'],
+  stagIds: ['stag-1', 'stag-2'],
 };
 
 // Route implementations
@@ -88,6 +89,28 @@ const routes = {
     }
   },
   
+  // Venue users route
+  '/api/venue/:venueId/users': async (req, res, params) => {
+    const venueId = params.venueId;
+    
+    if (!venueId) {
+      res.statusCode = 400;
+      return { error: 'Venue ID is required' };
+    }
+    
+    try {
+      // Simulated venue users
+      return [
+        { id: testData.userIds[0], name: 'Test User 1' },
+        { id: '2f4db1ce-54c9-5ea1-cf3f-f350b358187a', name: 'Test User 2' }
+      ];
+    } catch (err) {
+      console.error('Error:', err);
+      res.statusCode = 500;
+      return { error: 'Internal server error' };
+    }
+  },
+  
   // User Account route
   '/api/user-account': async (req, res, query) => {
     const userId = query.user_id;
@@ -123,6 +146,23 @@ const routes = {
     }
   },
   
+  // User Account assign stag route
+  '/api/user-account/assign-stag': async (req, res, query, body) => {
+    const { userId, stagId } = body || {};
+    
+    if (!userId || !stagId) {
+      res.statusCode = 400;
+      return { error: 'User ID and STAG ID are required' };
+    }
+    
+    return {
+      success: true,
+      userId,
+      stagId,
+      timestamp: new Date().toISOString()
+    };
+  },
+  
   // Checkin route
   '/api/checkin/:orgId': async (req, res, params, body) => {
     const orgId = params.orgId;
@@ -148,6 +188,38 @@ const routes = {
         orgId,
         userId,
         venueId
+      };
+    } catch (err) {
+      console.error('Error:', err);
+      res.statusCode = 500;
+      return { error: 'Internal server error' };
+    }
+  },
+  
+  // Checkin route with user ID
+  '/api/checkin/:orgId/:userId': async (req, res, params) => {
+    const { orgId, userId } = params;
+    
+    if (!orgId || !userId) {
+      res.statusCode = 400;
+      return { error: 'Organization ID and User ID are required' };
+    }
+    
+    try {
+      // Return checkin history for the user
+      return {
+        checkins: [
+          {
+            id: 'checkin-1',
+            timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
+            venueId: testData.venueIds[0]
+          },
+          {
+            id: 'checkin-2',
+            timestamp: new Date().toISOString(),
+            venueId: testData.venueIds[1]
+          }
+        ]
       };
     } catch (err) {
       console.error('Error:', err);
@@ -187,6 +259,182 @@ const routes = {
       res.statusCode = 500;
       return { error: 'Internal server error' };
     }
+  },
+  
+  // Register with STAG
+  '/api/register/:orgId/stag': async (req, res, params, body) => {
+    const { orgId } = params;
+    const { userId, stagId } = body || {};
+    
+    if (!orgId) {
+      res.statusCode = 400;
+      return { error: 'Organization ID is required' };
+    }
+    
+    if (!userId || !stagId) {
+      res.statusCode = 400;
+      return { error: 'User ID and STAG ID are required' };
+    }
+    
+    return {
+      success: true,
+      registrationId: 'test-stag-registration',
+      timestamp: new Date().toISOString(),
+      orgId,
+      userId,
+      stagId
+    };
+  },
+  
+  // Register with specific STAG
+  '/api/register/:orgId/stag/:stagId': async (req, res, params, body) => {
+    const { orgId, stagId } = params;
+    const { userId } = body || {};
+    
+    if (!orgId || !stagId) {
+      res.statusCode = 400;
+      return { error: 'Organization ID and STAG ID are required' };
+    }
+    
+    if (!userId) {
+      res.statusCode = 400;
+      return { error: 'User ID is required' };
+    }
+    
+    return {
+      success: true,
+      registrationId: 'test-specific-stag-registration',
+      timestamp: new Date().toISOString(),
+      orgId,
+      userId,
+      stagId
+    };
+  },
+  
+  // Staking route
+  '/api/staking': async (req, res, query) => {
+    return {
+      totalStaked: '1000000',
+      stakingPoolSize: '10000000'
+    };
+  },
+  
+  // Staking by user ID
+  '/api/staking/:userId': async (req, res, params) => {
+    const { userId } = params;
+    
+    if (!userId) {
+      res.statusCode = 400;
+      return { error: 'User ID is required' };
+    }
+    
+    // Simulate different responses based on user ID
+    if (userId === testData.userIds[0]) {
+      return {
+        userId,
+        stakedAmount: '5000',
+        stakingSince: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString() // 30 days ago
+      };
+    } else if (userId === testData.userIds[1]) {
+      res.statusCode = 404;
+      return { error: 'User not found or no staking record' };
+    } else {
+      return {
+        userId,
+        stakedAmount: '0',
+        stakingSince: null
+      };
+    }
+  },
+  
+  // Settle routes
+  '/api/settle': async (req, res, query) => {
+    return {
+      totalSettled: '500000',
+      pendingSettlements: '50000'
+    };
+  },
+  
+  // Settle by organization
+  '/api/settle/:orgId': async (req, res, params) => {
+    const { orgId } = params;
+    
+    if (!orgId) {
+      res.statusCode = 400;
+      return { error: 'Organization ID is required' };
+    }
+    
+    return {
+      orgId,
+      settledAmount: '250000',
+      pendingAmount: '25000',
+      lastSettlement: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString() // 1 day ago
+    };
+  },
+  
+  // Settle by organization and user
+  '/api/settle/:orgId/:userId': async (req, res, params) => {
+    const { orgId, userId } = params;
+    
+    if (!orgId || !userId) {
+      res.statusCode = 400;
+      return { error: 'Organization ID and User ID are required' };
+    }
+    
+    return {
+      orgId,
+      userId,
+      settledAmount: '5000',
+      pendingAmount: '1000',
+      lastSettlement: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).toISOString() // 7 days ago
+    };
+  },
+  
+  // User history routes
+  '/api/user-history': async (req, res, query) => {
+    return {
+      totalUsers: 500,
+      activeToday: 50,
+      activeThisWeek: 200,
+      activeThisMonth: 350
+    };
+  },
+  
+  // User history by organization
+  '/api/user-history/:orgId': async (req, res, params) => {
+    const { orgId } = params;
+    
+    if (!orgId) {
+      res.statusCode = 400;
+      return { error: 'Organization ID is required' };
+    }
+    
+    return {
+      orgId,
+      totalUsers: 200,
+      activeToday: 25,
+      activeThisWeek: 100,
+      activeThisMonth: 150
+    };
+  },
+  
+  // User history by organization and user
+  '/api/user-history/:orgId/:userId': async (req, res, params) => {
+    const { orgId, userId } = params;
+    
+    if (!orgId || !userId) {
+      res.statusCode = 400;
+      return { error: 'Organization ID and User ID are required' };
+    }
+    
+    return {
+      orgId,
+      userId,
+      lastActive: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 hours ago
+      totalLogins: 35,
+      totalTransactions: 12,
+      joinDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 90).toISOString() // 90 days ago
+    };
   }
 };
 
@@ -290,14 +538,29 @@ async function runTests() {
   // Test venue by ID routes
   await testVenueById();
   
+  // Test venue users route
+  await testVenueUsers();
+  
   // Test user account routes
   await testUserAccount();
+  
+  // Test user account assign stag route
+  await testUserAccountAssignStag();
   
   // Test checkin routes
   await testCheckin();
   
   // Test register routes
   await testRegister();
+  
+  // Test staking routes
+  await testStaking();
+  
+  // Test settle routes
+  await testSettle();
+  
+  // Test user history routes
+  await testUserHistory();
   
   console.log('\n=== All Tests Completed ===');
   
@@ -320,11 +583,40 @@ async function testVenueById() {
   await testEndpoint(`/api/venue/${testData.venueIds[2]}`, 'GET', 'Nonexistent venue');
 }
 
+async function testVenueUsers() {
+  console.log('\n--- Testing /api/venue/:venueId/users ---');
+  await testEndpoint(`/api/venue/${testData.venueIds[0]}/users`, 'GET', 'Venue users');
+}
+
 async function testUserAccount() {
   console.log('\n--- Testing /api/user-account ---');
   await testEndpoint(`/api/user-account?user_id=${testData.userIds[0]}`, 'GET', 'Valid user');
   await testEndpoint(`/api/user-account?user_id=${testData.userIds[1]}`, 'GET', 'Nonexistent user');
   await testEndpoint('/api/user-account', 'GET', 'Missing user ID');
+}
+
+async function testUserAccountAssignStag() {
+  console.log('\n--- Testing /api/user-account/assign-stag ---');
+  await testEndpoint(
+    '/api/user-account/assign-stag',
+    'POST',
+    'Assign STAG to user',
+    { userId: testData.userIds[0], stagId: testData.stagIds[0] }
+  );
+  
+  await testEndpoint(
+    '/api/user-account/assign-stag',
+    'POST',
+    'Assign STAG missing user ID',
+    { stagId: testData.stagIds[0] }
+  );
+  
+  await testEndpoint(
+    '/api/user-account/assign-stag',
+    'POST',
+    'Assign STAG missing STAG ID',
+    { userId: testData.userIds[0] }
+  );
 }
 
 async function testCheckin() {
@@ -348,6 +640,13 @@ async function testCheckin() {
     'POST',
     'Checkin missing venue ID',
     { userId: testData.userIds[0] }
+  );
+  
+  console.log('\n--- Testing /api/checkin/:orgId/:userId ---');
+  await testEndpoint(
+    `/api/checkin/${testData.orgIds[0]}/${testData.userIds[0]}`,
+    'GET',
+    'Get user checkin history'
   );
 }
 
@@ -373,6 +672,61 @@ async function testRegister() {
     'POST',
     'Registration missing card ID',
     { userId: testData.userIds[0] }
+  );
+  
+  console.log('\n--- Testing /api/register/:orgId/stag ---');
+  await testEndpoint(
+    `/api/register/${testData.orgIds[0]}/stag`,
+    'POST',
+    'Register with STAG',
+    { userId: testData.userIds[0], stagId: testData.stagIds[0] }
+  );
+  
+  console.log('\n--- Testing /api/register/:orgId/stag/:stagId ---');
+  await testEndpoint(
+    `/api/register/${testData.orgIds[0]}/stag/${testData.stagIds[1]}`,
+    'POST',
+    'Register with specific STAG',
+    { userId: testData.userIds[0] }
+  );
+}
+
+async function testStaking() {
+  console.log('\n--- Testing /api/staking ---');
+  await testEndpoint('/api/staking', 'GET', 'General staking info');
+  
+  console.log('\n--- Testing /api/staking/:userId ---');
+  await testEndpoint(`/api/staking/${testData.userIds[0]}`, 'GET', 'User with staking');
+  await testEndpoint(`/api/staking/${testData.userIds[1]}`, 'GET', 'User without staking');
+}
+
+async function testSettle() {
+  console.log('\n--- Testing /api/settle ---');
+  await testEndpoint('/api/settle', 'GET', 'General settlement info');
+  
+  console.log('\n--- Testing /api/settle/:orgId ---');
+  await testEndpoint(`/api/settle/${testData.orgIds[0]}`, 'GET', 'Organization settlements');
+  
+  console.log('\n--- Testing /api/settle/:orgId/:userId ---');
+  await testEndpoint(
+    `/api/settle/${testData.orgIds[0]}/${testData.userIds[0]}`,
+    'GET',
+    'User settlements in organization'
+  );
+}
+
+async function testUserHistory() {
+  console.log('\n--- Testing /api/user-history ---');
+  await testEndpoint('/api/user-history', 'GET', 'General user history');
+  
+  console.log('\n--- Testing /api/user-history/:orgId ---');
+  await testEndpoint(`/api/user-history/${testData.orgIds[0]}`, 'GET', 'Organization user history');
+  
+  console.log('\n--- Testing /api/user-history/:orgId/:userId ---');
+  await testEndpoint(
+    `/api/user-history/${testData.orgIds[0]}/${testData.userIds[0]}`,
+    'GET',
+    'Specific user history in organization'
   );
 }
 
