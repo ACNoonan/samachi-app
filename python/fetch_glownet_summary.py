@@ -37,7 +37,7 @@ HEADERS = {
     "Accept": "application/json"
 }
 
-TARGET_EVENT_ID = "test1" # The specific event ID/slug to fetch
+# TARGET_EVENT_ID will be set dynamically
 SUMMARY_FILE_PATH = os.path.join(script_dir, "glownet_test_data_summary.json")
 
 # --- Helper Functions ---
@@ -65,6 +65,40 @@ def handle_response(response, success_status_codes=(200, 201)):
             print(f"Response Text (non-JSON): {response.text}")
         # Instead of raising, return None to indicate failure to the caller
         return None
+
+def get_all_events():
+    """Fetches all events from the Glownet API."""
+    url = f"{GLOWNET_API_BASE_URL}/api/v2/events"
+    print(f"Fetching all events from {url}...")
+    all_events = []
+    page = 1
+    while True:
+        try:
+            params = {'page': page, 'per_page': 100} # Fetch 100 per page
+            response = requests.get(url, headers=HEADERS, params=params)
+            data = handle_response(response, success_status_codes=(200,))
+
+            if data is None:
+                print(f"  Failed to fetch events page {page}. Stopping event fetch.")
+                return None # Indicate overall failure
+            
+            if isinstance(data, list):
+                if not data: # Empty list indicates end of pages
+                    print(f"  Fetched {len(all_events)} events in total.")
+                    break
+                all_events.extend(data)
+                print(f"  Fetched page {page} ({len(data)} events). Total so far: {len(all_events)}.")
+                page += 1
+            else:
+                print(f"  Error: Expected a list of events but received type {type(data)}. Data: {data}")
+                return None # Indicate failure
+            
+            time.sleep(0.1) # Be nice to the API
+
+        except requests.exceptions.RequestException as e:
+            print(f"  Network error fetching events (page {page}): {e}")
+            return None # Indicate overall failure
+    return all_events
 
 def get_event_details(event_id):
     """Retrieves the full details for a single specific event."""
@@ -147,11 +181,11 @@ def get_event_gtags(event_id):
 
     return all_gtags
 
-def print_formatted_summary(timestamp, event_details, customers_list, gtags_list, error_message):
+def print_formatted_summary(timestamp, target_event_id_for_print, event_details, customers_list, gtags_list, error_message):
     """Prints a formatted summary of the fetched data to the console."""
     print("\n" + "=" * 40)
     print(f"--- Summary of Fetched Data ({timestamp}) ---")
-    print(f"Target Event: {TARGET_EVENT_ID}")
+    print(f"Target Event: {target_event_id_for_print}")
     print("-" * 40)
 
     if error_message:
@@ -212,10 +246,55 @@ def print_formatted_summary(timestamp, event_details, customers_list, gtags_list
 
 # --- Main Script ---
 if __name__ == "__main__":
-    print(f"Starting Glownet data summary fetch for Event: {TARGET_EVENT_ID}")
+    print("Starting Glownet data summary fetch...")
     print(f"API Base URL: {GLOWNET_API_BASE_URL}")
     print("-" * 30)
 
+    events = get_all_events()
+
+    if not events:
+        print("No events found or failed to fetch events. Exiting.")
+        sys.exit(1)
+
+    print("\nAvailable Events:")
+    for i, event in enumerate(events):
+        event_name = event.get('name', 'N/A')
+        event_slug = event.get('slug', event.get('id', 'N/A')) # Use slug, fallback to id
+        print(f"  {i + 1}. {event_name} (Identifier: {event_slug})")
+    
+    print("-" * 30)
+
+    selected_event_identifier = None
+    while True:
+        try:
+            choice = input("Enter the number of the event to summarize: ")
+            choice_idx = int(choice) - 1
+            if 0 <= choice_idx < len(events):
+                selected_event = events[choice_idx]
+                # Prefer slug if available, otherwise use id
+                selected_event_identifier = selected_event.get('slug') or selected_event.get('id')
+                if selected_event_identifier is None:
+                    print("Error: Selected event has no 'slug' or 'id'. Please check API response.")
+                    sys.exit(1)
+                print(f"You selected: {selected_event.get('name', 'N/A')} (Identifier: {selected_event_identifier})")
+                break
+            else:
+                print("Invalid selection. Please enter a number from the list.")
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+        except Exception as e:
+            print(f"An unexpected error occurred during event selection: {e}")
+            sys.exit(1)
+            
+    if not selected_event_identifier:
+        print("No event identifier selected. Exiting.")
+        sys.exit(1)
+
+    TARGET_EVENT_ID = str(selected_event_identifier) # Ensure it's a string for API calls
+
+    print(f"Proceeding to fetch summary for Event: {TARGET_EVENT_ID}")
+    print("-" * 30)
+    
     fetch_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     event_details = None
     customers_list = None
@@ -301,7 +380,7 @@ if __name__ == "__main__":
         print(f"An unexpected error occurred writing the summary file: {e}")
 
     # Print the formatted summary of the *current* fetch to the console
-    print_formatted_summary(fetch_timestamp, event_details, customers_list, gtags_list, error_message)
+    print_formatted_summary(fetch_timestamp, TARGET_EVENT_ID, event_details, customers_list, gtags_list, error_message)
 
     print("-" * 30)
     print("Summary Fetch Script finished.") 

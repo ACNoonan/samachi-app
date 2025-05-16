@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   User, Wallet, Shield, HelpCircle, LogOut, 
   ChevronRight, Mail, Calendar, 
-  Twitter, MessageCircle, X
+  Twitter, MessageCircle, X, Link2, CheckCircle2, AlertCircle
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
@@ -13,6 +13,7 @@ import { useAuth } from '@/app/context/AuthContext';
 import { toast } from 'sonner';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import { Buffer } from 'buffer'; // For base64 conversion
 
 // Define a more specific type for settings items
 type SettingItem = {
@@ -25,15 +26,17 @@ type SettingItem = {
 
 export const ProfileSettings: React.FC = () => {
   const router = useRouter();
-  const { user, profile, logout } = useAuth();
-  const { publicKey, connected } = useWallet();
+  const { user, profile, logout, fetchProfile, isProfileLoading } = useAuth(); // Added fetchProfile and isProfileLoading
+  const { publicKey, connected, signMessage, wallet } = useWallet();
+  
   const [privacyModalOpen, setPrivacyModalOpen] = useState(false);
   const [supportModalOpen, setSupportModalOpen] = useState(false);
-  
+  const [isLinkingWallet, setIsLinkingWallet] = useState(false);
+  const [walletLinkError, setWalletLinkError] = useState<string | null>(null);
+
   const handleLogout = async () => {
     try {
       await logout();
-      // No need to manually redirect as the auth state change will trigger a redirect
     } catch (error) {
       console.error("Logout failed:", error);
       toast.error("Failed to log out. Please try again.");
@@ -44,10 +47,54 @@ export const ProfileSettings: React.FC = () => {
     toast.info(`${service} integration coming soon!`);
   };
 
-  // Format date function
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString();
+  };
+
+  const handleLinkWallet = async () => {
+    if (!user || !publicKey || !signMessage) {
+      toast.error("User not authenticated or wallet not connected properly.");
+      return;
+    }
+
+    setIsLinkingWallet(true);
+    setWalletLinkError(null);
+
+    try {
+      const message = `Sign this message to link your wallet to your Samachi account: ${user.id}`;
+      const messageBytes = new TextEncoder().encode(message);
+      const signature = await signMessage(messageBytes);
+      const signatureBase64 = Buffer.from(signature).toString('base64');
+
+      const response = await fetch('/api/profile/link-wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          signedMessage: signatureBase64,
+          originalMessage: message,
+          walletAddress: publicKey.toBase58(),
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to link wallet.');
+      }
+
+      toast.success("Wallet linked successfully!");
+      if (user?.id) {
+        await fetchProfile(user.id); // Refresh profile data
+      }
+    } catch (error: any) {
+      console.error("Error linking wallet:", error);
+      const errorMessage = error.message || "An unexpected error occurred.";
+      setWalletLinkError(errorMessage);
+      toast.error("Failed to link wallet", { description: errorMessage });
+    } finally {
+      setIsLinkingWallet(false);
+    }
   };
 
   const renderTwitterConnect = () => {
@@ -98,7 +145,8 @@ export const ProfileSettings: React.FC = () => {
     );
   };
 
-  // Use the defined type
+  const isWalletEffectivelyLinked = profile?.wallet_address && publicKey && profile.wallet_address === publicKey.toBase58();
+
   const settingGroups: { title: string; items: SettingItem[] }[] = [
     {
       title: 'Account',
@@ -116,8 +164,60 @@ export const ProfileSettings: React.FC = () => {
         {
           icon: Wallet, 
           label: 'Connected Wallet',
-          value: connected && publicKey ? `${publicKey.toString().substring(0, 6)}...${publicKey.toString().substring(publicKey.toString().length - 4)}` : 'Not Connected',
-          onClick: () => {}, // We'll handle this with the WalletMultiButton
+          customRenderer: () => (
+            <div className="w-full">
+              <div className="flex justify-between items-center mb-2">
+                <div className="flex items-center">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mr-3">
+                    <Wallet className="h-4 w-4 text-primary" />
+                  </div>
+                  <span className="font-medium">Wallet Connection</span>
+                </div>
+                <div className="wallet-adapter-dropdown">
+                  <WalletMultiButton 
+                    className="!bg-transparent !text-foreground hover:!bg-black/5 dark:hover:!bg-white/10 !h-9 !px-2 !text-sm"
+                  />
+                </div>
+              </div>
+              {connected && user && publicKey && (
+                <div className="mt-2 pt-2 border-t border-gray-100/50">
+                  {isWalletEffectivelyLinked ? (
+                    <div className="flex items-center text-sm text-green-600 bg-green-50 p-2 rounded-md">
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      <span>Wallet successfully linked to your account.</span>
+                    </div>
+                  ) : (
+                    <Button 
+                      onClick={handleLinkWallet} 
+                      disabled={isLinkingWallet || !signMessage || isProfileLoading}
+                      className="w-full mt-1 h-9 text-sm"
+                      variant="outline"
+                    >
+                      {isLinkingWallet ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                          Linking...
+                        </>
+                      ) : (
+                        <>
+                          <Link2 className="h-4 w-4 mr-2" />
+                          Link this wallet to Samachi account
+                        </>
+                      )}
+                    </Button>
+                  )}
+                  {walletLinkError && (
+                    <p className="text-xs text-red-600 mt-1.5 flex items-center">
+                      <AlertCircle className="h-3 w-3 mr-1" /> {walletLinkError}
+                    </p>
+                  )}
+                </div>
+              )}
+              {!connected && user && (
+                 <p className="text-xs text-muted-foreground mt-2">Connect your wallet to link it to your account.</p>
+              )}
+            </div>
+          )
         },
         {
           icon: LogOut,
@@ -152,11 +252,9 @@ export const ProfileSettings: React.FC = () => {
       <div className="glass-card p-6 mb-8 animate-fade-in">
         <div className="flex items-center mb-6">
           <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-white text-2xl font-bold mr-4">
-            {/* Use profile username or user email initial */}
             {profile?.username ? profile.username.charAt(0).toUpperCase() : (user?.email ? user.email.charAt(0).toUpperCase() : 'S')}
           </div>
           <div>
-            {/* Display profile username or user email */}
             <h2 className="text-xl font-semibold">{profile?.username || user?.email || 'Samachi Member'}</h2>
             {user?.email && (
               <div className="flex items-center text-muted-foreground text-sm mt-1">
@@ -167,12 +265,17 @@ export const ProfileSettings: React.FC = () => {
           </div>
         </div>
 
-        {/* Profile details section */}
         <div className="space-y-3 text-sm border-t border-gray-100/50 pt-4">          
-          {profile?.walletAddress && (
+          {profile?.wallet_address && (
             <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Wallet Address</span>
-              <span className="font-medium">{`${profile.walletAddress.substring(0, 6)}...${profile.walletAddress.substring(profile.walletAddress.length - 4)}`}</span>
+              <span className="text-muted-foreground">Linked Wallet</span>
+              <span className="font-medium">{`${profile.wallet_address.substring(0, 6)}...${profile.wallet_address.substring(profile.wallet_address.length - 4)}`}</span>
+            </div>
+          )}
+          {!profile?.wallet_address && connected && publicKey && user && (
+             <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Connected Wallet</span>
+                <span className="font-medium text-orange-600">Not linked to account</span>
             </div>
           )}
           
@@ -196,9 +299,7 @@ export const ProfileSettings: React.FC = () => {
             {group.items.map((item, itemIndex) => (
               <div 
                 key={itemIndex} 
-                className={`p-4 ${
-                  item.onClick && !item.customRenderer && item.label !== 'Connected Wallet' ? 'cursor-pointer hover:bg-white/60' : ''
-                }`}
+                className={`p-4 ${item.onClick && !item.customRenderer && item.label !== 'Connected Wallet' ? 'cursor-pointer hover:bg-white/60' : ''}`}
                 onClick={item.onClick && !item.customRenderer && item.label !== 'Connected Wallet' ? item.onClick : undefined}
               >
                 {item.customRenderer ? (
@@ -213,29 +314,10 @@ export const ProfileSettings: React.FC = () => {
                     </div>
                     
                     <div className="flex items-center">
-                      {item.label === 'Connected Wallet' ? (
-                        <div className="flex items-center gap-2">
-                          {/* Custom WalletMultiButton wrapper with modified styles */}
-                          <div className="wallet-adapter-dropdown">
-                            <WalletMultiButton 
-                              className="!bg-transparent !text-foreground hover:!bg-black/5 dark:hover:!bg-white/10"
-                              style={{ 
-                                zIndex: 50,
-                                minWidth: 'unset',
-                                padding: '0 8px',
-                                height: '36px'
-                              }}
-                            />
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          {item.value && (
-                            <span className="text-sm text-muted-foreground mr-2">{item.value}</span>
-                          )}
-                          <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                        </>
+                      {item.value && (
+                        <span className="text-sm text-muted-foreground mr-2">{item.value}</span>
                       )}
+                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
                     </div>
                   </div>
                 )}
@@ -244,7 +326,7 @@ export const ProfileSettings: React.FC = () => {
           </div>
         </div>
       ))}
-
+      
       {/* Privacy Modal */}
       <Dialog open={privacyModalOpen} onOpenChange={setPrivacyModalOpen}>
         <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
@@ -374,4 +456,15 @@ export const ProfileSettings: React.FC = () => {
       </Dialog>
     </div>
   );
+};
+
+// Helper component for RefreshCw to ensure client-side execution for animation
+const RefreshCw = ({ className }: { className?: string }) => {
+  const [isClient, setIsClient] = useState(false);
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+  if (!isClient) return null; // Or a placeholder
+  const LucideRefreshCw = require('lucide-react').RefreshCw;
+  return <LucideRefreshCw className={className} />;
 };

@@ -1,5 +1,3 @@
-
-
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
@@ -79,9 +77,17 @@ CREATE OR REPLACE FUNCTION "public"."handle_new_user"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
+DECLARE
+  generated_username TEXT;
 BEGIN
+  -- Generate a default username from email if not provided in metadata
+  IF NEW.raw_user_meta_data ->> 'username' IS NULL OR TRIM(NEW.raw_user_meta_data ->> 'username') = '' THEN
+    generated_username := SPLIT_PART(NEW.email, '@', 1);
+  ELSE
+    generated_username := NEW.raw_user_meta_data ->> 'username';
+  END IF;
+
   -- Insert a new row into public.profiles
-  -- Extract data from the metadata passed during signup (NEW.raw_user_meta_data)
   INSERT INTO public.profiles (
       id,
       email,
@@ -89,15 +95,14 @@ BEGIN
       twitter_handle,
       telegram_handle,
       wallet_address
-      -- password_hash column is removed from the table
   )
   VALUES (
       NEW.id,
       NEW.email,
-      NEW.raw_user_meta_data ->> 'username', -- Extract username
-      NEW.raw_user_meta_data ->> 'twitter_handle', -- Extract twitter handle (or NULL if not provided)
-      NEW.raw_user_meta_data ->> 'telegram_handle', -- Extract telegram handle (or NULL if not provided)
-      NEW.raw_user_meta_data ->> 'wallet_address' -- Extract wallet address (or NULL if not provided)
+      generated_username, -- Use generated or provided username
+      NEW.raw_user_meta_data ->> 'twitter_handle',
+      NEW.raw_user_meta_data ->> 'telegram_handle',
+      NEW.raw_user_meta_data ->> 'wallet_address'
   );
   RETURN NEW;
 END;
@@ -105,6 +110,11 @@ $$;
 
 
 ALTER FUNCTION "public"."handle_new_user"() OWNER TO "postgres";
+
+-- Add the missing trigger definition
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 SET default_tablespace = '';
 
@@ -620,15 +630,39 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 
 
 
-
-
-
-
-
-
-
-
-
-
-
 RESET ALL;
+
+-- Enable Row Level Security for memberships
+ALTER TABLE public.memberships ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Allow authenticated users to read their own memberships
+CREATE POLICY "Allow authenticated users to read their own memberships"
+ON public.memberships
+FOR SELECT
+TO authenticated
+USING (auth.uid() = user_id);
+
+-- Policy: Allow service_role to bypass RLS for memberships (optional, but common for admin tasks)
+CREATE POLICY "Allow service_role to access all memberships"
+ON public.memberships
+FOR ALL
+TO service_role
+USING (true);
+
+
+-- Enable Row Level Security for venues
+ALTER TABLE public.venues ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Allow authenticated users to read all venues
+CREATE POLICY "Allow authenticated users to read all venues"
+ON public.venues
+FOR SELECT
+TO authenticated
+USING (true);
+
+-- Policy: Allow service_role to bypass RLS for venues (optional)
+CREATE POLICY "Allow service_role to access all venues"
+ON public.venues
+FOR ALL
+TO service_role
+USING (true);

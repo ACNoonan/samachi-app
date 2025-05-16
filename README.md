@@ -1,82 +1,185 @@
-# Samachi
+# Samachi: The Experiential Finance Layer for Live Entertainment
+![Samachi Logo](./public/samachi-logo-glow.png) 
 
-[![Samachi Logo](placeholder.png)](https://samachi.com) 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<!-- Add other badges as relevant: build status, Supabase, Solana, etc. -->
 
-**Samachi is the global VIP network; a "Gympass for clubs, resorts & festivals worldwide.**
+Samachi is building the future of payments and engagement for live entertainment venues. Our core offering, the **Samachi Smart Tab**, aims to provide a premium, frictionless payment experience, enabling restaurant-style tabs at festival scale, coupled with personalized rewards designed to maximize venue revenue and enhance guest satisfaction.
 
-Imagine tapping into exclusive venue experiences, managing your memberships effortlessly, and connecting with like-minded individuals – all starting with a simple scan of your membership card. Samachi makes this a reality.
+We are the integration layer connecting consumer-facing applications, AI-driven personalization, and crypto solutions with on-site Point-of-Sale (PoS) systems at events, festivals, sports arenas, and entertainment venues.
 
-We leverage RFID/NFC enabled membership cards with QR code technology for instant onboarding, Supabase for robust user & venue data management, and direct integration with venue systems (via the Glownet API) to provide real-time membership status and benefits. Utilizing Solana blockchain's fast, cheap and secure infrastructure for crypto-asset staking that enables a novel VIP, "restuarant-style" payment experience - Samachi aims to create a global network of festivals, clubs and resorts; the "Solana Social Layer".
+## Table of Contents
 
-## Core Features & Vision
+*   [The Problem](#the-problem)
+*   [Our Solution: The Samachi Smart Tab](#our-solution-the-samachi-smart-tab)
+*   [Project History & Evolution](#project-history--evolution)
+*   [Key Features](#key-features)
+*   [Technical Architecture](#technical-architecture)
+    *   [Current Stack](#current-stack)
+    *   [Target Architecture](#target-architecture)
+*   [How It Works: The User Journey](#how-it-works-the-user-journey)
+*   [Technical Decisions: Why Solana?](#technical-decisions-why-solana)
+*   [Current Status & Future Plans](#current-status--future-plans)
+*   [Getting Started (For Developers)](#getting-started-for-developers)
+*   [Contributing](#contributing)
+*   [License](#license)
+*   [Contact & Learn More](#contact--learn-more)
 
-*   **Instant Onboarding:** Scan your venue membership card\'s QR code (`/card/[cardId]`) to instantly sign up or sign in. No more cumbersome registration processes.
-*   **Unified Profile:** Manage your profile, linked memberships across different venues, and on-chain + closed-loop assets all in one place.
-*   **Real-time Venue Integration:** Connect directly with venue systems to:
-    *   Verify membership status upon entry.
-    *   Check cashless balances associated with your membership.
-    *   Participate in venue-specific promotions or top-up accounts.
-*   **Web3 Enabled:**
-    *   Connect your Solana wallet (Phantom, Solflare, etc.) securely using the Solana Mobile Wallet Adapter.
-    *   Enable staking mechanisms, token-gated experiences, or other blockchain-based loyalty features.
-*   **Community Hub:** (Vision) Become the central point for venue announcements, member interactions, and exclusive content.
+## The Problem
 
-## Technology Powering Samachi
+Live entertainment venues often struggle with:
+*   Long queues for payment and RFID top ups, leading to lost sales and frustrated guests.
+*   Generic experiences that fail to maximize per-customer revenue.
+*   Complexities in integrating modern payment solutions (including crypto) with existing PoS systems.
+*   Difficulty in offering personalized rewards and incentives in real-time.
 
-We\'ve built Samachi on a modern, scalable, and robust tech stack:
+## Our Solution: The Samachi Smart Tab
 
-*   **Framework:** Next.js (App Router) for a fast, server-rendered React experience.
-*   **Language:** TypeScript for type safety and developer efficiency.
-*   **UI:** React, Tailwind CSS, and shadcn/ui for beautiful, accessible, and responsive interfaces.
-*   **Backend:** Serverless functions via Next.js API Routes.
-*   **Database & Auth:** Supabase handles user authentication, profile data, venue information, and membership linking with its integrated Postgres database.
-*   **Wallet Integration:** Solana Mobile Wallet Adapter provides seamless and secure connection to the Solana ecosystem.
-*   **Venue System Integration:** Direct communication with the Glownet API v2 for real-time membership and balance data.
-*   **Package Manager:** pnpm for efficient dependency management.
+Samachi addresses these challenges by providing a backend integration service that powers the Smart Tab. This system:
+*   **Eliminates Payment Friction:** Allows guests to open a tab (similar to a restaurant) and pay seamlessly from their phone.
+*   **Boosts Venue Revenue:** Enables personalized, real-time rewards and recommendations to encourage spending and enhance customer experience.
+*   **Offers Self-Managed Tabs:** Gives users control over their spending limits and payment methods, including crypto staking options.
+*   **Integrates Seamlessly:** Acts as the bridge between consumer apps, AI, crypto, and existing on-site PoS systems.
 
-## Getting Started (For Development / Judging)
+## Project History & Evolution
 
-### Prerequisites
+This repository contains Samachi's submission for the **Colosseum Breakout Hackathon**. Initially, we envisioned a consumer-facing portal. However, recognizing a more significant market need and larger opportunity, we pivoted towards building a **backend integration service**.
 
-*   Node.js (LTS)
-*   pnpm (`npm install -g pnpm`)
-*   Supabase Account & Project
-*   (Optional) Smart PoS Account & API Key for testing live integration.
+This repository represents a **mid-point in that pivot**. It's currently a Next.js application, but its primary function has shifted to serving as an API-driven backend. While the frontend components from the initial hackathon concept may still exist in the codebase, the active development and future direction are focused on the API routes found in `app/api/` subdirectory and the underlying services they provide.
 
-### Installation & Setup
+Our long-term vision is to evolve this into a robust, dedicated backend platform (likely Python-based, as per our initial backend design discussions) that serves as the core **experiential finance layer**.
 
-1.  **Clone:** `git clone <your-repo-url> && cd samachi-app`
-2.  **Install:** `pnpm install`
-3.  **Environment:** Copy `.env.local.example` to `.env.local` and fill in your Supabase keys (public and service role). Add Smart PoS keys if testing that integration.
-    ```ini
-    # .env.local
-    NEXT_PUBLIC_SUPABASE_URL=...
-    NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-    SUPABASE_SERVICE_ROLE_KEY=... # Keep Secret!
-    GLOWNET_API_BASE_URL=https://opera.glownet.com/organization
-    GLOWNET_API_KEY=... # Optional for judges
+## Key Features
+
+*   **Seamless Onboarding:** Link on-site authentication (RFID, QR codes) to user profiles.
+*   **Abstracted Wallet Management:** Easy fiat and Solana wallet connection via Magic Link, with auto-wallet creation for new users.
+*   **Fiat-to-Crypto Staking:** Users can stake USDC (purchased with fiat or deposited on-chain) to increase their Smart Tab limit and earn rewards.
+*   **Custom Solana Smart Contract:** Manages a self-custody staking pool for user assets.
+*   **Smart Tab Activation:** Real-time communication with PoS systems (e.g., Glownet, Shift4) upon guest check-in to activate and fund the tab.
+*   **RFID Tap-to-Pay:** Enabled via PoS integration.
+*   **Personalized On-Site Rewards:** Delivered in real-time based on user behavior and preferences.
+*   **Automated Off-Chain Ledger & On-Chain Settlement:** Spend is tracked off-chain for speed, with options for auto-settlement via fiat or by debiting staked crypto assets on-chain.
+
+## Technical Architecture
+
+Samachi aims to abstract the complexities of blockchain and payment integrations, providing a simple API for partners.
+
+### Current Stack (Mid-Pivot Next.js API Service)
+
+*   **Framework:** Next.js (primarily using API Routes for backend logic)
+*   **Database (Off-Chain Storage):** Supabase
+*   **Wallet Management:** Magic Link (for seamless user wallet creation and management)
+*   **Blockchain:** Solana
+*   **Smart Contracts:** Custom Anchor-based smart contract for staking pools.
+    *   https://github.com/ACNoonan/samachi-contracts
+
+### Target Architecture (Backend Integration Service)
+
+While the current Next.js app serves API routes, the future vision includes a more specialized backend.
+*   **Core Backend:** Python-based API Platform (or similar robust backend language/framework)
+*   **Database (Off-Chain Storage):** Supabase (or other scalable database solutions)
+*   **Wallet Management:** Magic Link
+*   **Blockchain Interaction:** Direct integration with our Solana smart contracts.
+*   **Real-time Recommendation:** Logic and model inference defining personalized promotion features.
+*   **API Layer:** RESTful/GraphQL APIs for partner integrations.
+*   **MCP Server:** MCP server developed for Agentic AI integrations.
+
+`[TODO: Consider adding a simplified architecture diagram here, as mentioned in your demo script. This could be an image in the repo linked here.]`
+
+## How It Works: The User Journey
+
+1.  **Onboarding:**
+    *   A guest's on-site authentication method (e.g., RFID wristband or card from an event) is linked to their Samachi user profile.
+    *   Users connect traditional fiat payment methods and/or an existing Solana wallet. If no Solana wallet is provided, one is seamlessly created for them using Magic Link.
+2.  **Funding & Staking (Optional but Recommended):**
+    *   Users can stake USDC into a self-custody staking pool managed by our custom Solana smart contract. This can be done by purchasing USDC with fiat through Samachi or by depositing existing USDC.
+    *   Staking increases their Smart Tab spending limit and unlocks rewards. Our API handles all smart contract interactions, making it a simple "Stake" button experience for the user.
+3.  **Smart Tab Activation & Venue Check-in:**
+    *   Upon checking into a venue, our API communicates with the on-site PoS system (e.g., Glownet, Shift4).
+    *   Samachi activates their Smart Tab, enabling RFID tap-to-pay functionality and activating personalized, real-time rewards.
+4.  **Spending & Rewards:**
+    *   Guests use their RFID wristband/card to make purchases.
+    *   Personalized offers and rewards can be triggered based on spending patterns or venue promotions.
+5.  **Seamless Checkout & Settlement:**
+    *   Instead of waiting in line, Samachi handles tab settlement.
+    *   Our backend calculates the total spend. Users can opt for auto-settlement via either a) their linked fiat payment method or b) subtracting from their staked crypto assets.
+    *   If crypto settlement is chosen, Samachi's backend service interacts with our Solana smart contract to debit the user's stake. The spent amount is 'locked,' and the balance is settled with the venue. The on-chain record accurately reflects their self-custodied balance.
+
+## Technical Decisions: Why Solana?
+
+We chose Solana for several key reasons:
+*   **High Throughput & Low Fees:** Essential for managing the high volume of micro-transactions and state updates required for tab management at large-scale events.
+*   **Developer Ecosystem & Culture:** Solana is known for being builder-friendly, fostering innovation in decentralized finance.
+*   **Performance for User Experience:** Solana's speed allows us to abstract blockchain complexities and provide a simple, responsive UX, particularly for features like our self-custodial staking API.
+
+Solana empowers us to offer novel payment solutions while maintaining performance and user-friendliness.
+
+## Current Status & Future Plans
+
+**Current Status:**
+*   The project is currently a Next.js application serving as an API backend, a mid-point from our hackathon pivot.
+*   Core functionalities for onboarding, wallet creation, staking (via API calls to a deployed smart contract), and basic PoS interaction logic are being developed.
+*   Key API routes are located in `app/api/`.
+
+**Future Plans:**
+1.  **Full Backend Service Development:** Transition the API logic from Next.js to a dedicated, scalable backend service (e.g., Python/FastAPI).
+2.  **Expand PoS Integrations:** Develop robust connectors for a wider range of PoS systems used in live entertainment.
+3.  **Enhance Personalization Engine:** Integrate more sophisticated AI/ML models for personalized recommendations and rewards.
+4.  **Develop Partner SDKs/API Documentation:** Provide clear tools and documentation for consumer-facing apps to integrate with Samachi.
+5.  **Strengthen Smart Contract Features:** Explore utilizing additional on-chain assets for collateriziled Smart Tab.
+6.  **Security Audits:** Conduct thorough security audits of smart contracts and backend systems.
+
+## Getting Started (For Developers)
+
+As this repository currently functions as a Next.js app with API routes:
+
+1.  **Clone the repository:**
+    ```bash
+    git clone <your-repo-url>
+    cd <your-repo-name>
     ```
-4.  **Database:** Ensure Supabase tables are set up (use `supabase/migrations` and `supabase db push` if available, or set up manually).
+2.  **Install dependencies:**
+    ```bash
+    pnpm install
+    ```
+3.  **Set up environment variables:**
+    *   Create a `.env.local` file by copying `.env.example` (if one exists, otherwise create it).
+    *   Populate it with necessary API keys and configuration values for:
+        *   Supabase URL and Anon Key
+        *   Magic Link API Key
+        *   Solana RPC Endpoint
+        *   Secret keys for JWT or session management
+        *   `[TODO: List all required environment variables]`
+4.  **Run the development server:**
+    ```bash
+    pnpm run dev
+    ```
+    The API routes will typically be accessible under `http://localhost:3000/api/...`.
 
-### Running Locally
+5.  **Explore API Routes:**
+    *   The core backend logic currently resides in the `app/api/` directory.
 
-```bash
-pnpm dev
-```
+## Contributing
 
-Access the app at `http://localhost:3000`.
+We welcome contributions! If you're interested in helping build the future of experiential finance, please:
+1.  Fork the repository.
+2.  Create a new branch (`git checkout -b feature/your-feature-name`).
+3.  Make your changes.
+4.  Commit your changes (`git commit -m 'Add some feature'`).
+5.  Push to the branch (`git push origin feature/your-feature-name`).
+6.  Open a Pull Request.
 
-## Future Enhancements
+## License
 
-Beyond the core hackathon deliverable, Samachi has the potential to grow:
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-*   **Deeper Glownet Integration:** Implement transaction history, top-ups, and potentially direct purchases via the Samachi interface.
-*   **Advanced Staking Models:** Introduce varied staking options and yields tied to membership levels or venue participation.
-*   **Cross-Venue Promotions:** Continue facilitating partnerships and offers between participating venues.
-*   **Social Features:** Build out community forums, event calendars, and member-to-member interactions.
-*   **Venue Dashboard:** Provide tools for venues to manage their presence and promotions on Samachi.
-*   **NFT Ticketing:** Control access with a tokenized entry, availble for resale on secondary markets.
+## Contact & Learn More
+
+*   **Adam, Co-founder**
+*   **Twitter:** https://x.com/0xSamachi
+*   **Website/LinkedIn:** https://samachi.com
+*   Catch us at **Solana Accelerate in NYC** or experience a live Samachi Smart Tab at **Noviciado Club in Madrid**!
 
 ---
 
-*Samachi - Low Key, High Vibes, Everywhere.*
+We believe Samachi's backend service is the engine that will allow our partners to deliver incredibly smooth, rewarding, and secure experiences, abstracting complexity, fostering interoperability, and genuinely making experiential finance a reality. We're on a mission to provide low key, high vibes, everywhere.
