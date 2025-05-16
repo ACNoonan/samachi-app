@@ -191,6 +191,67 @@ import { GET } from '@/app/api/org/[org_id]/users/route';
 
  This is why it's not necessary to type the include path using `../../../`.
 
+#### Using `NextRequest` in a Test
+
+The ***Next*** framework uses `NextRequest` and `NextResponse` classes, which are essentially wrappers around the standard `Request` and `Response` objects used by **Node**.
+
+The caveat here is that **`NextRequest`** is only intended to be used in the context of an application/api, thus it is *ReadOnly*. This makes it difficult to use for tests that need to pass data in a `Request`, such as those trying to make changes to the DB.
+
+The workaround here is to either use the standard `Request` object, or create a `Request` object wrapped in a `NextRequest`, like this:
+
+```ts
+const req = new NextRequest(
+  new Request('http://localhost/api/venue', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(venue),
+  })
+);
+```
+
+...where `venue` is the data being passed to the route (in this example, for a `POST` request). This allows you to set the `Request.body` content and still use the `NextRequest` object, to simulate how the "production" environment would work.
+
+#### Using Dependency Injection
+
+Since *Supabase* allows using different security policies to allow different levels of access for specific DB roles, we may want to decide that we want to make "public" read calls using a DB role with less privileges that one allowed to make inserts or updates.
+
+To accommodate this, we can use function-signatures like the following for route handlers:
+
+```ts
+export async function POST(
+  request: NextRequest,
+  { params }: { params: {} },
+  supabase = createServerSupabaseClient()
+) { ...
+}
+```
+
+This does accomplishes two goals:
+
+1. It encapsulates creating a standard Supabase client, using the `createServerSupabaseClient()` utility function.
+2. It allows us to overload the `createServerSupabaseClient()` signature to use different environment keys, depending on the type of access we want to use.
+
+So, we can have a utility method that looks like this:
+
+```ts
+export const createTestSupabaseClient = (useAnon: boolean = true): SupabaseClient<Database> => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = useAnon ? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! : process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+  return createClient<Database>(url, key);
+};
+```
+
+...and then we can either pass in a client where
+
+```ts
+const client = createTestSupabaseClient(false);
+```
+
+or simply allow the handler to create its own client, using the default configuration. Since both helper methods `createServerSupabaseClient()` and `createTestSupabaseClient()` return the same type of `SupabaseClient<Database>` client object, the route handler doesn't care which one it uses.
+
+You can see how, if we wanted to test specific DB keys, associated with specific DB roles, we could modify `createTestSupabaseClient()` to accept a string `key` instead of a boolean.
+
 #### Debugging
 
 Debugging tests has been enabled for VSCode/VSCode-derivatives (e.g., _Cursor_) with another config in the `.vscode/launch.json` file:
