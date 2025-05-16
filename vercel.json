@@ -1,0 +1,12 @@
+{
+    "crons": [
+        {
+            "path": "/api/venues/sync-glownet", 
+            "schedule": "0 0 * * *"
+        },
+        {
+            "path": "/api/cards/sync-glownet",
+            "schedule": "30 0 * * *"
+        }
+    ]
+}
