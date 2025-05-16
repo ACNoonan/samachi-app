@@ -131,7 +131,7 @@ Using the route `GET https://<domain>/api/venue/` as an example: the JSDoc-style
 
 Note the `$ref:` property at the bottom: it references the Venue schema definition, which it's getting from the the `models/schema/schemas.json` file. Swagger knows where to look for this file because of the reference in `lib/swagger.ts`, and this allows Swagger to produce something like the following:
 
-![SwaggerUI for /api/venue/](https://github.com/ACNoonan/samachi-app/blob/master/readme-assets/swaggerui-example-venue-api-route.png)
+![SwaggerUI for /api/venue/](https://github.com/ACNoonan/samachi-app/blob/new-route-tests/readme-assets/swaggerui-example-venue-api-route.png)
 
 ### Creating/Running Tests
 
