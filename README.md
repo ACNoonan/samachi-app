@@ -1,5 +1,5 @@
 # Samachi: The Experiential Finance Layer for Live Entertainment
-![Samachi Logo](./public/samachi-logo-glow.png) 
+![Samachi Logo](./public/samachi-logo-banner.png) 
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 <!-- Add other badges as relevant: build status, Supabase, Solana, etc. -->
