@@ -4,7 +4,7 @@ import { NextRequest } from 'next/server';
 import { GET, POST } from '@/app/api/venue/route';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Database } from '@/models/supabase-types/supabase';
-import { Venue } from '@/models/Venue';
+import { Venue } from '@/models/schema/Venue';
 import { faker } from '@faker-js/faker';
 
 let supabase: SupabaseClient<Database>;

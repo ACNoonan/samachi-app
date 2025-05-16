@@ -6,8 +6,8 @@
     "dev": "next dev --turbopack",
     "build": "pnpm run build:schemas && next build",
     "start": "next start",
-    "build:schemas": "typescript-json-schema models/tsconfig.schemas.json '*' --required --out models/schemas.json",
-    "types:db": "bash scripts/type-gen/bash/gen-types.sh"
+    "build:schemas": "typescript-json-schema models/tsconfig.schemas.json '*' --required --out models/schema/schemas.json",
+    "build:types:db": "bash scripts/type-gen/bash/gen-types.sh"
   },
   "dependencies": {
     "@stoplight/elements": "^9.0.1",

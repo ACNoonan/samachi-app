@@ -1,5 +1,5 @@
 import { createSwaggerSpec } from "next-swagger-doc";
-import schemas from "../models/schemas.json"
+import schemas from "../models/schema/schemas.json"
 
 export const getApiDocs = async () => {
   const spec = createSwaggerSpec({

@@ -1,5 +1,13 @@
 {
   "extends": "../tsconfig.json",
-  "include": ["../models/**/*.ts"],
-  "exclude": ["node_modules", "app", "pages", "public", "tests", "__tests__"]
+  "include": ["../models/schema/**/*.ts"],
+  "exclude": [
+    "../models/supabase-types",
+    "node_modules",
+    "app",
+    "pages",
+    "public",
+    "tests",
+    "__tests__"
+  ]
 }

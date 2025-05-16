@@ -51,9 +51,9 @@ Since this is TypeScript, let's keep our types tight. To that end, API GET route
 
 For example, `https://<domain>/api/venue/` returns an `Array` of `Venue` objects.
 
-#### Setup - Create Schema Definitions in `models/` Directory
+#### Setup - Create Schema Definitions in `models/schema/` Directory
 
-Common data objects are defined in `<root>/models/` using *a single schema file per object*. `Venue`, for example, is described in the file `/models/Venue.ts`, and as of this writing (15 May 2025), it looks like this:
+Common data objects are defined in `<root>/models/schema/` using *a single schema file per object*. `Venue`, for example, is described in the file `models/schema/Venue.ts`, and as of this writing (15 May 2025), it looks like this:
 
 ```js
 import { Timestamp } from "next/dist/server/lib/cache-handlers/types";
@@ -72,7 +72,7 @@ export interface Venue {
 
 #### Building a Single Reference Schema
 
-We've using `typescript-json-schema` ([npm link](https://www.npmjs.com/package/typescript-json-schema)) to generate a single `schemas.json` file (also in `models/`) that compiles all of the object definitions into a single schema. This is useful because it can be read by Swagger and used in the Swagger UI endpoint.
+We've using `typescript-json-schema` ([npm link](https://www.npmjs.com/package/typescript-json-schema)) to generate a single `schemas.json` file (also in `models/schema/`) that compiles all of the object definitions into a single schema. This is useful because it can be read by Swagger and used in the Swagger UI endpoint.
 
 We've provided several options for regenerating the `schemas.json` file: 
 
@@ -88,7 +88,7 @@ pnpm run build:schemas
 pnpm build
 ```
 
-will also recreate the `models/schemas.json` file, because it also runs the command to rebuild the schemas file.
+will also recreate the `models/schema/schemas.json` file, because it also runs the command to rebuild the schemas file.
 
 3. Finally you can run the command manually, in case you want to change some of the options. Running:
 
@@ -129,7 +129,7 @@ Using the route `GET https://\<domain>/api/venue/` as an example: the JSDoc-styl
  */
 ```
 
-Note the `$ref:` property at the bottom: it references the Venue schema definition, which it's getting from the the `models/schemas.json` file. This allows Swagger to produce something like the following:
+Note the `$ref:` property at the bottom: it references the Venue schema definition, which it's getting from the the `models/schema/schemas.json` file. Swagger knows where to look for this file because of the reference in `lib/swagger.ts`, and this allows Swagger to produce something like the following:
 
 ![SwaggerUI for /api/venue/](https://github.com/ACNoonan/samachi-app/blob/master/readme-assets/swaggerui-example-venue-api-route.png)
 
