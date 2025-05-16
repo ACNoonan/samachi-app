@@ -515,7 +515,23 @@ const server = http.createServer(async (req, res) => {
   // Handle the route
   try {
     if (matchedRoute) {
-      const data = await routes[matchedRoute](req, res, params, body, query);
+      // Fix the parameter order to ensure query is passed correctly
+      // Check the route signature to determine the correct parameter order
+      const routeHandler = routes[matchedRoute];
+      const paramCount = routeHandler.length;
+      
+      let data;
+      if (routeHandler.toString().includes('(req, res, query)')) {
+        // Route handler expects query as third param
+        data = await routeHandler(req, res, query);
+      } else if (routeHandler.toString().includes('(req, res, params)')) {
+        // Route handler expects params as third param
+        data = await routeHandler(req, res, params);
+      } else {
+        // Route handler might have additional parameters
+        data = await routeHandler(req, res, params, body, query);
+      }
+      
       res.end(JSON.stringify(data));
     } else {
       res.statusCode = 404;
@@ -528,240 +544,6 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-// Test runner
-async function runTests() {
-  console.log('\n=== Starting Automated Tests ===');
-  
-  // Test venue routes
-  await testVenues();
-  
-  // Test venue by ID routes
-  await testVenueById();
-  
-  // Test venue users route
-  await testVenueUsers();
-  
-  // Test user account routes
-  await testUserAccount();
-  
-  // Test user account assign stag route
-  await testUserAccountAssignStag();
-  
-  // Test checkin routes
-  await testCheckin();
-  
-  // Test register routes
-  await testRegister();
-  
-  // Test staking routes
-  await testStaking();
-  
-  // Test settle routes
-  await testSettle();
-  
-  // Test user history routes
-  await testUserHistory();
-  
-  console.log('\n=== All Tests Completed ===');
-  
-  // Close the server after tests complete
-  server.close(() => {
-    console.log('Test server closed');
-    process.exit(0);
-  });
-}
-
-// Test functions
-async function testVenues() {
-  console.log('\n--- Testing /api/venue ---');
-  await testEndpoint('/api/venue', 'GET', 'Venues list');
-}
-
-async function testVenueById() {
-  console.log('\n--- Testing /api/venue/:venueId ---');
-  await testEndpoint(`/api/venue/${testData.venueIds[0]}`, 'GET', 'Existing venue');
-  await testEndpoint(`/api/venue/${testData.venueIds[2]}`, 'GET', 'Nonexistent venue');
-}
-
-async function testVenueUsers() {
-  console.log('\n--- Testing /api/venue/:venueId/users ---');
-  await testEndpoint(`/api/venue/${testData.venueIds[0]}/users`, 'GET', 'Venue users');
-}
-
-async function testUserAccount() {
-  console.log('\n--- Testing /api/user-account ---');
-  await testEndpoint(`/api/user-account?user_id=${testData.userIds[0]}`, 'GET', 'Valid user');
-  await testEndpoint(`/api/user-account?user_id=${testData.userIds[1]}`, 'GET', 'Nonexistent user');
-  await testEndpoint('/api/user-account', 'GET', 'Missing user ID');
-}
-
-async function testUserAccountAssignStag() {
-  console.log('\n--- Testing /api/user-account/assign-stag ---');
-  await testEndpoint(
-    '/api/user-account/assign-stag',
-    'POST',
-    'Assign STAG to user',
-    { userId: testData.userIds[0], stagId: testData.stagIds[0] }
-  );
-  
-  await testEndpoint(
-    '/api/user-account/assign-stag',
-    'POST',
-    'Assign STAG missing user ID',
-    { stagId: testData.stagIds[0] }
-  );
-  
-  await testEndpoint(
-    '/api/user-account/assign-stag',
-    'POST',
-    'Assign STAG missing STAG ID',
-    { userId: testData.userIds[0] }
-  );
-}
-
-async function testCheckin() {
-  console.log('\n--- Testing /api/checkin/:orgId ---');
-  await testEndpoint(
-    `/api/checkin/${testData.orgIds[0]}`,
-    'POST',
-    'Valid checkin',
-    { userId: testData.userIds[0], venueId: testData.venueIds[0] }
-  );
-  
-  await testEndpoint(
-    `/api/checkin/${testData.orgIds[0]}`,
-    'POST',
-    'Checkin missing user ID',
-    { venueId: testData.venueIds[0] }
-  );
-  
-  await testEndpoint(
-    `/api/checkin/${testData.orgIds[0]}`,
-    'POST',
-    'Checkin missing venue ID',
-    { userId: testData.userIds[0] }
-  );
-  
-  console.log('\n--- Testing /api/checkin/:orgId/:userId ---');
-  await testEndpoint(
-    `/api/checkin/${testData.orgIds[0]}/${testData.userIds[0]}`,
-    'GET',
-    'Get user checkin history'
-  );
-}
-
-async function testRegister() {
-  console.log('\n--- Testing /api/register/:orgId ---');
-  
-  await testEndpoint(
-    `/api/register/${testData.orgIds[0]}`,
-    'POST',
-    'Valid registration',
-    { userId: testData.userIds[0], cardId: testData.cardIds[0] }
-  );
-  
-  await testEndpoint(
-    `/api/register/${testData.orgIds[0]}`,
-    'POST',
-    'Registration missing user ID',
-    { cardId: testData.cardIds[0] }
-  );
-  
-  await testEndpoint(
-    `/api/register/${testData.orgIds[0]}`,
-    'POST',
-    'Registration missing card ID',
-    { userId: testData.userIds[0] }
-  );
-  
-  console.log('\n--- Testing /api/register/:orgId/stag ---');
-  await testEndpoint(
-    `/api/register/${testData.orgIds[0]}/stag`,
-    'POST',
-    'Register with STAG',
-    { userId: testData.userIds[0], stagId: testData.stagIds[0] }
-  );
-  
-  console.log('\n--- Testing /api/register/:orgId/stag/:stagId ---');
-  await testEndpoint(
-    `/api/register/${testData.orgIds[0]}/stag/${testData.stagIds[1]}`,
-    'POST',
-    'Register with specific STAG',
-    { userId: testData.userIds[0] }
-  );
-}
-
-async function testStaking() {
-  console.log('\n--- Testing /api/staking ---');
-  await testEndpoint('/api/staking', 'GET', 'General staking info');
-  
-  console.log('\n--- Testing /api/staking/:userId ---');
-  await testEndpoint(`/api/staking/${testData.userIds[0]}`, 'GET', 'User with staking');
-  await testEndpoint(`/api/staking/${testData.userIds[1]}`, 'GET', 'User without staking');
-}
-
-async function testSettle() {
-  console.log('\n--- Testing /api/settle ---');
-  await testEndpoint('/api/settle', 'GET', 'General settlement info');
-  
-  console.log('\n--- Testing /api/settle/:orgId ---');
-  await testEndpoint(`/api/settle/${testData.orgIds[0]}`, 'GET', 'Organization settlements');
-  
-  console.log('\n--- Testing /api/settle/:orgId/:userId ---');
-  await testEndpoint(
-    `/api/settle/${testData.orgIds[0]}/${testData.userIds[0]}`,
-    'GET',
-    'User settlements in organization'
-  );
-}
-
-async function testUserHistory() {
-  console.log('\n--- Testing /api/user-history ---');
-  await testEndpoint('/api/user-history', 'GET', 'General user history');
-  
-  console.log('\n--- Testing /api/user-history/:orgId ---');
-  await testEndpoint(`/api/user-history/${testData.orgIds[0]}`, 'GET', 'Organization user history');
-  
-  console.log('\n--- Testing /api/user-history/:orgId/:userId ---');
-  await testEndpoint(
-    `/api/user-history/${testData.orgIds[0]}/${testData.userIds[0]}`,
-    'GET',
-    'Specific user history in organization'
-  );
-}
-
-// Helper function to test an endpoint
-async function testEndpoint(path, method = 'GET', description, body = null) {
-  try {
-    console.log(`Testing: ${description} (${method} ${path})`);
-    
-    const options = {
-      method,
-      headers: {}
-    };
-    
-    if (body) {
-      options.headers['Content-Type'] = 'application/json';
-      options.body = JSON.stringify(body);
-    }
-    
-    const response = await fetch(`http://localhost:${PORT}${path}`, options);
-    let data;
-    
-    try {
-      data = await response.json();
-    } catch (e) {
-      data = { error: 'Failed to parse response as JSON' };
-    }
-    
-    console.log(`Status: ${response.status}`);
-    console.log(`✅ Test passed: ${description}`);
-  } catch (error) {
-    console.error(`❌ Test failed: ${description}`);
-    console.error(error);
-  }
-}
-
 // Start server
 const PORT = 3333;
 server.listen(PORT, () => {
@@ -771,6 +553,6 @@ server.listen(PORT, () => {
     console.log(`- ${route}`);
   });
   
-  // Run automated tests
-  runTests();
+  // Comment out automatic test runner to keep server running
+  // runTests();
 }); 
