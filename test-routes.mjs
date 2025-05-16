@@ -24,10 +24,9 @@ const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 const testData = {
   // Known existing IDs from database
   cardIds: ['TESTU0001', 'MNCA0001', 'NONEXISTENT'],
-  venueIds: ['1', '2', 'nonexistent-venue'],
-  userIds: ['someUserId', 'nonexistent-user'], // Replace with actual test user IDs
-  orgIds: ['1', 'nonexistent-org'], // Replace with actual test org IDs
-  // Add more test data as needed
+  venueIds: ['534d480b-ba71-48fd-9957-9800b2b4acb9', '510dd180-6cbf-4948-95e3-87ab0ed052dd', '00000000-0000-0000-0000-000000000000'],
+  userIds: ['1f3cb1be-43b9-4ea0-bf2f-f250b258187a', '00000000-0000-0000-0000-000000000000'],
+  orgIds: ['1', 'nonexistent-org'],
 };
 
 // Route implementations
@@ -37,7 +36,8 @@ const routes = {
     try {
       const { data, error } = await supabase
         .from('venues')
-        .select('*');
+        .select('*')
+        .limit(2); // Limit results for cleaner output
         
       if (error) {
         console.error('Supabase query error:', error);
@@ -65,7 +65,7 @@ const routes = {
     try {
       const { data, error } = await supabase
         .from('venues')
-        .select('*')
+        .select('id, name, currency')
         .eq('id', venueId)
         .single();
         
@@ -99,8 +99,8 @@ const routes = {
     
     try {
       const { data, error } = await supabase
-        .from('users')
-        .select('*')
+        .from('profiles')
+        .select('id, username, email')
         .eq('id', userId)
         .single();
         
@@ -280,19 +280,6 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-// Start server
-const PORT = 3333;
-server.listen(PORT, () => {
-  console.log(`Test server running on http://localhost:${PORT}`);
-  console.log('\nAvailable test routes:');
-  Object.keys(routes).forEach(route => {
-    console.log(`- ${route}`);
-  });
-  
-  // Run automated tests
-  runTests();
-});
-
 // Test runner
 async function runTests() {
   console.log('\n=== Starting Automated Tests ===');
@@ -313,6 +300,12 @@ async function runTests() {
   await testRegister();
   
   console.log('\n=== All Tests Completed ===');
+  
+  // Close the server after tests complete
+  server.close(() => {
+    console.log('Test server closed');
+    process.exit(0);
+  });
 }
 
 // Test functions
@@ -323,31 +316,19 @@ async function testVenues() {
 
 async function testVenueById() {
   console.log('\n--- Testing /api/venue/:venueId ---');
-  
-  // Test with existing venue ID
   await testEndpoint(`/api/venue/${testData.venueIds[0]}`, 'GET', 'Existing venue');
-  
-  // Test with nonexistent venue ID
   await testEndpoint(`/api/venue/${testData.venueIds[2]}`, 'GET', 'Nonexistent venue');
 }
 
 async function testUserAccount() {
   console.log('\n--- Testing /api/user-account ---');
-  
-  // Test with valid user ID
   await testEndpoint(`/api/user-account?user_id=${testData.userIds[0]}`, 'GET', 'Valid user');
-  
-  // Test with nonexistent user ID
   await testEndpoint(`/api/user-account?user_id=${testData.userIds[1]}`, 'GET', 'Nonexistent user');
-  
-  // Test without user ID
   await testEndpoint('/api/user-account', 'GET', 'Missing user ID');
 }
 
 async function testCheckin() {
   console.log('\n--- Testing /api/checkin/:orgId ---');
-  
-  // Test with valid data
   await testEndpoint(
     `/api/checkin/${testData.orgIds[0]}`,
     'POST',
@@ -355,7 +336,6 @@ async function testCheckin() {
     { userId: testData.userIds[0], venueId: testData.venueIds[0] }
   );
   
-  // Test with missing user ID
   await testEndpoint(
     `/api/checkin/${testData.orgIds[0]}`,
     'POST',
@@ -363,7 +343,6 @@ async function testCheckin() {
     { venueId: testData.venueIds[0] }
   );
   
-  // Test with missing venue ID
   await testEndpoint(
     `/api/checkin/${testData.orgIds[0]}`,
     'POST',
@@ -375,7 +354,6 @@ async function testCheckin() {
 async function testRegister() {
   console.log('\n--- Testing /api/register/:orgId ---');
   
-  // Test with valid data
   await testEndpoint(
     `/api/register/${testData.orgIds[0]}`,
     'POST',
@@ -383,7 +361,6 @@ async function testRegister() {
     { userId: testData.userIds[0], cardId: testData.cardIds[0] }
   );
   
-  // Test with missing user ID
   await testEndpoint(
     `/api/register/${testData.orgIds[0]}`,
     'POST',
@@ -391,7 +368,6 @@ async function testRegister() {
     { cardId: testData.cardIds[0] }
   );
   
-  // Test with missing card ID
   await testEndpoint(
     `/api/register/${testData.orgIds[0]}`,
     'POST',
@@ -425,10 +401,22 @@ async function testEndpoint(path, method = 'GET', description, body = null) {
     }
     
     console.log(`Status: ${response.status}`);
-    console.log('Response:', data);
     console.log(`✅ Test passed: ${description}`);
   } catch (error) {
     console.error(`❌ Test failed: ${description}`);
     console.error(error);
   }
-} 
+}
+
+// Start server
+const PORT = 3333;
+server.listen(PORT, () => {
+  console.log(`Test server running on http://localhost:${PORT}`);
+  console.log('\nAvailable test routes:');
+  Object.keys(routes).forEach(route => {
+    console.log(`- ${route}`);
+  });
+  
+  // Run automated tests
+  runTests();
+}); 
